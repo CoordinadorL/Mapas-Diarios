@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapas Diarios — Rutas en Vivo | Multi-Camión</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* TOPBAR */
+.topbar{background:linear-gradient(90deg,#1e293b,#0f172a);padding:9px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #3b82f6;flex-shrink:0;gap:10px;flex-wrap:wrap}
+.topbar-left h1{font-size:.92rem;font-weight:700;letter-spacing:.4px;color:#f1f5f9}
+.topbar-left p{font-size:.65rem;color:#64748b;margin-top:1px}
+.stats{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.stat{text-align:center}
+.stat .v{font-size:.95rem;font-weight:700;color:#3b82f6}
+.stat .v.green{color:#22c55e}
+.stat .l{font-size:.56rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px}
+.live-badge{display:flex;align-items:center;gap:5px;background:#052e16;border:1px solid #16a34a;border-radius:20px;padding:3px 9px;font-size:.65rem;color:#4ade80;font-weight:700}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* FILTROS PRINCIPALES — fecha y camión */
+.filters-bar{background:#0f172a;padding:7px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #1e3a5f;flex-shrink:0}
+.filter-group{display:flex;align-items:center;gap:6px}
+.filter-group label{font-size:.65rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap}
+.fselect{background:#1e293b;color:#f1f5f9;border:1.5px solid #334155;border-radius:8px;padding:4px 10px;font-size:.72rem;font-weight:600;cursor:pointer;outline:none;transition:border-color .2s;min-width:140px}
+.fselect:hover,.fselect:focus{border-color:#3b82f6}
+.fselect option{background:#1e293b}
+.fsep{width:1px;height:22px;background:#1e3a5f}
+
+/* CONTROLES vendedor / vista */
+.controls{background:#1e293b;padding:5px 14px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #0f172a;flex-shrink:0}
+.controls span{font-size:.65rem;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.fbtn{padding:3px 10px;border-radius:20px;border:1.5px solid;font-size:.65rem;font-weight:700;cursor:pointer;background:transparent;color:#fff;transition:all .15s}
+.fbtn:hover{opacity:.8;transform:scale(1.04)}
+.fbtn.on{color:#000!important}
+.sep{width:1px;height:16px;background:#334155;margin:0 2px}
+.reload-btn{padding:3px 11px;border-radius:20px;border:1.5px solid #3b82f6;font-size:.65rem;font-weight:700;cursor:pointer;background:#1d4ed8;color:#fff;transition:all .15s}
+.reload-btn:hover{background:#2563eb}
+.reload-btn.loading{opacity:.6;pointer-events:none}
+
+/* PROGRESO */
+.prog-wrap{flex-shrink:0;background:#0f172a;padding:3px 14px;display:flex;align-items:center;gap:10px}
+.prog-label{font-size:.6rem;color:#64748b;white-space:nowrap}
+.prog-bar{flex:1;height:3px;background:#1e293b;border-radius:4px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,#3b82f6,#22c55e);border-radius:4px;transition:width .3s}
+.prog-pct{font-size:.6rem;color:#3b82f6;min-width:60px;text-align:right}
+
+#map{flex:1}
+
+/* OVERLAY */
+#overlay{position:fixed;inset:0;background:#0f172a;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .4s}
+#overlay.hidden{opacity:0;pointer-events:none}
+.spinner{width:42px;height:42px;border:3px solid #1e293b;border-top-color:#3b82f6;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.load-txt{color:#94a3b8;font-size:.82rem}
+.load-src{color:#3b82f6;font-size:.7rem;margin-top:2px}
+#error-msg{color:#f87171;font-size:.78rem;text-align:center;padding:0 24px;display:none;line-height:1.6}
+
+/* POPUP */
+.leaflet-popup-content-wrapper{padding:0!important;border-radius:14px!important;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.4)!important}
+.leaflet-popup-content{margin:0!important;width:auto!important}
+.leaflet-popup-close-button{color:#888!important;top:7px!important;right:7px!important;font-size:17px!important;z-index:10}
+.pc{background:#fff;color:#222;font-family:'Segoe UI',Arial,sans-serif;min-width:270px;max-width:308px}
+.pc-head{padding:9px 13px 7px;display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #f1f5f9}
+.pc-code{display:flex;align-items:center;gap:6px}
+.pc-num{width:23px;height:23px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.62rem;font-weight:800;color:#fff;flex-shrink:0}
+.pc-title{font-size:.83rem;font-weight:800;color:#0f172a}
+.pc-sub{font-size:.62rem;color:#94a3b8;margin-top:1px}
+.pc-badge{font-size:.62rem;font-weight:700;color:#fff;padding:2px 8px;border-radius:12px;white-space:nowrap}
+.pc-body{padding:8px 13px 5px}
+.pc-row{display:flex;margin-bottom:4px;font-size:.73rem;line-height:1.3}
+.pc-key{font-weight:700;color:#64748b;min-width:105px;flex-shrink:0}
+.pc-val{color:#1e293b;word-break:break-word}
+.pc-foot{background:#f8fafc;padding:6px 13px;display:flex;justify-content:space-around;border-top:1px solid #f1f5f9}
+.pc-metric .mv{font-size:.88rem;font-weight:800;color:#1e40af;text-align:center}
+.pc-metric .ml{font-size:.57rem;color:#94a3b8;text-align:center;font-weight:600}
+.pc-km{font-size:.61rem;color:#475569;background:#e2e8f0;padding:3px 10px;text-align:center;font-weight:600}
+.pc-coords{font-size:.59rem;color:#cbd5e1;text-align:center;padding:3px 13px 6px;background:#f8fafc}
+
+/* LEGEND */
+.legend{position:absolute;bottom:26px;right:10px;background:rgba(15,23,42,.93);padding:9px 13px;border-radius:10px;z-index:1000;border:1px solid #1e293b;font-size:.67rem;backdrop-filter:blur(4px)}
+.legend h4{color:#94a3b8;margin-bottom:4px;font-size:.64rem;text-transform:uppercase;letter-spacing:.8px}
+.li{display:flex;align-items:center;gap:6px;margin-bottom:2px;color:#cbd5e1}
+.ld{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.ll{width:18px;height:2px;flex-shrink:0;border-radius:2px}
+
+/* NO DATA */
+.no-data{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(15,23,42,.92);border:1px solid #334155;border-radius:12px;padding:20px 28px;text-align:center;z-index:500;display:none}
+.no-data h3{color:#94a3b8;font-size:.9rem;margin-bottom:6px}
+.no-data p{color:#475569;font-size:.75rem}
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <div class="spinner"></div>
+  <div class="load-txt">Cargando datos desde Google Sheets...</div>
+  <div class="load-src" id="load-src">Conectando con la API...</div>
+  <div id="error-msg"></div>
+</div>
+
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>🚛 MAPAS DIARIOS — RUTAS EN VIVO</h1>
+    <p id="sub-info">Cargando... &nbsp;|&nbsp; Riobamba, Ecuador</p>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="v" id="s-clientes">—</div><div class="l">Clientes</div></div>
+    <div class="stat"><div class="v green" id="s-km">— km</div><div class="l">Distancia</div></div>
+    <div class="stat"><div class="v" id="s-peso">—</div><div class="l">Kg Total</div></div>
+    <div class="stat"><div class="v" id="s-venta">—</div><div class="l">$ Total</div></div>
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+  </div>
+</div>
+
+<!-- FILTROS FECHA Y CAMIÓN -->
+<div class="filters-bar">
+  <div class="filter-group">
+    <label>📅 Fecha:</label>
+    <select class="fselect" id="sel-fecha" onchange="onFechaChange()">
+      <option value="">Cargando...</option>
+    </select>
+  </div>
+  <div class="fsep"></div>
+  <div class="filter-group">
+    <label>🚛 Camión / Chofer:</label>
+    <select class="fselect" id="sel-chofer" onchange="onChoferChange()">
+      <option value="">Cargando...</option>
+    </select>
+  </div>
+  <div class="fsep"></div>
+  <button class="reload-btn" onclick="recargar()">↻ Actualizar Sheet</button>
+  <span id="ultima-act" style="font-size:.6rem;color:#475569"></span>
+</div>
+
+<!-- FILTROS VENDEDOR / VISTA -->
+<div class="controls">
+  <span>Vendedor:</span>
+  <div id="vendedor-btns">
+    <button class="fbtn on" data-v="ALL" style="border-color:#94a3b8;background:#94a3b8;color:#000" onclick="fv('ALL',this)">Todos</button>
+  </div>
+  <div class="sep"></div>
+  <span>Vista:</span>
+  <button class="fbtn on" id="btn-ruta" style="border-color:#3b82f6;background:#3b82f6;color:#fff" onclick="toggleRuta(this)">Ruta</button>
+  <button class="fbtn on" id="btn-nums" style="border-color:#22c55e;background:#22c55e;color:#fff" onclick="toggleNums(this)">Números</button>
+</div>
+
+<div class="prog-wrap">
+  <span class="prog-label">Progreso de visitas:</span>
+  <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+  <span class="prog-pct" id="prog-pct">0 / 0</span>
+</div>
+
+<div id="map">
+  <div class="no-data" id="no-data">
+    <h3>Sin datos para mostrar</h3>
+    <p>Selecciona una fecha y un camión válidos</p>
+  </div>
+</div>
+
+<div class="legend">
+  <h4>Leyenda</h4>
+  <div id="legend-items"><div class="li"><div class="ld" style="background:#94a3b8"></div>Cargando...</div></div>
+  <h4 style="margin-top:6px">Ruta</h4>
+  <div class="li"><div class="ll" style="background:#3b82f6"></div>Optimizada</div>
+  <div class="li" style="font-size:.6rem;color:#475569;margin-top:3px">★ = punto de inicio</div>
+</div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbz-cpx-G7caRDYUE8jIayGr-2j4bPVhC-yWUl9rXnHgwzk7ec0OR3uti7vEqj6lljYIrg/exec";
+const PALETTE = ['#f87171','#facc15','#4ade80','#60a5fa','#c084fc','#fb923c','#34d399','#f472b6','#a78bfa','#38bdf8'];
+
+// Estado global
+let ALL_ROWS = [];      // todos los datos crudos del sheet
+let DATA = [];          // datos filtrados + optimizados (fecha+chofer seleccionados)
+let colorMap = {};
+let allMarkers = [], allLines = [];
+let showRuta = true, showNums = true;
+let activeVendedor = 'ALL';
+let completed = new Set();
+let activeFecha = '', activeChofer = '';
+
+const map = L.map('map').setView([-1.685, -78.644], 14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution:'© OpenStreetMap', maxZoom:19
+}).addTo(map);
+
+// ── UTILS ──────────────────────────────────────────────
+function haversine(lat1,lon1,lat2,lon2){
+  const R=6371,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.asin(Math.sqrt(a));
+}
+
+function nearestNeighbor(points){
+  if(!points.length)return[];
+  const visited=new Array(points.length).fill(false);
+  const route=[0]; visited[0]=true;
+  for(let i=0;i<points.length-1;i++){
+    const last=route[route.length-1];
+    let best=-1,bestD=Infinity;
+    for(let j=0;j<points.length;j++){
+      if(!visited[j]){
+        const d=haversine(points[last].lat,points[last].lng,points[j].lat,points[j].lng);
+        if(d<bestD){bestD=d;best=j;}
+      }
+    }
+    visited[best]=true; route.push(best);
+  }
+  return route;
+}
+
+function normalizeKey(k){return k.trim().toLowerCase().replace(/\s+/g,'_')}
+function getField(row,...candidates){
+  for(const c of candidates){
+    if(row[c]!==undefined&&row[c]!=='')return row[c];
+    const nk=normalizeKey(c);
+    for(const k of Object.keys(row))if(normalizeKey(k)===nk)return row[k];
+  }
+  return '';
+}
+function parseNum(v){if(typeof v==='number')return v;return parseFloat(String(v).replace(/[^0-9.\-]/g,''))||0;}
+function fmtFecha(v){
+  // Normaliza fechas: Date objects, strings "2026-06-22", "22/06/2026", etc.
+  if(!v)return'';
+  if(v instanceof Date){
+    const y=v.getFullYear(),m=String(v.getMonth()+1).padStart(2,'0'),d=String(v.getDate()).padStart(2,'0');
+    return`${y}-${m}-${d}`;
+  }
+  const s=String(v).trim();
+  // dd/mm/yyyy → yyyy-mm-dd
+  const m1=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m1)return`${m1[3]}-${m1[2].padStart(2,'0')}-${m1[1].padStart(2,'0')}`;
+  return s.slice(0,10);
+}
+
+// ── FETCH ───────────────────────────────────────────────
+async function fetchData(){
+  document.getElementById('load-src').textContent='Consultando Google Apps Script...';
+  let raw;
+  try{
+    const res=await fetch(API_URL+'?t='+Date.now(),{method:'GET',redirect:'follow',mode:'cors'});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    raw=await res.json();
+  }catch(e){
+    const PROXY='https://api.allorigins.win/get?url='+encodeURIComponent(API_URL+'?t='+Date.now());
+    const res2=await fetch(PROXY);
+    if(!res2.ok)throw new Error('No se pudo conectar. Verifica el Apps Script.');
+    const w=await res2.json(); raw=JSON.parse(w.contents);
+  }
+  if(!Array.isArray(raw)||raw.length===0)throw new Error('Sin datos en el Sheet');
+
+  return raw.map(row=>({
+    fecha:  fmtFecha(getField(row,'Fecha Liq','fecha_liq','fecha')),
+    chofer: String(getField(row,'Chofer','chofer')).trim(),
+    vendedor:String(getField(row,'vendedor','Vendedor')).trim(),
+    codigo: String(getField(row,'CodigoCliente','Codigo Cliente','codigo_cliente')),
+    razon:  String(getField(row,'Razon','razon','Razón')),
+    dir:    String(getField(row,'Direccion','direccion','Dirección')),
+    lng:    parseNum(getField(row,'longitud_x','Longitud','lng','lon')),
+    lat:    parseNum(getField(row,'latitud_y','Latitud','lat')),
+    peso:   parseNum(getField(row,'Suma de Peso','peso','Peso')),
+    total:  parseNum(getField(row,'Suma de Total','total','Total')),
+  })).filter(r=>r.lat!==0&&r.lng!==0&&r.fecha&&r.chofer);
+}
+
+// ── SELECTORES fecha / chofer ───────────────────────────
+function buildFechaSelector(){
+  const fechas=[...new Set(ALL_ROWS.map(r=>r.fecha))].sort().reverse(); // más reciente primero
+  const sel=document.getElementById('sel-fecha');
+  sel.innerHTML=fechas.map(f=>`<option value="${f}">${f}</option>`).join('');
+  // Selecciona la más reciente por defecto
+  activeFecha=fechas[0]||'';
+  sel.value=activeFecha;
+  buildChoferSelector();
+}
+
+function buildChoferSelector(){
+  const choferes=[...new Set(ALL_ROWS.filter(r=>r.fecha===activeFecha).map(r=>r.chofer))].sort();
+  const sel=document.getElementById('sel-chofer');
+  sel.innerHTML=choferes.map(c=>`<option value="${c}">${c}</option>`).join('');
+  activeChofer=choferes[0]||'';
+  sel.value=activeChofer;
+}
+
+function onFechaChange(){
+  activeFecha=document.getElementById('sel-fecha').value;
+  buildChoferSelector();
+  applyFiltersAndDraw();
+}
+
+function onChoferChange(){
+  activeChofer=document.getElementById('sel-chofer').value;
+  applyFiltersAndDraw();
+}
+
+// ── FILTRAR + OPTIMIZAR + DIBUJAR ──────────────────────
+function applyFiltersAndDraw(){
+  completed.clear();
+  activeVendedor='ALL';
+
+  // Filtrar por fecha y chofer
+  const filtered=ALL_ROWS.filter(r=>r.fecha===activeFecha&&r.chofer===activeChofer);
+
+  if(!filtered.length){
+    DATA=[];
+    clearMap();
+    document.getElementById('no-data').style.display='block';
+    updateStats(); updateProgress();
+    return;
+  }
+  document.getElementById('no-data').style.display='none';
+
+  // Optimizar ruta
+  const points=filtered.map(r=>({lat:r.lat,lng:r.lng}));
+  const order=nearestNeighbor(points);
+  DATA=order.map(i=>filtered[i]);
+
+  buildColorMap(DATA);
+  buildVendedorBtns(DATA);
+  buildLegend(DATA);
+  updateStats();
+  updateProgress();
+
+  // Reset filtro vendedor a "Todos"
+  document.querySelectorAll('.fbtn[data-v]').forEach(b=>{
+    b.classList.remove('on');b.style.background='transparent';b.style.color='#fff';
+  });
+  const allBtn=document.querySelector('.fbtn[data-v="ALL"]');
+  if(allBtn){allBtn.classList.add('on');allBtn.style.background='#94a3b8';allBtn.style.color='#000';}
+
+  draw('ALL');
+
+  // Actualizar subtítulo
+  document.getElementById('sub-info').textContent=`${activeFecha}  |  ${activeChofer}  |  Riobamba, Ecuador`;
+}
+
+// ── MAPA ────────────────────────────────────────────────
+function buildColorMap(rows){
+  colorMap={};
+  const vendedores=[...new Set(rows.map(r=>r.vendedor))].sort();
+  vendedores.forEach((v,i)=>colorMap[v]=PALETTE[i%PALETTE.length]);
+}
+
+function buildVendedorBtns(rows){
+  const vendedores=[...new Set(rows.map(r=>r.vendedor))].sort();
+  const container=document.getElementById('vendedor-btns');
+  container.innerHTML=`<button class="fbtn on" data-v="ALL" style="border-color:#94a3b8;background:#94a3b8;color:#000" onclick="fv('ALL',this)">Todos</button> `;
+  vendedores.forEach(v=>{
+    const color=colorMap[v];
+    const btn=document.createElement('button');
+    btn.className='fbtn'; btn.dataset.v=v;
+    btn.style.cssText=`border-color:${color}`;
+    btn.textContent=v;
+    btn.onclick=function(){fv(v,this);};
+    container.appendChild(btn);
+    container.appendChild(document.createTextNode(' '));
+  });
+}
+
+function buildLegend(rows){
+  const vendedores=[...new Set(rows.map(r=>r.vendedor))].sort();
+  document.getElementById('legend-items').innerHTML=vendedores.map(v=>
+    `<div class="li"><div class="ld" style="background:${colorMap[v]}"></div>${v}</div>`
+  ).join('');
+}
+
+function makeIcon(color,num,isFirst){
+  const size=isFirst?32:27;
+  const inner=isFirst
+    ?`<div style="font-size:7px;line-height:1">★</div><div style="font-size:7px;font-weight:800">${num}</div>`
+    :`<span style="font-size:${num>=100?'7px':num>=10?'8px':'9px'};font-weight:800">${num}</span>`;
+  return L.divIcon({
+    className:'',
+    html:`<div style="background:${color};width:${size}px;height:${size}px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);cursor:pointer">${inner}</div>`,
+    iconSize:[size,size],iconAnchor:[size/2,size/2],popupAnchor:[0,-size/2-2]
+  });
+}
+
+function buildPopup(d,idx){
+  const color=colorMap[d.vendedor]||'#888';
+  const isFirst=idx===0;
+  const dn=idx<DATA.length-1?haversine(d.lat,d.lng,DATA[idx+1].lat,DATA[idx+1].lng):null;
+  const distInfo=dn!=null
+    ?`<div class="pc-km">Distancia al siguiente: ${(dn*1000).toFixed(0)} m</div>`
+    :`<div class="pc-km">Último punto de la ruta</div>`;
+  return`<div class="pc">
+<div class="pc-head">
+  <div class="pc-code">
+    <div class="pc-num" style="background:${color}">${idx+1}</div>
+    <div>
+      <div class="pc-title">${isFirst?'★ INICIO — ':''}${d.vendedor}</div>
+      <div class="pc-sub">${d.chofer}</div>
+    </div>
+  </div>
+  <div class="pc-badge" style="background:${color}">${d.vendedor}</div>
+</div>
+<div class="pc-body">
+  <div class="pc-row"><span class="pc-key">Fecha Liq</span><span class="pc-val">${d.fecha}</span></div>
+  <div class="pc-row"><span class="pc-key">vendedor</span><span class="pc-val">${d.vendedor}</span></div>
+  <div class="pc-row"><span class="pc-key">CodigoCliente</span><span class="pc-val">${d.codigo}</span></div>
+  <div class="pc-row"><span class="pc-key">Razon</span><span class="pc-val">${d.razon}</span></div>
+  <div class="pc-row"><span class="pc-key">Direccion</span><span class="pc-val">${d.dir}</span></div>
+  <div class="pc-row"><span class="pc-key">longitud_x</span><span class="pc-val">${d.lng}</span></div>
+  <div class="pc-row"><span class="pc-key">latitud_y</span><span class="pc-val">${d.lat}</span></div>
+  <div style="margin:4px 0 2px;font-size:.71rem;font-weight:700;color:#334155">Suma de Peso ${d.peso.toFixed(2)}</div>
+  <div style="font-size:.71rem;font-weight:700;color:#334155">Suma de Total $ ${d.total.toFixed(2)}</div>
+</div>
+<div class="pc-foot">
+  <div class="pc-metric"><div class="mv">${d.peso.toFixed(2)}</div><div class="ml">kg Peso</div></div>
+  <div class="pc-metric"><div class="mv">$${d.total.toFixed(2)}</div><div class="ml">Total</div></div>
+  <div class="pc-metric"><div class="mv">#${idx+1}</div><div class="ml">Orden</div></div>
+</div>
+${distInfo}
+<div class="pc-coords">📍 ${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}</div>
+</div>`;
+}
+
+function clearMap(){
+  allMarkers.forEach(m=>map.removeLayer(m));
+  allLines.forEach(l=>map.removeLayer(l));
+  allMarkers=[];allLines=[];
+}
+
+function draw(filter){
+  clearMap();
+  const fd=filter==='ALL'?DATA:DATA.filter(d=>d.vendedor===filter);
+  if(!fd.length)return;
+
+  if(showRuta&&fd.length>1){
+    const coords=fd.map(d=>[d.lat,d.lng]);
+    const line=L.polyline(coords,{color:'#3b82f6',weight:3,opacity:.75,dashArray:'8,5'}).addTo(map);
+    allLines.push(line);
+    for(let i=0;i<fd.length-1;i++){
+      const dist=haversine(fd[i].lat,fd[i].lng,fd[i+1].lat,fd[i+1].lng);
+      if(dist<0.35){
+        const mid=[(fd[i].lat+fd[i+1].lat)/2,(fd[i].lng+fd[i+1].lng)/2];
+        const lbl=L.marker(mid,{icon:L.divIcon({
+          className:'',
+          html:`<div style="background:rgba(15,23,42,.8);color:#93c5fd;font-size:9px;padding:1px 4px;border-radius:4px;white-space:nowrap">${(dist*1000).toFixed(0)}m</div>`,
+          iconAnchor:[18,8]
+        })}).addTo(map);
+        allLines.push(lbl);
+      }
+    }
+  }
+
+  fd.forEach(d=>{
+    const realIdx=DATA.indexOf(d);
+    const color=colorMap[d.vendedor]||'#888';
+    const icon=showNums?makeIcon(color,realIdx+1,realIdx===0):makeIcon(color,'·',false);
+    const m=L.marker([d.lat,d.lng],{icon})
+      .addTo(map)
+      .bindPopup(buildPopup(d,realIdx),{maxWidth:320,minWidth:285});
+    m.on('popupopen',()=>{completed.add(realIdx);updateProgress();});
+    allMarkers.push(m);
+  });
+
+  map.fitBounds(L.latLngBounds(fd.map(d=>[d.lat,d.lng])),{padding:[40,40]});
+}
+
+// ── STATS / PROGRESS ────────────────────────────────────
+function updateStats(){
+  const totalPeso=DATA.reduce((s,d)=>s+d.peso,0);
+  const totalVenta=DATA.reduce((s,d)=>s+d.total,0);
+  let totalKm=0;
+  for(let i=0;i<DATA.length-1;i++)totalKm+=haversine(DATA[i].lat,DATA[i].lng,DATA[i+1].lat,DATA[i+1].lng);
+  document.getElementById('s-clientes').textContent=DATA.length||'—';
+  document.getElementById('s-km').textContent=DATA.length?(totalKm.toFixed(1)+' km'):'— km';
+  document.getElementById('s-peso').textContent=DATA.length?(totalPeso.toFixed(1)+' kg'):'—';
+  document.getElementById('s-venta').textContent=DATA.length?('$ '+totalVenta.toFixed(2)):'—';
+}
+
+function updateProgress(){
+  const n=completed.size,tot=DATA.length;
+  const pct=tot?Math.round(n/tot*100):0;
+  document.getElementById('prog-fill').style.width=pct+'%';
+  document.getElementById('prog-pct').textContent=`${n} / ${tot} (${pct}%)`;
+}
+
+// ── BOTONES ─────────────────────────────────────────────
+function fv(v,btn){
+  activeVendedor=v;
+  document.querySelectorAll('.fbtn[data-v]').forEach(b=>{
+    b.classList.remove('on');b.style.background='transparent';b.style.color='#fff';
+  });
+  btn.classList.add('on');
+  btn.style.background=btn.style.borderColor;
+  btn.style.color=v==='ALL'?'#000':'#fff';
+  draw(activeVendedor);
+}
+
+function toggleRuta(btn){
+  showRuta=!showRuta;
+  btn.textContent=showRuta?'Ruta':'Sin ruta';
+  btn.style.background=showRuta?'#3b82f6':'transparent';
+  btn.classList.toggle('on',showRuta);
+  draw(activeVendedor);
+}
+
+function toggleNums(btn){
+  showNums=!showNums;
+  btn.textContent=showNums?'Números':'Sin nums';
+  btn.style.background=showNums?'#22c55e':'transparent';
+  btn.classList.toggle('on',showNums);
+  draw(activeVendedor);
+}
+
+function recargar(){
+  const btn=document.querySelector('.reload-btn');
+  btn.classList.add('loading');btn.textContent='↻ Actualizando...';
+  completed.clear();updateProgress();
+  loadAndRender().finally(()=>{
+    btn.classList.remove('loading');btn.textContent='↻ Actualizar Sheet';
+  });
+}
+
+// ── CARGA PRINCIPAL ─────────────────────────────────────
+async function loadAndRender(){
+  try{
+    ALL_ROWS=await fetchData();
+    buildFechaSelector();   // pobla fechas y selecciona la más reciente
+    applyFiltersAndDraw();  // filtra, optimiza y dibuja
+
+    const now=new Date();
+    const hm=now.toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('ultima-act').textContent=`Última act: ${hm}`;
+    document.getElementById('overlay').classList.add('hidden');
+  }catch(err){
+    document.getElementById('load-src').textContent='';
+    const em=document.getElementById('error-msg');
+    em.style.display='block';
+    em.innerHTML=`❌ Error al cargar datos:<br><b>${err.message}</b><br><br>Verifica que el Apps Script esté publicado<br>con acceso <b>"Cualquier persona"</b>.`;
+    console.error(err);
+  }
+}
+
+// Auto-refresh cada 5 minutos
+setInterval(()=>{completed.clear();loadAndRender();},5*60*1000);
+
+loadAndRender();
+</script>
+</body>
+</html>
