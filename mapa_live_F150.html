@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapas Diarios — Rutas en Vivo</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── TOPBAR ── */
+.topbar{background:linear-gradient(90deg,#1e293b,#0f172a);padding:7px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #3b82f6;flex-shrink:0;gap:8px;flex-wrap:wrap}
+.topbar-left h1{font-size:.88rem;font-weight:700;letter-spacing:.3px;color:#f1f5f9}
+.topbar-left p{font-size:.62rem;color:#64748b;margin-top:1px}
+.stats{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.stat{text-align:center}
+.stat .v{font-size:.9rem;font-weight:700;color:#3b82f6}
+.stat .v.green{color:#22c55e}
+.stat .v.orange{color:#f97316}
+.stat .l{font-size:.53rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px}
+.live-badge{display:flex;align-items:center;gap:4px;background:#052e16;border:1px solid #16a34a;border-radius:20px;padding:2px 8px;font-size:.62rem;color:#4ade80;font-weight:700}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── FILTROS ── */
+.filters-bar{background:#0f172a;padding:5px 12px;display:flex;gap:7px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #1e3a5f;flex-shrink:0}
+.fg{display:flex;align-items:center;gap:4px}
+.fg label{font-size:.6rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+.fselect{background:#1e293b;color:#f1f5f9;border:1.5px solid #334155;border-radius:7px;padding:3px 7px;font-size:.68rem;font-weight:600;cursor:pointer;outline:none;transition:border-color .2s;min-width:125px}
+.fselect:hover,.fselect:focus{border-color:#3b82f6}
+.fselect option{background:#1e293b}
+.fsep{width:1px;height:18px;background:#1e3a5f;flex-shrink:0}
+.liq-wrap{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.liq-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;border:1.5px solid #334155;font-size:.62rem;font-weight:700;cursor:pointer;color:#94a3b8;background:transparent;transition:all .15s;user-select:none}
+.liq-chip:hover{border-color:#3b82f6;color:#93c5fd}
+.liq-chip.sel{background:#1d4ed8;border-color:#3b82f6;color:#fff}
+.liq-chip input{display:none}
+.liq-apply{padding:2px 10px;border-radius:7px;border:1.5px solid #22c55e;font-size:.62rem;font-weight:700;cursor:pointer;background:#15803d;color:#fff;transition:all .15s;white-space:nowrap}
+.liq-apply:hover{background:#16a34a}
+
+/* ── CONTROLES ── */
+.controls{background:#1e293b;padding:3px 12px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #0f172a;flex-shrink:0}
+.controls span{font-size:.6rem;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.fbtn{padding:2px 8px;border-radius:20px;border:1.5px solid;font-size:.6rem;font-weight:700;cursor:pointer;background:transparent;color:#fff;transition:all .15s}
+.fbtn:hover{opacity:.8;transform:scale(1.04)}
+.fbtn.on{color:#000!important}
+.sep{width:1px;height:14px;background:#334155;margin:0 2px}
+.icon-btn{padding:2px 9px;border-radius:20px;border:1.5px solid;font-size:.6rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap}
+.reload-btn{border-color:#3b82f6;background:#1d4ed8;color:#fff}
+.reload-btn:hover{background:#2563eb}
+.reload-btn.loading{opacity:.6;pointer-events:none}
+.dark-btn{border-color:#475569;background:transparent;color:#94a3b8}
+.dark-btn.on{background:#334155;color:#fff}
+.panel-btn{border-color:#8b5cf6;background:transparent;color:#a78bfa}
+.panel-btn.on{background:#7c3aed;color:#fff}
+.search-wrap{display:flex;align-items:center;background:#0f172a;border:1.5px solid #334155;border-radius:20px;padding:1px 8px;gap:4px;transition:border-color .2s}
+.search-wrap:focus-within{border-color:#3b82f6}
+.search-wrap input{background:transparent;border:none;outline:none;color:#f1f5f9;font-size:.62rem;width:110px;padding:1px 0}
+.search-wrap input::placeholder{color:#475569}
+
+/* ── PROGRESO ── */
+.prog-wrap{flex-shrink:0;background:#0f172a;padding:2px 12px;display:flex;align-items:center;gap:8px}
+.prog-label{font-size:.56rem;color:#64748b;white-space:nowrap}
+.prog-bar{flex:1;height:4px;background:#1e293b;border-radius:4px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,#3b82f6,#22c55e);border-radius:4px;transition:width .4s}
+.prog-pct{font-size:.56rem;color:#3b82f6;min-width:70px;text-align:right}
+
+/* ── BANNER RESUMEN LIQUIDACIÓN ── */
+.liq-banner{flex-shrink:0;background:#0c1a2e;border-bottom:1px solid #1e3a5f;padding:3px 14px;display:flex;gap:16px;align-items:center;font-size:.6rem;flex-wrap:wrap}
+.liq-banner .lb-item{display:flex;align-items:center;gap:4px;color:#94a3b8}
+.liq-banner .lb-val{font-weight:700;color:#f1f5f9}
+.liq-banner .lb-high{color:#f87171}
+.liq-banner .lb-med{color:#fbbf24}
+
+/* ── MAP WRAPPER ── */
+#map-wrap{flex:1;position:relative}
+#map{flex:1}
+
+/* ── PANEL LATERAL ── */
+/* ── FLOATING PANEL ── */
+/* Botón flotante Lista */
+#fab-panel{
+  position:fixed;bottom:68px;right:14px;z-index:1100;
+  width:48px;height:48px;border-radius:50%;
+  background:#1d4ed8;border:2px solid #3b82f6;
+  color:#fff;font-size:1.2rem;cursor:pointer;
+  box-shadow:0 3px 14px rgba(0,0,0,.5);
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .2s,background .2s;
+}
+#fab-panel:hover{transform:scale(1.08);background:#2563eb}
+#fab-panel .fab-badge{
+  position:absolute;top:-4px;right:-4px;
+  background:#22c55e;color:#000;font-size:.5rem;font-weight:800;
+  width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+}
+
+/* Drawer flotante */
+#side-panel{
+  position:fixed;top:0;right:-340px;
+  width:320px;height:100vh;
+  background:#0f172a;border-left:2px solid #1e3a5f;
+  display:flex;flex-direction:column;
+  z-index:1050;
+  transition:right .3s cubic-bezier(.4,0,.2,1);
+  box-shadow:-6px 0 24px rgba(0,0,0,.6);
+}
+#side-panel.open{right:0}
+
+/* Overlay oscuro detrás del panel */
+#panel-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.35);
+  z-index:1040;display:none;
+}
+#panel-overlay.show{display:block}
+
+.panel-header{
+  background:#1e293b;padding:10px 14px;
+  display:flex;justify-content:space-between;align-items:center;
+  border-bottom:1px solid #0f172a;flex-shrink:0;
+}
+.panel-header h3{font-size:.78rem;font-weight:700;color:#f1f5f9}
+.panel-close{background:none;border:none;color:#64748b;font-size:1.1rem;cursor:pointer;line-height:1}
+.panel-close:hover{color:#f1f5f9}
+
+/* Barra de búsqueda dentro del panel */
+.panel-search{
+  padding:8px 12px;background:#0f172a;border-bottom:1px solid #1e293b;flex-shrink:0;
+}
+.panel-search input{
+  width:100%;background:#1e293b;border:1.5px solid #334155;
+  color:#f1f5f9;border-radius:8px;padding:5px 10px;font-size:.72rem;
+  outline:none;transition:border-color .2s;
+}
+.panel-search input:focus{border-color:#3b82f6}
+.panel-search input::placeholder{color:#475569}
+
+/* Stats resumen */
+.panel-stats{
+  padding:5px 12px;background:#0a1120;border-bottom:1px solid #1e293b;
+  display:flex;gap:10px;flex-shrink:0;
+}
+.ps{text-align:center;flex:1}
+.ps .pv{font-size:.78rem;font-weight:700;color:#3b82f6}
+.ps .pl{font-size:.54rem;color:#475569;text-transform:uppercase}
+
+/* Lista scrollable */
+.panel-list{overflow-y:auto;flex:1;min-height:0}
+.panel-list::-webkit-scrollbar{width:4px}
+.panel-list::-webkit-scrollbar-track{background:#0f172a}
+.panel-list::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
+
+.p-item{
+  padding:6px 10px;border-bottom:1px solid #1a2539;
+  display:flex;align-items:center;gap:6px;
+  transition:background .12s;
+}
+.p-item:hover{background:#1a2539}
+.p-item.visited .p-name{text-decoration:line-through;color:#475569}
+.p-item.visited{opacity:.55}
+.p-item.high .p-dot{background:#dc2626}
+.p-item.medium .p-dot{background:#ca8a04}
+.p-num{font-size:.6rem;font-weight:800;color:#475569;min-width:18px;text-align:right;flex-shrink:0}
+.p-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.p-info{flex:1;min-width:0;cursor:pointer;padding:1px 0}
+.p-name{font-size:.67rem;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-meta{font-size:.56rem;color:#64748b;margin-top:1px;display:flex;gap:5px}
+.p-total{font-weight:700}
+.p-total.high{color:#f87171}
+.p-total.medium{color:#fbbf24}
+.p-total.normal{color:#94a3b8}
+.p-actions{display:flex;gap:3px;flex-shrink:0}
+.p-act-btn{
+  width:24px;height:24px;border-radius:6px;border:none;
+  cursor:pointer;font-size:.72rem;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;
+}
+.p-act-done{background:#15803d;color:#fff}
+.p-act-done:hover{background:#16a34a;transform:scale(1.1)}
+.p-act-undone{background:#7f1d1d;color:#fff;display:none}
+.p-act-undone:hover{background:#dc2626;transform:scale(1.1)}
+.p-item.visited .p-act-done{display:none}
+.p-item.visited .p-act-undone{display:flex}
+.panel-footer{
+  background:#1e293b;padding:6px 12px;border-top:1px solid #0f172a;
+  font-size:.62rem;color:#64748b;text-align:center;flex-shrink:0;
+}
+
+/* ── OVERLAY ── */
+#overlay{position:fixed;inset:0;background:#0f172a;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .4s}
+#overlay.hidden{opacity:0;pointer-events:none}
+.spinner{width:42px;height:42px;border:3px solid #1e293b;border-top-color:#3b82f6;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.load-txt{color:#94a3b8;font-size:.82rem}
+.load-src{color:#3b82f6;font-size:.68rem;margin-top:2px}
+#error-msg{color:#f87171;font-size:.76rem;text-align:center;padding:0 28px;display:none;line-height:1.7}
+
+/* ── POPUP ── */
+.leaflet-popup-content-wrapper{padding:0!important;border-radius:14px!important;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.4)!important}
+.leaflet-popup-content{margin:0!important;width:auto!important}
+.leaflet-popup-close-button{color:#888!important;top:7px!important;right:7px!important;font-size:17px!important;z-index:10}
+.pc{background:#fff;color:#222;font-family:'Segoe UI',Arial,sans-serif;min-width:270px;max-width:310px}
+.pc-head{padding:8px 12px 6px;display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #f1f5f9}
+.pc-code{display:flex;align-items:center;gap:6px}
+.pc-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.58rem;font-weight:800;color:#fff;flex-shrink:0}
+.pc-title{font-size:.8rem;font-weight:800;color:#0f172a}
+.pc-sub{font-size:.58rem;color:#94a3b8;margin-top:1px}
+.pc-badge{font-size:.58rem;font-weight:700;color:#fff;padding:2px 7px;border-radius:12px;white-space:nowrap}
+.pc-liq{font-size:.58rem;font-weight:700;color:#fff;padding:2px 7px;border-radius:12px;background:#7c3aed;margin-top:3px;display:inline-block}
+.pc-body{padding:7px 12px 4px}
+.pc-row{display:flex;margin-bottom:3px;font-size:.7rem;line-height:1.3}
+.pc-key{font-weight:700;color:#64748b;min-width:108px;flex-shrink:0}
+.pc-val{color:#1e293b;word-break:break-word}
+.pc-foot{background:#f8fafc;padding:5px 12px;display:flex;justify-content:space-around;border-top:1px solid #f1f5f9}
+.pc-metric .mv{font-size:.85rem;font-weight:800;color:#1e40af;text-align:center}
+.pc-metric .ml{font-size:.54rem;color:#94a3b8;text-align:center;font-weight:600}
+.pc-km{font-size:.58rem;color:#475569;background:#e2e8f0;padding:3px 10px;text-align:center;font-weight:600}
+.pc-coords{font-size:.56rem;color:#cbd5e1;text-align:center;padding:3px 12px 5px;background:#f8fafc}
+.pc-actions{display:flex;gap:6px;padding:7px 12px;border-top:1px solid #f1f5f9;flex-wrap:wrap}
+.pc-btn{flex:1;padding:5px 4px;border-radius:8px;border:none;font-size:.65rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;transition:all .15s;min-width:70px}
+.pc-btn-nav{background:#1d4ed8;color:#fff}
+.pc-btn-nav:hover{background:#2563eb}
+.pc-btn-waze{background:#33ccff;color:#1a1a1a}
+.pc-btn-waze:hover{background:#00b8e6}
+.pc-btn-done{background:#16a34a;color:#fff}
+.pc-btn-done:hover{background:#15803d}
+.pc-btn-done.undone{background:#dc2626}
+.pc-btn-done.undone:hover{background:#b91c1c}
+
+/* ── LEYENDA — lado izquierdo arriba ── */
+.legend{position:absolute;bottom:70px;left:10px;background:rgba(15,23,42,.93);padding:8px 12px;border-radius:10px;z-index:500;border:1px solid #1e293b;font-size:.63rem;backdrop-filter:blur(4px)}
+.legend h4{color:#94a3b8;margin-bottom:4px;font-size:.6rem;text-transform:uppercase;letter-spacing:.8px}
+.li{display:flex;align-items:center;gap:5px;margin-bottom:2px;color:#cbd5e1}
+.ld{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.ll{width:16px;height:2px;flex-shrink:0;border-radius:2px}
+
+/* ── CLUSTER OVERRIDE ── */
+.marker-cluster-small,.marker-cluster-medium,.marker-cluster-large{background:rgba(59,130,246,.3)!important}
+.marker-cluster-small div,.marker-cluster-medium div,.marker-cluster-large div{background:rgba(59,130,246,.7)!important;color:#fff!important;font-weight:700!important}
+
+@keyframes pingRed{0%,100%{box-shadow:0 0 0 3px #fca5a5,0 0 12px 4px rgba(220,38,38,.5)}50%{box-shadow:0 0 0 6px #fca5a5,0 0 18px 8px rgba(220,38,38,.7)}}
+
+.no-data{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(15,23,42,.92);border:1px solid #334155;border-radius:12px;padding:20px 28px;text-align:center;z-index:500;display:none}
+.no-data h3{color:#94a3b8;font-size:.9rem;margin-bottom:6px}
+.no-data p{color:#475569;font-size:.75rem}
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <div class="spinner"></div>
+  <div class="load-txt">Cargando datos desde Google Sheets...</div>
+  <div class="load-src" id="load-src">Conectando con la API...</div>
+  <div id="error-msg"></div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>🚛 MAPAS DIARIOS — RUTAS EN VIVO</h1>
+    <p id="sub-info">Cargando... &nbsp;|&nbsp; Ecuador</p>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="v" id="s-clientes">—</div><div class="l">Clientes</div></div>
+    <div class="stat"><div class="v" id="s-visitados">—</div><div class="l">Visitados</div></div>
+    <div class="stat"><div class="v green" id="s-km">— km</div><div class="l">Distancia</div></div>
+    <div class="stat"><div class="v" id="s-peso">—</div><div class="l">Kg Total</div></div>
+    <div class="stat"><div class="v" id="s-venta">—</div><div class="l">$ Total</div></div>
+    <div class="stat"><div class="v orange" id="s-drops">—</div><div class="l">Drops &gt;$100</div></div>
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+  </div>
+</div>
+
+<!-- FILTROS -->
+<div class="filters-bar">
+  <div class="fg">
+    <label>📅 Fecha:</label>
+    <select class="fselect" id="sel-fecha" onchange="onFechaChange()"><option value="">Cargando...</option></select>
+  </div>
+  <div class="fsep"></div>
+  <div class="fg">
+    <label>🚛 Camión:</label>
+    <select class="fselect" id="sel-chofer" onchange="onChoferChange()"><option value="">Cargando...</option></select>
+  </div>
+  <div class="fsep"></div>
+  <div class="fg">
+    <label>📋 Liquidación:</label>
+    <div class="liq-wrap" id="liq-chips"><span style="font-size:.62rem;color:#475569">Cargando...</span></div>
+    <button class="liq-apply" onclick="applyFiltersAndDraw()">✓ Aplicar</button>
+  </div>
+  <div class="fsep"></div>
+  <button class="icon-btn reload-btn" onclick="recargar()">↻ Actualizar</button>
+  <span id="ultima-act" style="font-size:.56rem;color:#475569"></span>
+</div>
+
+<!-- BANNER RESUMEN -->
+<div class="liq-banner" id="liq-banner" style="display:none">
+  <div class="lb-item">📦 Clientes: <span class="lb-val" id="ban-cli">—</span></div>
+  <div class="lb-item">⚖️ Peso: <span class="lb-val" id="ban-peso">—</span></div>
+  <div class="lb-item">💰 Total: <span class="lb-val" id="ban-total">—</span></div>
+  <div class="lb-item">🔴 Drops &gt;$150: <span class="lb-val lb-high" id="ban-high">—</span></div>
+  <div class="lb-item">🟡 Drops &gt;$100: <span class="lb-val lb-med" id="ban-med">—</span></div>
+</div>
+
+<!-- CONTROLES -->
+<div class="controls">
+  <span>Vendedor:</span>
+  <div id="vendedor-btns">
+    <button class="fbtn on" data-v="ALL" style="border-color:#94a3b8;background:#94a3b8;color:#000" onclick="fv('ALL',this)">Todos</button>
+  </div>
+  <div class="sep"></div>
+  <span>Vista:</span>
+  <button class="icon-btn" id="btn-ruta" style="border-color:#3b82f6;background:#1d4ed8;color:#fff" onclick="toggleRuta(this)">Ruta</button>
+  <button class="icon-btn" id="btn-nums" style="border-color:#22c55e;background:#15803d;color:#fff" onclick="toggleNums(this)">Números</button>
+  <button class="icon-btn dark-btn" id="btn-cluster" onclick="toggleCluster(this)">Cluster</button>
+  <button class="icon-btn dark-btn on" id="btn-dark" onclick="toggleDark(this)">🌙 Noche</button>
+  <div class="sep"></div>
+  <button class="icon-btn panel-btn" id="btn-panel" 
+  <div class="search-wrap">
+    <span style="color:#475569;font-size:.7rem">🔍</span>
+    <input type="text" id="search-input" placeholder="Buscar cliente..." oninput="onSearch(this.value)">
+  </div>
+</div>
+
+<!-- PROGRESO -->
+<div class="prog-wrap">
+  <span class="prog-label">Progreso de entregas:</span>
+  <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+  <span class="prog-pct" id="prog-pct">0 / 0</span>
+</div>
+
+<!-- MAP + PANEL -->
+<div id="map-wrap">
+  <div id="map">
+    <div class="no-data" id="no-data">
+      <h3>Sin datos para mostrar</h3>
+      <p>Selecciona una fecha, camión y al menos una liquidación</p>
+    </div>
+  </div>
+
+  <!-- PANEL LATERAL -->
+  <!-- Overlay para cerrar panel tocando el mapa -->
+<div id="panel-overlay" onclick="closePanel()"></div>
+
+<!-- Drawer flotante -->
+<div id="side-panel">
+  <div class="panel-header">
+    <h3>📋 Lista de Clientes</h3>
+    <button class="panel-close" onclick="closePanel()">✕</button>
+  </div>
+  <div class="panel-search">
+    <input type="text" id="panel-search" placeholder="🔍 Buscar cliente, código, dirección..." oninput="filterPanel(this.value)">
+  </div>
+  <div class="panel-stats">
+    <div class="ps"><div class="pv" id="ps-total">—</div><div class="pl">Clientes</div></div>
+    <div class="ps"><div class="pv" id="ps-entregados">0</div><div class="pl">Entregados</div></div>
+    <div class="ps"><div class="pv" id="ps-drops">—</div><div class="pl">Drops altos</div></div>
+    <div class="ps"><div class="pv" id="ps-venta">—</div><div class="pl">$ Total</div></div>
+  </div>
+  <div class="panel-list" id="panel-list"></div>
+  <div class="panel-footer" id="panel-footer">— clientes</div>
+</div>
+
+<!-- FAB botón flotante Lista -->
+<button id="fab-panel" onclick="openPanel()" title="Lista de clientes">
+  📋
+  <span class="fab-badge" id="fab-badge">0</span>
+</button>
+</div>
+
+<!-- LEYENDA -->
+<div class="legend">
+  <h4>Vendedores</h4>
+  <div id="legend-items"><div class="li"><div class="ld" style="background:#94a3b8"></div>Cargando...</div></div>
+  <h4 style="margin-top:5px">Ruta</h4>
+  <div class="li"><div class="ll" style="background:#3b82f6"></div>Optimizada</div>
+  <div class="li" style="font-size:.57rem;color:#475569;margin-top:2px">★ = punto inicio</div>
+  <h4 style="margin-top:5px">Prioridad</h4>
+  <div class="li"><div class="ld" style="background:#dc2626;box-shadow:0 0 0 2px #fca5a5"></div>🔴 Alto &gt;$150</div>
+  <div class="li"><div class="ld" style="background:#ca8a04;box-shadow:0 0 0 2px #fde68a"></div>🟡 Medio &gt;$100</div>
+  <div class="li"><div class="ld" style="background:#4ade80"></div>Normal</div>
+  <div class="li" style="margin-top:4px"><div class="ld" style="background:#6b7280;opacity:.5"></div>✓ Entregado</div>
+</div>
+
+<script>
+const API_URL="https://script.google.com/macros/s/AKfycbz-cpx-G7caRDYUE8jIayGr-2j4bPVhC-yWUl9rXnHgwzk7ec0OR3uti7vEqj6lljYIrg/exec";
+const PALETTE=['#4ade80','#60a5fa','#c084fc','#34d399','#f472b6','#a78bfa','#38bdf8','#2dd4bf','#818cf8','#fb923c'];
+const TIER_HIGH=150, TIER_MEDIUM=100;
+const TILE_DARK='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const TILE_LIGHT='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+let ALL_ROWS=[],DATA=[],colorMap={};
+let allMarkers=[],allLines=[],clusterGroup=null;
+let showRuta=true,showNums=true,useCluster=false,darkMode=true,panelOpen=false;
+let activeVendedor='ALL',activeFecha='',activeChofer='';
+let activeLiqs=new Set();
+let completed=new Set(); // índices visitados
+let LABEL_OFFSETS={};
+let tileLayer=null;
+
+const map=L.map('map').setView([-1.685,-78.644],13);
+tileLayer=L.tileLayer(TILE_DARK,{attribution:'© CARTO',maxZoom:19}).addTo(map);
+
+// ── UTILS ─────────────────────────────────────────────────
+function haversine(a,b,c,d){const R=6371,dL=(c-a)*Math.PI/180,dG=(d-b)*Math.PI/180,x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dG/2)**2;return R*2*Math.asin(Math.sqrt(x));}
+function nearestNeighbor(pts){if(!pts.length)return[];const v=new Array(pts.length).fill(false);const r=[0];v[0]=true;for(let i=0;i<pts.length-1;i++){const l=r[r.length-1];let b=-1,bd=Infinity;for(let j=0;j<pts.length;j++){if(!v[j]){const d=haversine(pts[l].lat,pts[l].lng,pts[j].lat,pts[j].lng);if(d<bd){bd=d;b=j;}}}v[b]=true;r.push(b);}return r;}
+function nk(k){return k.trim().toLowerCase().replace(/\s+/g,'_')}
+function gf(row,...cs){for(const c of cs){if(row[c]!==undefined&&row[c]!=='')return row[c];const n=nk(c);for(const k of Object.keys(row))if(nk(k)===n)return row[k];}return'';}
+function pn(v){if(typeof v==='number')return v;return parseFloat(String(v).replace(/[^0-9.\-]/g,''))||0;}
+function ff(v){if(!v)return'';if(v instanceof Date){const y=v.getFullYear(),m=String(v.getMonth()+1).padStart(2,'0'),d=String(v.getDate()).padStart(2,'0');return`${y}-${m}-${d}`;}const s=String(v).trim();const m1=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m1)return`${m1[3]}-${m1[2].padStart(2,'0')}-${m1[1].padStart(2,'0')}`;return s.slice(0,10);}
+function getTier(t){return t>=TIER_HIGH?'high':t>=TIER_MEDIUM?'medium':'normal';}
+
+// ── FETCH ─────────────────────────────────────────────────
+async function fetchData(){
+  document.getElementById('load-src').textContent='Consultando Google Apps Script...';
+  let raw;
+  try{const res=await fetch(API_URL+'?t='+Date.now(),{method:'GET',redirect:'follow',mode:'cors'});if(!res.ok)throw new Error('HTTP '+res.status);raw=await res.json();}
+  catch(e){const P='https://api.allorigins.win/get?url='+encodeURIComponent(API_URL+'?t='+Date.now());const r2=await fetch(P);if(!r2.ok)throw new Error('Sin conexión con el Sheet.');const w=await r2.json();raw=JSON.parse(w.contents);}
+  if(!Array.isArray(raw)||!raw.length)throw new Error('Sin datos en el Sheet');
+  return raw.map(row=>({
+    fecha:ff(gf(row,'Fecha Liq','fecha_liq','fecha')),
+    chofer:String(gf(row,'Chofer','chofer')).trim(),
+    liq:String(gf(row,'Num de Liquidación','Num de Liquidacion','num_liquidacion','liquidacion')||'').trim(),
+    vendedor:String(gf(row,'vendedor','Vendedor')).trim(),
+    codigo:String(gf(row,'CodigoCliente','Codigo Cliente','codigo_cliente')),
+    razon:String(gf(row,'Razon','razon','Razón')),
+    dir:String(gf(row,'Direccion','direccion','Dirección')),
+    lng:pn(gf(row,'longitud_x','Longitud','lng','lon')),
+    lat:pn(gf(row,'latitud_y','Latitud','lat')),
+    peso:pn(gf(row,'Suma de Peso','peso','Peso')),
+    total:pn(gf(row,'Suma de Total','total','Total')),
+  })).filter(r=>r.lat!==0&&r.lng!==0&&r.fecha&&r.chofer);
+}
+
+// ── SELECTORES ────────────────────────────────────────────
+function buildFechaSelector(){
+  const fechas=[...new Set(ALL_ROWS.map(r=>r.fecha))].sort().reverse();
+  const sel=document.getElementById('sel-fecha');
+  sel.innerHTML=fechas.map(f=>`<option value="${f}">${f}</option>`).join('');
+  activeFecha=fechas[0]||'';sel.value=activeFecha;
+  buildChoferSelector();
+}
+function buildChoferSelector(){
+  const ch=[...new Set(ALL_ROWS.filter(r=>r.fecha===activeFecha).map(r=>r.chofer))].sort();
+  const sel=document.getElementById('sel-chofer');
+  sel.innerHTML=ch.map(c=>`<option value="${c}">${c}</option>`).join('');
+  activeChofer=ch[0]||'';sel.value=activeChofer;
+  buildLiqChips(true);
+}
+function buildLiqChips(all=false){
+  const rows=ALL_ROWS.filter(r=>r.fecha===activeFecha&&r.chofer===activeChofer);
+  const liqs=[...new Set(rows.map(r=>r.liq).filter(Boolean))].sort((a,b)=>Number(a)-Number(b)||a.localeCompare(b));
+  const c=document.getElementById('liq-chips');
+  if(!liqs.length){c.innerHTML=`<span class="liq-chip sel" style="pointer-events:none">Todas</span>`;activeLiqs=new Set(['__ALL__']);return;}
+  if(all||![...activeLiqs].some(l=>liqs.includes(l)))activeLiqs=new Set(liqs);
+  c.innerHTML='';
+  const ac=document.createElement('label');
+  ac.className='liq-chip'+(liqs.every(l=>activeLiqs.has(l))?' sel':'');
+  ac.innerHTML=`<input type="checkbox"> Todas`;
+  ac.addEventListener('click',e=>{e.preventDefault();if(liqs.every(l=>activeLiqs.has(l)))activeLiqs.clear();else activeLiqs=new Set(liqs);buildLiqChips(false);});
+  c.appendChild(ac);
+  liqs.forEach(liq=>{const ch=document.createElement('label');ch.className='liq-chip'+(activeLiqs.has(liq)?' sel':'');ch.innerHTML=`<input type="checkbox"> Liq ${liq}`;ch.addEventListener('click',e=>{e.preventDefault();if(activeLiqs.has(liq))activeLiqs.delete(liq);else activeLiqs.add(liq);ch.classList.toggle('sel',activeLiqs.has(liq));ac.classList.toggle('sel',liqs.every(l=>activeLiqs.has(l)));});c.appendChild(ch);});
+}
+function onFechaChange(){activeFecha=document.getElementById('sel-fecha').value;buildChoferSelector();applyFiltersAndDraw();}
+function onChoferChange(){activeChofer=document.getElementById('sel-chofer').value;buildLiqChips(true);applyFiltersAndDraw();}
+
+// ── FILTRAR + OPTIMIZAR ────────────────────────────────────
+function applyFiltersAndDraw(){
+  completed.clear();activeVendedor='ALL';
+  let filtered=ALL_ROWS.filter(r=>r.fecha===activeFecha&&r.chofer===activeChofer);
+  const hasLiq=filtered.some(r=>r.liq);
+  if(hasLiq&&activeLiqs.size&&!activeLiqs.has('__ALL__'))filtered=filtered.filter(r=>activeLiqs.has(r.liq));
+  if(!filtered.length){DATA=[];clearMap();document.getElementById('no-data').style.display='block';updateStats();updateProgress();return;}
+  document.getElementById('no-data').style.display='none';
+  const pts=filtered.map(r=>({lat:r.lat,lng:r.lng}));
+  DATA=nearestNeighbor(pts).map(i=>filtered[i]);
+  buildColorMap(DATA);buildVendedorBtns(DATA);buildLegend(DATA);
+  updateStats();updateProgress();updateBanner();buildPanel();
+  resetVendedorBtns();
+  draw('ALL');
+  const liqLabel=hasLiq&&activeLiqs.size?` | Liq: ${[...activeLiqs].sort().join(', ')}`:'';
+  document.getElementById('sub-info').textContent=`${activeFecha} | ${activeChofer}${liqLabel}`;
+}
+
+// ── MAPA ──────────────────────────────────────────────────
+function computeLabelOffsets(arr){
+  const off={};const DEG=0.0008;
+  for(let i=0;i<arr.length;i++){off[i]=0;let c=0;for(let j=0;j<i;j++){if(Math.abs(arr[i].lat-arr[j].lat)<DEG&&Math.abs(arr[i].lng-arr[j].lng)<DEG)c++;}off[i]=c*18;}
+  return off;
+}
+
+function buildColorMap(rows){colorMap={};[...new Set(rows.map(r=>r.vendedor))].sort().forEach((v,i)=>colorMap[v]=PALETTE[i%PALETTE.length]);}
+function buildVendedorBtns(rows){
+  const vs=[...new Set(rows.map(r=>r.vendedor))].sort();
+  const con=document.getElementById('vendedor-btns');
+  con.innerHTML=`<button class="fbtn on" data-v="ALL" style="border-color:#94a3b8;background:#94a3b8;color:#000" onclick="fv('ALL',this)">Todos</button> `;
+  vs.forEach(v=>{const col=colorMap[v];const b=document.createElement('button');b.className='fbtn';b.dataset.v=v;b.style.cssText=`border-color:${col}`;b.textContent=v;b.onclick=function(){fv(v,this);};con.appendChild(b);con.appendChild(document.createTextNode(' '));});
+}
+function resetVendedorBtns(){document.querySelectorAll('.fbtn[data-v]').forEach(b=>{b.classList.remove('on');b.style.background='transparent';b.style.color='#fff';});const a=document.querySelector('.fbtn[data-v="ALL"]');if(a){a.classList.add('on');a.style.background='#94a3b8';a.style.color='#000';}}
+function buildLegend(rows){const vs=[...new Set(rows.map(r=>r.vendedor))].sort();document.getElementById('legend-items').innerHTML=vs.map(v=>`<div class="li"><div class="ld" style="background:${colorMap[v]}"></div>${v}</div>`).join('');}
+
+function makeIcon(vendorColor,num,isFirst,d,offsetY=0){
+  if(!d)d={total:0,razon:'',vendedor:''};
+  const visited=completed.has(DATA.indexOf(d));
+  const tier=showNums?getTier(d.total):'normal';
+  let dotColor=vendorColor,ring='',pulse='',extraSize=0,tierIcon='';
+  let labelBg='transparent',labelColor='',labelBorder='transparent';
+
+  if(visited){dotColor='#4b5563';ring='opacity:.5;';}
+  else if(tier==='high'){dotColor='#dc2626';ring='box-shadow:0 0 0 3px #fca5a5,0 0 14px 5px rgba(239,68,68,.5);';pulse='animation:pingRed 1.2s ease-in-out infinite;';extraSize=6;tierIcon='🔴';labelBg='#7f1d1d';labelColor='#fecaca';labelBorder='#f87171';}
+  else if(tier==='medium'){dotColor='#ca8a04';ring='box-shadow:0 0 0 2px #fde68a,0 0 9px 3px rgba(234,179,8,.45);';extraSize=3;tierIcon='🟡';labelBg='#78350f';labelColor='#fef3c7';labelBorder='#fbbf24';}
+
+  const size=isFirst?34+extraSize:27+extraSize;
+  const fs=num>=100?'7px':num>=10?'8px':'9px';
+  const inner=isFirst?`<div style="font-size:7px;line-height:1">★</div><div style="font-size:7px;font-weight:800">${num}</div>`:`<span style="font-size:${fs};font-weight:800">${visited?'✓':num}</span>`;
+  const nombre=d.razon?d.razon.trim().split(/\s+/).slice(0,3).join(' '):'';
+  const valorLine=tier!=='normal'&&!visited?`<div style="display:inline-block;background:${labelBg};border:1px solid ${labelBorder};color:${labelColor};font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:5px;box-shadow:0 2px 6px rgba(0,0,0,.5);white-space:nowrap;">${tierIcon} $${d.total.toFixed(0)}</div>`:'';
+  const nombreLine=showNums?`<div style="font-size:9px;font-weight:700;color:${darkMode?'#f1f5f9':'#1e293b'};text-shadow:${darkMode?'-1px -1px 0 #0f172a,1px -1px 0 #0f172a,-1px 1px 0 #0f172a,1px 1px 0 #0f172a':'-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff'};white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis;margin-top:${valorLine?'2px':'0'};pointer-events:none;${visited?'text-decoration:line-through;opacity:.6;':''}">${nombre}</div>`:'';
+  const connector=offsetY>0?`<div style="position:absolute;left:50%;top:${size+1}px;width:1px;height:${offsetY+2}px;background:rgba(148,163,184,.3);transform:translateX(-50%);pointer-events:none"></div>`:'';
+  const label=showNums?`<div style="position:absolute;top:${size+3+offsetY}px;left:50%;transform:translateX(-50%);text-align:center;line-height:1.4;pointer-events:none;white-space:nowrap;z-index:10;">${valorLine}${nombreLine}</div>`:'';
+  const totalH=size+46+offsetY;
+  return L.divIcon({className:'',html:`<div style="position:relative;width:${size}px;height:${totalH}px;"><div style="background:${dotColor};width:${size}px;height:${size}px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;border:2px solid #fff;${ring}cursor:pointer;${pulse}">${inner}</div>${connector}${label}</div>`,iconSize:[size,totalH],iconAnchor:[size/2,size/2],popupAnchor:[0,-size/2-2]});
+}
+
+function buildPopup(d,idx){
+  const color=colorMap[d.vendedor]||'#888';
+  const tier=getTier(d.total);
+  const isFirst=idx===0;
+  const dn=idx<DATA.length-1?haversine(d.lat,d.lng,DATA[idx+1].lat,DATA[idx+1].lng):null;
+  const distInfo=dn!=null?`<div class="pc-km">➡️ Siguiente: ${(dn*1000).toFixed(0)} m</div>`:`<div class="pc-km">🏁 Último punto de la ruta</div>`;
+  const liqBadge=d.liq?`<div class="pc-liq">📋 Liq. ${d.liq}</div>`:'';
+  const tierBadge=tier!=='normal'?`<span style="background:${tier==='high'?'#dc2626':'#ca8a04'};color:#fff;font-size:.55rem;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">${tier==='high'?'🔴 DROP ALTO':'🟡 DROP MEDIO'}</span>`:'';
+  const visitedState=completed.has(idx);
+  const gmapsUrl=`https://www.google.com/maps/dir/?api=1&destination=${d.lat},${d.lng}&travelmode=driving`;
+  const wazeUrl=`https://waze.com/ul?ll=${d.lat},${d.lng}&navigate=yes`;
+  return`<div class="pc">
+<div class="pc-head">
+  <div class="pc-code">
+    <div class="pc-num" style="background:${tier==='high'?'#dc2626':tier==='medium'?'#ca8a04':color}">${idx+1}</div>
+    <div>
+      <div class="pc-title">${isFirst?'★ INICIO — ':''}${d.vendedor} ${tierBadge}</div>
+      <div class="pc-sub">${d.chofer}</div>
+      ${liqBadge}
+    </div>
+  </div>
+  <div class="pc-badge" style="background:${color}">${d.vendedor}</div>
+</div>
+<div class="pc-body">
+  <div class="pc-row"><span class="pc-key">Fecha Liq</span><span class="pc-val">${d.fecha}</span></div>
+  <div class="pc-row"><span class="pc-key">Num Liquidación</span><span class="pc-val">${d.liq||'—'}</span></div>
+  <div class="pc-row"><span class="pc-key">vendedor</span><span class="pc-val">${d.vendedor}</span></div>
+  <div class="pc-row"><span class="pc-key">CodigoCliente</span><span class="pc-val">${d.codigo}</span></div>
+  <div class="pc-row"><span class="pc-key">Razon</span><span class="pc-val">${d.razon}</span></div>
+  <div class="pc-row"><span class="pc-key">Direccion</span><span class="pc-val">${d.dir}</span></div>
+  <div class="pc-row"><span class="pc-key">longitud_x</span><span class="pc-val">${d.lng}</span></div>
+  <div class="pc-row"><span class="pc-key">latitud_y</span><span class="pc-val">${d.lat}</span></div>
+  <div style="margin:3px 0 1px;font-size:.69rem;font-weight:700;color:#334155">Suma de Peso ${d.peso.toFixed(2)}</div>
+  <div style="font-size:.69rem;font-weight:700;color:${tier==='high'?'#dc2626':tier==='medium'?'#ca8a04':'#334155'}">Suma de Total $ ${d.total.toFixed(2)}</div>
+</div>
+<div class="pc-foot">
+  <div class="pc-metric"><div class="mv">${d.peso.toFixed(2)}</div><div class="ml">kg Peso</div></div>
+  <div class="pc-metric"><div class="mv" style="color:${tier==='high'?'#dc2626':tier==='medium'?'#ca8a04':'#1e40af'}">$${d.total.toFixed(0)}</div><div class="ml">Total</div></div>
+  <div class="pc-metric"><div class="mv">#${idx+1}</div><div class="ml">Orden</div></div>
+</div>
+${distInfo}
+<div class="pc-actions">
+  <button class="pc-btn pc-btn-nav" onclick="window.open('${gmapsUrl}','_blank')">🗺️ Google Maps</button>
+  <button class="pc-btn pc-btn-waze" onclick="window.open('${wazeUrl}','_blank')">🚗 Waze</button>
+  <button class="pc-btn pc-btn-done ${visitedState?'undone':''}" id="done-btn-${idx}" onclick="toggleVisited(${idx})">${visitedState?'↩ Desmarcar':'✅ Entregado'}</button>
+</div>
+<div class="pc-coords">📍 ${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}</div>
+</div>`;
+}
+
+function clearMap(){
+  allMarkers.forEach(m=>map.removeLayer(m));
+  allLines.forEach(l=>map.removeLayer(l));
+  if(clusterGroup){map.removeLayer(clusterGroup);clusterGroup=null;}
+  allMarkers=[];allLines=[];
+}
+
+function draw(filter){
+  clearMap();
+  const fd=filter==='ALL'?DATA:DATA.filter(d=>d.vendedor===filter);
+  if(!fd.length)return;
+
+  if(showRuta&&fd.length>1){
+    const line=L.polyline(fd.map(d=>[d.lat,d.lng]),{color:'#3b82f6',weight:3,opacity:.75,dashArray:'8,5'}).addTo(map);
+    allLines.push(line);
+    for(let i=0;i<fd.length-1;i++){
+      const dist=haversine(fd[i].lat,fd[i].lng,fd[i+1].lat,fd[i+1].lng);
+      if(dist<0.35){
+        const mid=[(fd[i].lat+fd[i+1].lat)/2,(fd[i].lng+fd[i+1].lng)/2];
+        const lbl=L.marker(mid,{icon:L.divIcon({className:'',html:`<div style="background:rgba(15,23,42,.8);color:#93c5fd;font-size:9px;padding:1px 4px;border-radius:4px;white-space:nowrap">${(dist*1000).toFixed(0)}m</div>`,iconAnchor:[18,8]})}).addTo(map);
+        allLines.push(lbl);
+      }
+    }
+  }
+
+  LABEL_OFFSETS=computeLabelOffsets(DATA);
+
+  if(useCluster){
+    clusterGroup=L.markerClusterGroup({maxClusterRadius:50,showCoverageOnHover:false});
+    fd.forEach(d=>{
+      const ri=DATA.indexOf(d);
+      const col=colorMap[d.vendedor]||'#888';
+      const icon=makeIcon(col,ri+1,ri===0,d,0);
+      const m=L.marker([d.lat,d.lng],{icon}).bindPopup(buildPopup(d,ri),{maxWidth:320,minWidth:285});
+      m.on('popupopen',()=>markVisited(ri,false));
+      clusterGroup.addLayer(m);
+      allMarkers.push(m);
+    });
+    map.addLayer(clusterGroup);
+  } else {
+    fd.forEach(d=>{
+      const ri=DATA.indexOf(d);
+      const col=colorMap[d.vendedor]||'#888';
+      const icon=makeIcon(col,ri+1,ri===0,d,LABEL_OFFSETS[ri]||0);
+      const m=L.marker([d.lat,d.lng],{icon}).addTo(map).bindPopup(buildPopup(d,ri),{maxWidth:320,minWidth:285});
+      m.on('popupopen',()=>markVisited(ri,false));
+      allMarkers.push(m);
+    });
+  }
+  map.fitBounds(L.latLngBounds(fd.map(d=>[d.lat,d.lng])),{padding:[40,40]});
+}
+
+// ── VISITADOS / ENTREGADOS ─────────────────────────────────
+function markVisited(idx,redraw=true){
+  completed.add(idx);
+  updateProgress();updateStats();updatePanel();
+  if(redraw)draw(activeVendedor);
+}
+
+function toggleVisited(idx){
+  if(completed.has(idx))completed.delete(idx);
+  else completed.add(idx);
+  updateProgress();updateStats();updatePanel();
+  map.closePopup();
+  draw(activeVendedor);
+}
+
+// ── PANEL LATERAL ─────────────────────────────────────────
+
+function filterPanel(q){
+  const items=document.querySelectorAll('.p-item');
+  const ql=q.toLowerCase();
+  let shown=0;
+  items.forEach(el=>{
+    const name=(el.querySelector('.p-name')||{}).textContent||'';
+    const meta=(el.querySelector('.p-meta')||{}).textContent||'';
+    const match=!ql||name.toLowerCase().includes(ql)||meta.toLowerCase().includes(ql);
+    el.style.display=match?'flex':'none';
+    if(match)shown++;
+  });
+  document.getElementById('panel-footer').textContent=
+    q?`${shown} resultado(s) para "${q}"`:
+    `${completed.size} de ${DATA.length} entregados`;
+}
+function buildPanel(){
+  const list=document.getElementById('panel-list');
+  list.innerHTML='';
+  DATA.forEach((d,i)=>{
+    const tier=getTier(d.total);
+    const vis=completed.has(i);
+    const col=colorMap[d.vendedor]||'#888';
+    const dotCol=tier==='high'?'#dc2626':tier==='medium'?'#ca8a04':col;
+    const div=document.createElement('div');
+    div.className=`p-item ${tier} ${vis?'visited':''}`;
+    div.id=`pi-${i}`;
+    div.innerHTML=`
+      <span class="p-num">${i+1}</span>
+      <div class="p-dot" style="background:${dotCol}"></div>
+      <div class="p-info">
+        <div class="p-name">${d.razon}</div>
+        <div class="p-meta">
+          <span class="p-total ${tier}">$${d.total.toFixed(0)}</span>
+          <span>${d.vendedor}</span>
+          ${d.liq?`<span>Liq ${d.liq}</span>`:''}
+        </div>
+      </div>
+      <div class="p-actions">
+        <button class="p-act-btn p-act-done" title="Marcar como entregado" data-action="deliver" data-idx="${i}">✅</button>
+        <button class="p-act-btn p-act-undone" title="Desmarcar entrega" data-action="undo" data-idx="${i}">↩</button>
+      </div>`;
+
+    // Click en info → centra mapa, abre popup, NO toca el estado de entrega
+    div.querySelector('.p-info').addEventListener('click',()=>{
+      const m=allMarkers[DATA.indexOf(d)];
+      if(m){
+        if(useCluster&&clusterGroup){clusterGroup.zoomToShowLayer(m,()=>m.openPopup());}
+        else{map.setView([d.lat,d.lng],17);m.openPopup();}
+      }
+    });
+
+    // Botón ✅ Entregar
+    div.querySelector('[data-action="deliver"]').addEventListener('click',(e)=>{
+      e.stopPropagation();
+      if(!completed.has(i)){completed.add(i);updateProgress();updateStats();updatePanel();
+        const col=colorMap[d.vendedor]||'#888';
+        const ni=makeIcon(col,i+1,i===0,d,LABEL_OFFSETS[i]||0);
+        if(allMarkers[i])allMarkers[i].setIcon(ni);
+      }
+    });
+
+    // Botón ↩ Desmarcar
+    div.querySelector('[data-action="undo"]').addEventListener('click',(e)=>{
+      e.stopPropagation();
+      if(completed.has(i)){completed.delete(i);updateProgress();updateStats();updatePanel();
+        const col=colorMap[d.vendedor]||'#888';
+        const ni=makeIcon(col,i+1,i===0,d,LABEL_OFFSETS[i]||0);
+        if(allMarkers[i])allMarkers[i].setIcon(ni);
+      }
+    });
+
+    list.appendChild(div);
+  });
+  updatePanel();
+}
+
+function panelToggleVisited(idx){
+  if(completed.has(idx)) completed.delete(idx);
+  else completed.add(idx);
+  updateProgress(); updateStats(); updatePanel();
+  // Redibujar solo el marcador afectado sin redibujar todo el mapa
+  const d=DATA[idx];
+  if(d){
+    const col=colorMap[d.vendedor]||'#888';
+    const newIcon=makeIcon(col,idx+1,idx===0,d,LABEL_OFFSETS[idx]||0);
+    if(allMarkers[idx]) allMarkers[idx].setIcon(newIcon);
+  }
+}
+
+function updatePanel(){
+  DATA.forEach((_,i)=>{
+    const el=document.getElementById(`pi-${i}`);
+    if(!el)return;
+    const vis=completed.has(i);
+    el.className=`p-item ${getTier(DATA[i].total)} ${vis?'visited':''}`;
+    const btnDone=el.querySelector('[data-action="deliver"]');
+    const btnUndo=el.querySelector('[data-action="undo"]');
+    if(btnDone)btnDone.style.display=vis?'none':'flex';
+    if(btnUndo)btnUndo.style.display=vis?'flex':'none';
+  });
+  const tot=DATA.length,vis=completed.size;
+  // FAB badge
+  const badge=document.getElementById('fab-badge');
+  if(badge){badge.textContent=tot-vis;badge.style.background=vis===tot&&tot>0?'#22c55e':'#3b82f6';}
+  // Panel stats
+  const drops=DATA.filter(d=>getTier(d.total)==='high').length;
+  const totalV=DATA.reduce((s,d)=>s+d.total,0);
+  const ps_t=document.getElementById('ps-total');const ps_e=document.getElementById('ps-entregados');
+  const ps_d=document.getElementById('ps-drops');const ps_v=document.getElementById('ps-venta');
+  if(ps_t)ps_t.textContent=tot;if(ps_e)ps_e.textContent=vis;
+  if(ps_d)ps_d.textContent=drops;if(ps_v)ps_v.textContent='$'+totalV.toFixed(0);
+  // Footer
+  const footer=document.getElementById('panel-footer');
+  if(footer)footer.textContent=`${vis} de ${tot} entregados`;
+}
+
+// ── BUSCAR ────────────────────────────────────────────────
+function onSearch(val){
+  const q=val.trim().toLowerCase();
+  if(!q){document.querySelectorAll('.p-item').forEach(el=>el.style.display='');return;}
+  DATA.forEach((d,i)=>{
+    const el=document.getElementById(`pi-${i}`);
+    if(!el)return;
+    const match=d.razon.toLowerCase().includes(q)||d.codigo.includes(q)||d.dir.toLowerCase().includes(q);
+    el.style.display=match?'':'none';
+    if(match&&!panelOpen)togglePanel(document.getElementById('btn-panel'));
+  });
+  // Centro mapa en primer resultado
+  const first=DATA.find((d,i)=>d.razon.toLowerCase().includes(q)||d.codigo.includes(q));
+  if(first){const m=allMarkers[DATA.indexOf(first)];if(m){map.setView([first.lat,first.lng],17);m.openPopup();}}
+}
+
+// ── STATS ─────────────────────────────────────────────────
+function updateStats(){
+  const tp=DATA.reduce((s,d)=>s+d.peso,0);
+  const tv=DATA.reduce((s,d)=>s+d.total,0);
+  let km=0;for(let i=0;i<DATA.length-1;i++)km+=haversine(DATA[i].lat,DATA[i].lng,DATA[i+1].lat,DATA[i+1].lng);
+  const drops=DATA.filter(d=>getTier(d.total)!=='normal').length;
+  document.getElementById('s-clientes').textContent=DATA.length||'—';
+  document.getElementById('s-visitados').textContent=`${completed.size}/${DATA.length}`;
+  document.getElementById('s-km').textContent=DATA.length?(km.toFixed(1)+' km'):'— km';
+  document.getElementById('s-peso').textContent=DATA.length?(tp.toFixed(1)+' kg'):'—';
+  document.getElementById('s-venta').textContent=DATA.length?('$ '+tv.toFixed(2)):'—';
+  document.getElementById('s-drops').textContent=drops||'—';
+}
+function updateProgress(){
+  const n=completed.size,tot=DATA.length,pct=tot?Math.round(n/tot*100):0;
+  document.getElementById('prog-fill').style.width=pct+'%';
+  document.getElementById('prog-pct').textContent=`${n} / ${tot} (${pct}%)`;
+}
+function updateBanner(){
+  const ban=document.getElementById('liq-banner');
+  if(!DATA.length){ban.style.display='none';return;}
+  ban.style.display='flex';
+  const tp=DATA.reduce((s,d)=>s+d.peso,0);
+  const tv=DATA.reduce((s,d)=>s+d.total,0);
+  const hi=DATA.filter(d=>d.total>=TIER_HIGH).length;
+  const me=DATA.filter(d=>d.total>=TIER_MEDIUM&&d.total<TIER_HIGH).length;
+  document.getElementById('ban-cli').textContent=DATA.length;
+  document.getElementById('ban-peso').textContent=tp.toFixed(1)+' kg';
+  document.getElementById('ban-total').textContent='$ '+tv.toFixed(2);
+  document.getElementById('ban-high').textContent=hi;
+  document.getElementById('ban-med').textContent=me;
+}
+
+// ── CONTROLES ─────────────────────────────────────────────
+function fv(v,btn){
+  activeVendedor=v;
+  document.querySelectorAll('.fbtn[data-v]').forEach(b=>{b.classList.remove('on');b.style.background='transparent';b.style.color='#fff';});
+  btn.classList.add('on');btn.style.background=btn.style.borderColor;btn.style.color=v==='ALL'?'#000':'#fff';
+  draw(activeVendedor);
+}
+function toggleRuta(btn){
+  showRuta=!showRuta;
+  btn.style.background=showRuta?'#1d4ed8':'transparent';
+  btn.style.borderColor=showRuta?'#3b82f6':'#475569';
+  btn.style.color=showRuta?'#fff':'#64748b';
+  draw(activeVendedor);
+}
+function toggleNums(btn){
+  showNums=!showNums;
+  btn.style.background=showNums?'#15803d':'transparent';
+  btn.style.borderColor=showNums?'#22c55e':'#475569';
+  btn.style.color=showNums?'#fff':'#64748b';
+  draw(activeVendedor);
+}
+function toggleCluster(btn){
+  useCluster=!useCluster;
+  btn.classList.toggle('on',useCluster);
+  draw(activeVendedor);
+}
+function toggleDark(btn){
+  darkMode=!darkMode;
+  if(tileLayer)map.removeLayer(tileLayer);
+  tileLayer=L.tileLayer(darkMode?TILE_DARK:TILE_LIGHT,{attribution:'© '+(darkMode?'CARTO':'OpenStreetMap'),maxZoom:19}).addTo(map);
+  btn.textContent=darkMode?'🌙 Noche':'☀️ Día';
+  btn.classList.toggle('on',darkMode);
+  draw(activeVendedor);
+}
+function openPanel(){
+  panelOpen=true;
+  document.getElementById('side-panel').classList.add('open');
+  document.getElementById('panel-overlay').classList.add('show');
+  document.getElementById('panel-search').value='';
+  filterPanel('');
+  document.getElementById('fab-panel').style.display='none';
+}
+function closePanel(){
+  panelOpen=false;
+  document.getElementById('side-panel').classList.remove('open');
+  document.getElementById('panel-overlay').classList.remove('show');
+  document.getElementById('fab-panel').style.display='flex';
+  setTimeout(()=>map.invalidateSize(),310);
+}
+function recargar(){
+  const btn=document.querySelector('.reload-btn');
+  btn.classList.add('loading');btn.textContent='↻ Actualizando...';
+  completed.clear();updateProgress();
+  loadAndRender().finally(()=>{btn.classList.remove('loading');btn.textContent='↻ Actualizar';});
+}
+
+// ── WHATSAPP SHARE ────────────────────────────────────────
+function shareWhatsApp(){
+  const drops=DATA.filter(d=>getTier(d.total)!=='normal');
+  const tv=DATA.reduce((s,d)=>s+d.total,0);
+  const url=encodeURIComponent(window.location.href);
+  const msg=encodeURIComponent(
+    `🚛 *Ruta ${activeFecha}*\n`+
+    `👤 ${activeChofer}\n`+
+    `📦 ${DATA.length} clientes | 💰 $${tv.toFixed(2)}\n`+
+    (drops.length?`⚠️ ${drops.length} drops fuertes (>$${TIER_MEDIUM})\n`:'')+
+    `\n🗺️ Ver mapa: ${decodeURIComponent(url)}`
+  );
+  window.open(`https://wa.me/?text=${msg}`,'_blank');
+}
+
+// ── CARGA PRINCIPAL ───────────────────────────────────────
+async function loadAndRender(){
+  try{
+    ALL_ROWS=await fetchData();
+    buildFechaSelector();
+    applyFiltersAndDraw();
+    document.getElementById('ultima-act').textContent=`Act: ${new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'})}`;
+    document.getElementById('overlay').classList.add('hidden');
+  }catch(err){
+    document.getElementById('load-src').textContent='';
+    const em=document.getElementById('error-msg');
+    em.style.display='block';
+    em.innerHTML=`❌ Error al cargar datos:<br><b>${err.message}</b><br><br>Verifica que el Apps Script esté publicado<br>con acceso <b>"Cualquier persona"</b>.`;
+    console.error(err);
+  }
+}
+
+// Botón flotante WhatsApp
+const wabtn=document.createElement('button');
+wabtn.style.cssText='position:fixed;bottom:16px;left:10px;z-index:800;background:#25d366;border:none;border-radius:50%;width:42px;height:42px;font-size:1.2rem;cursor:pointer;box-shadow:0 3px 12px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;';
+wabtn.title='Compartir ruta por WhatsApp';
+wabtn.innerHTML='<svg viewBox="0 0 32 32" width="24" height="24" fill="white"><path d="M16 3C9 3 3 9 3 16c0 2.4.7 4.7 1.9 6.6L3 29l6.6-1.9C11.4 28.3 13.6 29 16 29c7 0 13-6 13-13S23 3 16 3zm6.5 18.5c-.3.8-1.5 1.5-2.1 1.6-.5.1-1.2.1-1.9-.1-.4-.1-1-.3-1.7-.6-3-1.3-5-4.3-5.1-4.5-.1-.2-1.1-1.5-1.1-2.8 0-1.3.7-2 .9-2.2.2-.2.5-.3.7-.3h.5c.2 0 .4 0 .5.4.2.4.7 1.7.7 1.8.1.1.1.3 0 .4-.1.2-.1.3-.3.5l-.4.5c-.1.1-.3.3-.1.6.2.3.8 1.3 1.7 2.1 1.2 1 2.1 1.4 2.4 1.5.3.1.5.1.6-.1.2-.2.7-.8.9-1.1.2-.3.4-.2.7-.1.3.1 1.7.8 2 1 .3.1.5.2.6.3.1.3.1 1-.2 1.8z"/></svg>';
+wabtn.onclick=shareWhatsApp;
+document.body.appendChild(wabtn);
+
+setInterval(()=>{completed.clear();loadAndRender();},5*60*1000);
+loadAndRender();
+</script>
+</body>
+</html>
