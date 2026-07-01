@@ -1,0 +1,33 @@
+{
+  "name": "Mapas Diarios — Rutas en Vivo",
+  "short_name": "Mapas Diarios",
+  "description": "Gestión de rutas de entrega en tiempo real",
+  "start_url": "./mapa_live_F150.html",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "any",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["navigation", "utilities"],
+  "shortcuts": [
+    {
+      "name": "Abrir Mapa",
+      "url": "./mapa_live_F150.html",
+      "description": "Ver ruta del día"
+    }
+  ]
+}
