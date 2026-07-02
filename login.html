@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>Mapas Diarios — Ingreso</title>
+<link rel="manifest" href="manifest.json">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.card{width:100%;max-width:340px;padding:0 20px}
+.logo{text-align:center;margin-bottom:22px}
+.logo .emoji{font-size:2.6rem}
+.logo h1{font-size:1.05rem;font-weight:800;color:#f1f5f9;margin-top:6px;letter-spacing:.3px}
+.logo p{font-size:.72rem;color:#64748b;margin-top:2px}
+.pin-display{display:flex;justify-content:center;gap:10px;margin:22px 0}
+.pin-dot{width:16px;height:16px;border-radius:50%;border:2px solid #334155;background:transparent;transition:all .15s}
+.pin-dot.filled{background:#3b82f6;border-color:#3b82f6}
+.pin-dot.error{background:#dc2626;border-color:#dc2626}
+#pin-hidden{position:absolute;opacity:0;pointer-events:none}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.key{background:#1e293b;border:1.5px solid #334155;color:#f1f5f9;font-size:1.15rem;font-weight:700;border-radius:12px;padding:14px 0;cursor:pointer;transition:all .12s;user-select:none}
+.key:active{background:#334155;transform:scale(.96)}
+.key.action{background:transparent;border:none;color:#64748b;font-size:.95rem}
+.msg{text-align:center;font-size:.72rem;color:#f87171;min-height:18px;margin-top:14px;font-weight:600}
+.msg.ok{color:#4ade80}
+.footer-note{text-align:center;font-size:.6rem;color:#334155;margin-top:22px}
+.spinner-inline{display:inline-block;width:12px;height:12px;border:2px solid #334155;border-top-color:#3b82f6;border-radius:50%;animation:spin .6s linear infinite;vertical-align:middle;margin-right:5px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">
+    <div class="emoji">🚛</div>
+    <h1>MAPAS DIARIOS</h1>
+    <p>Ingresa tu PIN para continuar</p>
+  </div>
+
+  <div class="pin-display" id="pin-display">
+    <div class="pin-dot"></div>
+    <div class="pin-dot"></div>
+    <div class="pin-dot"></div>
+  </div>
+
+  <div class="msg" id="msg">&nbsp;</div>
+
+  <div class="keypad">
+    <button class="key" onclick="pressKey('1')">1</button>
+    <button class="key" onclick="pressKey('2')">2</button>
+    <button class="key" onclick="pressKey('3')">3</button>
+    <button class="key" onclick="pressKey('4')">4</button>
+    <button class="key" onclick="pressKey('5')">5</button>
+    <button class="key" onclick="pressKey('6')">6</button>
+    <button class="key" onclick="pressKey('7')">7</button>
+    <button class="key" onclick="pressKey('8')">8</button>
+    <button class="key" onclick="pressKey('9')">9</button>
+    <button class="key action" onclick="clearPin()">Borrar</button>
+    <button class="key" onclick="pressKey('0')">0</button>
+    <button class="key action" onclick="backspace()">⌫</button>
+  </div>
+
+  <div class="footer-note">Mapas Diarios — Rutas en Vivo</div>
+</div>
+
+<script>
+if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
+const API_URL="https://script.google.com/macros/s/AKfycbwzQRnCJHFXni_9Qvs9kh_6BoikPDtb2sAMNChS3gSk9gAn5e31z5PFvKRGRzeoFqK5og/exec";
+let pin='';
+let verificando=false;
+const MAXLEN=3; // los PINs actuales son de 3 dígitos; si agregas uno más largo, se autoextiende al escribir
+
+// Si ya hay sesión activa, saltar directo a donde corresponde
+(function(){
+  try{
+    const s=JSON.parse(localStorage.getItem('sesionActiva')||'null');
+    if(s && s.rol) redirigir(s.rol);
+  }catch(e){}
+})();
+
+function renderDots(){
+  const wrap=document.getElementById('pin-display');
+  const len=Math.max(3,pin.length);
+  wrap.innerHTML='';
+  for(let i=0;i<len;i++){
+    const d=document.createElement('div');
+    d.className='pin-dot'+(i<pin.length?' filled':'');
+    wrap.appendChild(d);
+  }
+}
+function pressKey(n){
+  if(verificando||pin.length>=MAXLEN) return;
+  pin+=n;
+  renderDots();
+  setMsg('');
+  if(pin.length>=MAXLEN) intentarLogin();
+}
+function backspace(){ if(verificando)return; pin=pin.slice(0,-1); renderDots(); setMsg(''); }
+function clearPin(){ if(verificando)return; pin=''; renderDots(); setMsg(''); }
+function setMsg(t,cls){ const m=document.getElementById('msg'); m.textContent=t||'\u00A0'; m.className='msg'+(cls?(' '+cls):''); }
+function shakeError(){
+  document.querySelectorAll('.pin-dot').forEach(d=>d.classList.add('error'));
+  setTimeout(()=>{ pin=''; renderDots(); },400);
+}
+
+async function fetchConTimeout(url, opts, ms){
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(), ms);
+  try{
+    return await fetch(url, {...opts, signal:ctrl.signal});
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function intentarLogin(){
+  verificando=true;
+  setMsg('Verificando...');
+  document.querySelectorAll('.key').forEach(k=>k.style.pointerEvents='none');
+  let data;
+  try{
+    const res=await fetchConTimeout(API_URL+'?tipo=login&pin='+encodeURIComponent(pin)+'&t='+Date.now(),{method:'GET',mode:'cors'}, 8000);
+    if(!res.ok) throw new Error('HTTP '+res.status);
+    data=await res.json();
+  }catch(e){
+    try{
+      const P='https://api.allorigins.win/get?url='+encodeURIComponent(API_URL+'?tipo=login&pin='+encodeURIComponent(pin)+'&t='+Date.now());
+      const r2=await fetchConTimeout(P,{},8000);
+      if(!r2.ok) throw new Error('HTTP '+r2.status);
+      const w=await r2.json();
+      data=JSON.parse(w.contents);
+    }catch(e2){
+      setMsg(e2.name==='AbortError'?'❌ El servidor tardó demasiado. Reintenta.':'❌ Sin conexión. Verifica que el Apps Script esté publicado con acceso "Cualquier persona".');
+      document.querySelectorAll('.key').forEach(k=>k.style.pointerEvents='');
+      pin=''; renderDots();
+      verificando=false;
+      return;
+    }
+  }
+  document.querySelectorAll('.key').forEach(k=>k.style.pointerEvents='');
+  if(data && data.ok){
+    setMsg('✅ Bienvenido, '+data.usuario, 'ok');
+    localStorage.setItem('sesionActiva', JSON.stringify({usuario:data.usuario, rol:data.rol, ts:Date.now()}));
+    setTimeout(()=>redirigir(data.rol), 500);
+  } else {
+    setMsg('❌ PIN incorrecto');
+    shakeError();
+    verificando=false;
+  }
+}
+
+function redirigir(rol){
+  const rolesResumen=['admin','bodega','coordinador','cartera'];
+  const rolesMapa=['transportista','reparto'];
+  if(rolesMapa.includes(rol)) window.location.href='mapa_live_F150.html';
+  else if(rolesResumen.includes(rol)) window.location.href='resumen.html';
+  else window.location.href='mapa_live_F150.html';
+}
+
+// Soporte de teclado físico
+document.addEventListener('keydown', e=>{
+  if(e.key>='0'&&e.key<='9') pressKey(e.key);
+  else if(e.key==='Backspace') backspace();
+  else if(e.key==='Escape') clearPin();
+});
+</script>
+</body>
+</html>
