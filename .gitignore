@@ -1,0 +1,7 @@
+# Claude Code (archivos locales del asistente, no publicar)
+.claude/
+
+# Sistema
+Thumbs.db
+Desktop.ini
+.DS_Store
