@@ -2585,8 +2585,16 @@ function generarReporte(){
   const vis=completed.size, xcCount=porCobrar.size, quemCount=quemados.size, anulCount=anulados.size;
   const pend=Math.max(0,tot-vis-xcCount-quemCount-anulCount);
   const totalVal=DATA.reduce((s,d)=>s+d.total,0);
-  let entVal=0,ncVal=0;
-  DATA.forEach((d,i)=>{ if(!completed.has(i))return; if(devParcial.has(i)){const p=devParcial.get(i);entVal+=p;ncVal+=(d.total-p);}else{entVal+=d.total;} });
+  let entVal=0,ncVal=0,retenVal=0,retenCount=0,ncCount=0;
+  DATA.forEach((d,i)=>{
+    if(!completed.has(i))return;
+    if(devParcial.has(i)){
+      const p=devParcial.get(i); entVal+=p;
+      const dif=d.total-p; // lo no cobrado en este cliente
+      if(d.hasRet && (d.retencionVal||0)>0 && Math.abs(dif-d.retencionVal)<0.02){ retenVal+=dif; retenCount++; } // retención 2%
+      else if(dif>0.009){ ncVal+=dif; ncCount++; } // devolución / NC parcial real
+    } else { entVal+=d.total; }
+  });
   const xcVal=DATA.filter((_,i)=>porCobrar.has(i)).reduce((s,d)=>s+d.total,0);
   let quemVal=0, quemPendVal=0, quemPendCount=0;
   DATA.forEach((d,i)=>{
@@ -2616,7 +2624,8 @@ function generarReporte(){
       <div class="exp-row"><span class="exp-label">🔥 Quemados</span><span class="exp-val red">${quemCount} — $${quemVal.toFixed(2)}</span></div>
       ${quemPendCount>0?`<div class="exp-row"><span class="exp-label">⚠️ Quemados c/ pendiente</span><span class="exp-val orange">${quemPendCount} — $${quemPendVal.toFixed(2)}</span></div>`:''}
       <div class="exp-row"><span class="exp-label">❌ Anulados</span><span class="exp-val" style="color:#818cf8">${anulCount} — $${anulVal.toFixed(2)}</span></div>
-      <div class="exp-row"><span class="exp-label">💰 NC Parciales</span><span class="exp-val red">${devParcial.size} — $${ncVal.toFixed(2)}</span></div>
+      <div class="exp-row"><span class="exp-label">💰 NC Parciales</span><span class="exp-val red">${ncCount} — $${ncVal.toFixed(2)}</span></div>
+      <div class="exp-row"><span class="exp-label">🧾 Retención 2%</span><span class="exp-val" style="color:#c084fc">${retenCount} — $${retenVal.toFixed(2)}</span></div>
       <div class="exp-row"><span class="exp-label">⏳ Pendientes</span><span class="exp-val">${pend}</span></div>
     </div>
     ${anulDetalle?`<div class="exp-section"><div style="font-size:.6rem;color:#64748b;font-weight:700;margin-bottom:4px">MOTIVOS DE ANULACIÓN</div>${anulDetalle}</div>`:''}`;
@@ -2629,8 +2638,16 @@ function getReporteTexto(){
   const quemCount=quemados.size, anulCount=anulados.size;
   const pend=Math.max(0,tot-vis-xcCount-quemCount-anulCount);
   const totalVal=DATA.reduce((s,d)=>s+d.total,0);
-  let entVal=0,ncVal=0;
-  DATA.forEach((d,i)=>{if(!completed.has(i))return;if(devParcial.has(i)){const p=devParcial.get(i);entVal+=p;ncVal+=(d.total-p);}else{entVal+=d.total;}});
+  let entVal=0,ncVal=0,retenVal=0,retenCount=0,ncCount=0;
+  DATA.forEach((d,i)=>{
+    if(!completed.has(i))return;
+    if(devParcial.has(i)){
+      const p=devParcial.get(i); entVal+=p;
+      const dif=d.total-p;
+      if(d.hasRet && (d.retencionVal||0)>0 && Math.abs(dif-d.retencionVal)<0.02){ retenVal+=dif; retenCount++; }
+      else if(dif>0.009){ ncVal+=dif; ncCount++; }
+    } else { entVal+=d.total; }
+  });
   const xcVal=DATA.filter((_,i)=>porCobrar.has(i)).reduce((s,d)=>s+d.total,0);
   let quemVal=0, quemPendVal=0, quemPendCount=0;
   DATA.forEach((d,i)=>{
@@ -2651,7 +2668,8 @@ function getReporteTexto(){
   txt+=`🔥 Quemados: ${quemCount} — $${quemVal.toFixed(2)}\n`;
   if(quemPendCount>0) txt+=`⚠️ Quemados con pendiente: ${quemPendCount} — $${quemPendVal.toFixed(2)} por quemar/cobrar aún\n`;
   txt+=`❌ Anulados: ${anulCount} — $${anulVal.toFixed(2)}\n`;
-  if(ncVal>0) txt+=`💰 NC Parciales: ${devParcial.size} — $${ncVal.toFixed(2)}\n`;
+  if(ncVal>0) txt+=`💰 NC Parciales: ${ncCount} — $${ncVal.toFixed(2)}\n`;
+  if(retenCount>0) txt+=`🧾 Retención 2%: ${retenCount} — $${retenVal.toFixed(2)}\n`;
   txt+=`⏳ Pendientes: ${pend}\n`;
   if(anulados.size){
     txt+=`\n📋 MOTIVOS ANULACIÓN:\n`;
