@@ -1,0 +1,2795 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mapas Diarios">
+<meta name="application-name" content="Mapas Diarios">
+<meta name="description" content="Rutas de entrega en vivo — Riobamba, Ecuador">
+<link rel="manifest" href="manifest.json">
+<!-- iOS icons -->
+<link rel="apple-touch-icon" href="https://coordinadorl.github.io/Mapas-Diarios/icon-192.png">
+<title>Mapas Diarios — Rutas en Vivo</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js">
+// ── PWA SERVICE WORKER ──────────────────────────────────────
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => console.log('SW registered:', reg.scope))
+      .catch(err => console.log('SW error:', err));
+  });
+}
+
+// ── PWA INSTALL PROMPT ──────────────────────────────────────
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  // Show install button in bottom bar
+  const installBtn = document.getElementById('btn-install-pwa');
+  if(installBtn) installBtn.style.display = 'flex';
+});
+window.addEventListener('appinstalled', () => {
+  deferredPrompt = null;
+  const installBtn = document.getElementById('btn-install-pwa');
+  if(installBtn) installBtn.style.display = 'none';
+});
+function instalarApp(){
+  if(!deferredPrompt){ alert('Para instalar: toca los 3 puntos del navegador → "Añadir a pantalla de inicio"'); return; }
+  deferredPrompt.prompt();
+  deferredPrompt.userChoice.then(choice=>{
+    if(choice.outcome==='accepted') console.log('PWA instalada');
+    deferredPrompt = null;
+  });
+}
+
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.Default.css"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── TOPBAR ── */
+.topbar{background:linear-gradient(90deg,#1e293b,#0f172a);padding:7px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #3b82f6;flex-shrink:0;gap:8px;flex-wrap:wrap}
+.topbar-left h1{font-size:.88rem;font-weight:700;letter-spacing:.3px;color:#f1f5f9}
+.topbar-left p{font-size:.62rem;color:#64748b;margin-top:1px}
+.stats{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.stat{text-align:center}
+.stat .v{font-size:.9rem;font-weight:700;color:#3b82f6}
+.stat .v.green{color:#22c55e}
+.stat .v.orange{color:#f97316}
+.stat .l{font-size:.53rem;color:#64748b;text-transform:uppercase;letter-spacing:.5px}
+.live-badge{display:flex;align-items:center;gap:4px;background:#052e16;border:1px solid #16a34a;border-radius:20px;padding:2px 8px;font-size:.62rem;color:#4ade80;font-weight:700}
+.live-dot{width:6px;height:6px;border-radius:50%;background:#4ade80;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── FILTROS ── */
+.filters-bar{background:#0f172a;padding:5px 12px;display:flex;gap:7px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #1e3a5f;flex-shrink:0}
+.fg{display:flex;align-items:center;gap:4px}
+.fg label{font-size:.6rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+.fselect{background:#1e293b;color:#f1f5f9;border:1.5px solid #334155;border-radius:7px;padding:3px 7px;font-size:.68rem;font-weight:600;cursor:pointer;outline:none;transition:border-color .2s;min-width:125px}
+.fselect:hover,.fselect:focus{border-color:#3b82f6}
+.fselect option{background:#1e293b}
+.fsep{width:1px;height:18px;background:#1e3a5f;flex-shrink:0}
+.liq-wrap{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.liq-chip{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:20px;border:1.5px solid #334155;font-size:.62rem;font-weight:700;cursor:pointer;color:#94a3b8;background:transparent;transition:all .15s;user-select:none}
+.liq-chip:hover{border-color:#3b82f6;color:#93c5fd}
+.liq-chip.sel{background:#1d4ed8;border-color:#3b82f6;color:#fff}
+.liq-chip input{display:none}
+.liq-apply{padding:2px 10px;border-radius:7px;border:1.5px solid #22c55e;font-size:.62rem;font-weight:700;cursor:pointer;background:#15803d;color:#fff;transition:all .15s;white-space:nowrap}
+.liq-apply:hover{background:#16a34a}
+
+/* ── CONTROLES ── */
+.controls{background:#1e293b;padding:3px 12px;display:flex;gap:4px;align-items:center;flex-wrap:wrap;border-bottom:1px solid #0f172a;flex-shrink:0}
+.controls span{font-size:.6rem;color:#64748b;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.fbtn{padding:2px 8px;border-radius:20px;border:1.5px solid;font-size:.6rem;font-weight:700;cursor:pointer;background:transparent;color:#fff;transition:all .15s}
+.fbtn:hover{opacity:.8;transform:scale(1.04)}
+.fbtn.on{color:#000!important}
+.sep{width:1px;height:14px;background:#334155;margin:0 2px}
+.icon-btn{padding:2px 9px;border-radius:20px;border:1.5px solid;font-size:.6rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap}
+.reload-btn{border-color:#3b82f6;background:#1d4ed8;color:#fff}
+.reload-btn:hover{background:#2563eb}
+.reload-btn.loading{opacity:.6;pointer-events:none}
+.dark-btn{border-color:#475569;background:transparent;color:#94a3b8}
+.dark-btn.on{background:#334155;color:#fff}
+.panel-btn{border-color:#8b5cf6;background:transparent;color:#a78bfa}
+.panel-btn.on{background:#7c3aed;color:#fff}
+.search-wrap{display:flex;align-items:center;background:#0f172a;border:1.5px solid #334155;border-radius:20px;padding:1px 8px;gap:4px;transition:border-color .2s}
+.search-wrap:focus-within{border-color:#3b82f6}
+.search-wrap input{background:transparent;border:none;outline:none;color:#f1f5f9;font-size:.62rem;width:110px;padding:1px 0}
+.search-wrap input::placeholder{color:#475569}
+
+/* ── PROGRESO ── */
+.prog-wrap{flex-shrink:0;background:#0f172a;padding:2px 12px;display:flex;align-items:center;gap:8px}
+.prog-label{font-size:.56rem;color:#64748b;white-space:nowrap}
+.prog-bar{flex:1;height:4px;background:#1e293b;border-radius:4px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,#3b82f6,#22c55e);border-radius:4px;transition:width .4s}
+.prog-pct{font-size:.56rem;color:#3b82f6;min-width:70px;text-align:right}
+
+/* ── BANNER RESUMEN LIQUIDACIÓN ── */
+.liq-banner{flex-shrink:0;background:#0c1a2e;border-bottom:1px solid #1e3a5f;padding:3px 14px;display:flex;gap:16px;align-items:center;font-size:.6rem;flex-wrap:wrap}
+.liq-banner .lb-item{display:flex;align-items:center;gap:4px;color:#94a3b8}
+.liq-banner .lb-val{font-weight:700;color:#f1f5f9}
+.liq-banner .lb-high{color:#f87171}
+.liq-banner .lb-med{color:#fbbf24}
+
+/* ── MAP WRAPPER ── */
+#map-wrap{flex:1;position:relative;min-height:0;display:flex;flex-direction:column}
+#map{flex:1;min-height:0;z-index:1}
+
+/* ── PANEL LATERAL ── */
+/* ── FLOATING PANEL ── */
+/* Botón flotante Lista */
+#fab-panel{
+  position:fixed;bottom:248px;right:14px;z-index:1100;
+  width:46px;height:46px;border-radius:50%;
+  background:#1d4ed8;border:2px solid #3b82f6;
+  color:#fff;font-size:1.1rem;cursor:pointer;
+  box-shadow:0 3px 14px rgba(0,0,0,.5);
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .2s,background .2s;
+}
+#fab-panel:hover{transform:scale(1.08);background:#2563eb}
+#fab-panel .fab-badge{
+  position:absolute;top:-4px;right:-4px;
+  background:#22c55e;color:#000;font-size:.5rem;font-weight:800;
+  width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+}
+
+/* Drawer flotante */
+#side-panel{
+  position:fixed;top:0;right:-340px;
+  width:320px;height:100vh;
+  background:#0f172a;border-left:2px solid #1e3a5f;
+  display:flex;flex-direction:column;
+  z-index:1050;
+  transition:right .3s cubic-bezier(.4,0,.2,1);
+  box-shadow:-6px 0 24px rgba(0,0,0,.6);
+}
+#side-panel.open{right:0}
+
+/* Overlay oscuro detrás del panel */
+#panel-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.35);
+  z-index:1040;display:none;
+}
+#panel-overlay.show{display:block}
+
+.panel-header{
+  background:#1e293b;padding:10px 14px;
+  display:flex;justify-content:space-between;align-items:center;
+  border-bottom:1px solid #0f172a;flex-shrink:0;
+}
+.panel-header h3{font-size:.78rem;font-weight:700;color:#f1f5f9}
+.panel-close{background:none;border:none;color:#64748b;font-size:1.1rem;cursor:pointer;line-height:1}
+.panel-close:hover{color:#f1f5f9}
+
+/* Barra de búsqueda dentro del panel */
+.panel-search{
+  padding:8px 12px;background:#0f172a;border-bottom:1px solid #1e293b;flex-shrink:0;
+}
+.panel-search input{
+  width:100%;background:#1e293b;border:1.5px solid #334155;
+  color:#f1f5f9;border-radius:8px;padding:5px 10px;font-size:.72rem;
+  outline:none;transition:border-color .2s;
+}
+.panel-search input:focus{border-color:#3b82f6}
+.panel-search input::placeholder{color:#475569}
+
+/* Stats resumen */
+.panel-stats{
+  padding:5px 12px;background:#0a1120;border-bottom:1px solid #1e293b;
+  display:flex;gap:10px;flex-shrink:0;
+}
+.ps{text-align:center;flex:1}
+.ps .pv{font-size:.78rem;font-weight:700;color:#3b82f6}
+.ps .pl{font-size:.54rem;color:#475569;text-transform:uppercase}
+
+/* Lista scrollable */
+.panel-list{overflow-y:auto;flex:1;min-height:0}
+.panel-list::-webkit-scrollbar{width:4px}
+.panel-list::-webkit-scrollbar-track{background:#0f172a}
+.panel-list::-webkit-scrollbar-thumb{background:#334155;border-radius:4px}
+
+.p-item{
+  padding:6px 10px;border-bottom:1px solid #1a2539;
+  display:flex;align-items:center;gap:6px;
+  transition:background .12s;
+}
+.p-item:hover{background:#1a2539}
+.p-item.visited .p-name{text-decoration:line-through;color:#475569}
+.p-item.visited{opacity:.55}
+.p-item.high .p-dot{background:#dc2626}
+.p-item.medium .p-dot{background:#ca8a04}
+.p-num{font-size:.6rem;font-weight:800;color:#475569;min-width:18px;text-align:right;flex-shrink:0}
+.p-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.p-info{flex:1;min-width:0;cursor:pointer;padding:1px 0}
+.p-name{font-size:.67rem;font-weight:700;color:#e2e8f0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.p-meta{font-size:.56rem;color:#64748b;margin-top:1px;display:flex;gap:5px}
+.p-total{font-weight:700}
+.p-total.high{color:#f87171}
+.p-total.medium{color:#fbbf24}
+.p-total.normal{color:#94a3b8}
+.p-actions{display:flex;gap:3px;flex-shrink:0}
+.p-act-btn{
+  width:24px;height:24px;border-radius:6px;border:none;
+  cursor:pointer;font-size:.72rem;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;
+}
+.p-act-done{background:#15803d;color:#fff}
+.p-act-done:hover{background:#16a34a;transform:scale(1.1)}
+.p-act-undone{background:#7f1d1d;color:#fff;display:none}
+.p-act-undone:hover{background:#dc2626;transform:scale(1.1)}
+.p-item.visited .p-act-done{display:none}
+.p-item.visited .p-act-undone{display:flex}
+.panel-footer{
+  background:#1e293b;padding:6px 12px;border-top:1px solid #0f172a;
+  font-size:.62rem;color:#64748b;text-align:center;flex-shrink:0;
+}
+
+/* ── OVERLAY ── */
+#overlay{position:fixed;inset:0;background:#0f172a;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .4s}
+#overlay.hidden{opacity:0;pointer-events:none}
+.spinner{width:42px;height:42px;border:3px solid #1e293b;border-top-color:#3b82f6;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.load-txt{color:#94a3b8;font-size:.82rem}
+.load-src{color:#3b82f6;font-size:.68rem;margin-top:2px}
+#error-msg{color:#f87171;font-size:.76rem;text-align:center;padding:0 28px;display:none;line-height:1.7}
+
+/* ── POPUP ── */
+.leaflet-popup-content-wrapper{padding:0!important;border-radius:14px!important;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,.4)!important}
+.leaflet-popup-content{margin:0!important;width:auto!important}
+.leaflet-popup-close-button{color:#888!important;top:7px!important;right:7px!important;font-size:17px!important;z-index:10}
+.pc{background:#fff;color:#222;font-family:'Segoe UI',Arial,sans-serif;min-width:240px;max-width:280px;max-height:75vh;overflow-y:auto;font-size:.78rem}
+.pc-head{padding:8px 12px 6px;display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #f1f5f9}
+.pc-code{display:flex;align-items:center;gap:6px}
+.pc-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.58rem;font-weight:800;color:#fff;flex-shrink:0}
+.pc-title{font-size:.8rem;font-weight:800;color:#0f172a}
+.pc-sub{font-size:.58rem;color:#94a3b8;margin-top:1px}
+.pc-badge{font-size:.58rem;font-weight:700;color:#fff;padding:2px 7px;border-radius:12px;white-space:nowrap}
+.pc-liq{font-size:.58rem;font-weight:700;color:#fff;padding:2px 7px;border-radius:12px;background:#7c3aed;margin-top:3px;display:inline-block}
+.pc-body{padding:7px 12px 4px}
+.pc-row{display:flex;margin-bottom:3px;font-size:.7rem;line-height:1.3}
+.pc-key{font-weight:700;color:#64748b;min-width:108px;flex-shrink:0}
+.pc-val{color:#1e293b;word-break:break-word}
+.pc-foot{background:#f8fafc;padding:5px 12px;display:flex;justify-content:space-around;border-top:1px solid #f1f5f9}
+.pc-metric .mv{font-size:.85rem;font-weight:800;color:#1e40af;text-align:center}
+.pc-metric .ml{font-size:.54rem;color:#94a3b8;text-align:center;font-weight:600}
+.pc-km{font-size:.58rem;color:#475569;background:#e2e8f0;padding:3px 10px;text-align:center;font-weight:600}
+.pc-coords{font-size:.56rem;color:#cbd5e1;text-align:center;padding:3px 12px 5px;background:#f8fafc}
+.pc-actions{display:flex;gap:6px;padding:7px 12px;border-top:1px solid #f1f5f9;flex-wrap:wrap}
+.pc-btn{flex:1;padding:5px 4px;border-radius:8px;border:none;font-size:.65rem;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;transition:all .15s;min-width:70px}
+.pc-btn-nav{background:#1d4ed8;color:#fff}
+.pc-btn-nav:hover{background:#2563eb}
+.pc-btn-waze{background:#33ccff;color:#1a1a1a}
+.pc-btn-waze:hover{background:#00b8e6}
+.pc-btn-done{background:#16a34a;color:#fff}
+.pc-btn-done:hover{background:#15803d}
+.pc-btn-done.undone{background:#dc2626}
+.pc-btn-done.undone:hover{background:#b91c1c}
+
+/* ── LEYENDA — lado izquierdo arriba ── */
+/* ── RESUMEN FLOTANTE ── */
+#fab-resumen{
+  position:fixed;bottom:182px;right:14px;z-index:1100;
+  width:46px;height:46px;border-radius:50%;
+  background:#0f172a;border:2px solid #334155;
+  color:#94a3b8;font-size:1.1rem;cursor:pointer;
+  box-shadow:0 3px 14px rgba(0,0,0,.5);
+  display:flex;align-items:center;justify-content:center;
+  transition:all .2s;
+}
+#fab-resumen:hover{transform:scale(1.08);border-color:#3b82f6;color:#fff}
+#resumen-panel{
+  position:fixed;bottom:235px;left:10px;
+  width:270px;z-index:1100;
+  background:#0f172a;border:1px solid #1e3a5f;
+  border-radius:14px;padding:14px;
+  box-shadow:0 8px 32px rgba(0,0,0,.6);
+  display:none;
+  font-family:'Segoe UI',Arial,sans-serif;
+}
+#resumen-panel.show{display:block}
+.rp-title{font-size:.72rem;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center}
+.rp-title span{font-size:.6rem;color:#475569}
+.rp-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid #1e293b}
+.rp-row:last-child{border-bottom:none}
+.rp-label{display:flex;align-items:center;gap:7px;font-size:.72rem;color:#cbd5e1}
+.rp-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.rp-vals{text-align:right}
+.rp-count{font-size:.85rem;font-weight:800;color:#f1f5f9}
+.rp-money{font-size:.62rem;color:#64748b;margin-top:1px}
+.rp-pct{font-size:.6rem;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:6px}
+.rp-bar-wrap{margin-top:10px;background:#1e293b;border-radius:6px;height:6px;overflow:hidden}
+.rp-bar-fill{height:100%;border-radius:6px;transition:width .4s;background:linear-gradient(90deg,#22c55e,#3b82f6)}
+
+
+.legend{position:absolute;bottom:70px;left:10px;background:rgba(15,23,42,.93);padding:8px 12px;border-radius:10px;z-index:500;border:1px solid #1e293b;font-size:.63rem;backdrop-filter:blur(4px)}
+.legend h4{color:#94a3b8;margin-bottom:4px;font-size:.6rem;text-transform:uppercase;letter-spacing:.8px}
+.li{display:flex;align-items:center;gap:5px;margin-bottom:2px;color:#cbd5e1}
+.ld{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.ll{width:16px;height:2px;flex-shrink:0;border-radius:2px}
+
+/* ── CLUSTER OVERRIDE ── */
+.marker-cluster-small,.marker-cluster-medium,.marker-cluster-large{background:rgba(59,130,246,.3)!important}
+.marker-cluster-small div,.marker-cluster-medium div,.marker-cluster-large div{background:rgba(59,130,246,.7)!important;color:#fff!important;font-weight:700!important}
+
+/* ── FAB RESUMEN ── */
+#fab-resumen{
+  position:fixed;bottom:182px;right:14px;z-index:1100;
+  width:46px;height:46px;border-radius:50%;
+  background:#7c3aed;border:2px solid #a78bfa;
+  color:#fff;font-size:1.1rem;cursor:pointer;
+  box-shadow:0 3px 14px rgba(0,0,0,.5);
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .2s;
+}
+#fab-resumen:hover{transform:scale(1.08)}
+
+#resumen-panel.hidden{display:none}
+.rp-header{
+  background:#1e293b;padding:8px 14px;
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:.75rem;font-weight:700;color:#a78bfa;
+}
+.rp-header button{background:none;border:none;color:#64748b;cursor:pointer;font-size:.9rem}
+.rp-header button:hover{color:#f1f5f9}
+.rp-body{padding:12px 14px;display:flex;flex-direction:column;gap:8px}
+.rp-section{background:#1e293b;border-radius:10px;padding:10px 12px}
+.rp-section-title{font-size:.62rem;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+.rp-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:3px}
+.rp-label{font-size:.68rem;color:#94a3b8}
+.rp-val{font-size:.78rem;font-weight:700}
+.rp-divider{height:1px;background:#334155;margin:4px 0}
+.rp-progress{margin-top:6px}
+.rp-prog-bar{height:6px;background:#334155;border-radius:4px;overflow:hidden;margin-top:3px}
+.rp-prog-fill{height:100%;border-radius:4px;transition:width .4s}
+
+/* ── PANEL XC ITEM ── */
+.p-item.xc-item .p-name{color:#f97316}
+.p-item.xc-item .p-dot{background:#f97316!important;box-shadow:0 0 0 2px #fdba74}
+
+/* ── BOTÓN XC EN PANEL ── */
+.p-act-xc{background:#92400e;color:#fef3c7;border:1px solid #f97316;font-size:.55rem;font-weight:800;letter-spacing:.3px}
+/* ── Botones popup adicionales ── */
+.pc-btn-quemado{background:linear-gradient(135deg,#7f1d1d,#991b1b);color:#fca5a5;border:none;padding:8px 10px;border-radius:8px;font-size:.7rem;font-weight:700;cursor:pointer;flex:1;transition:all .15s}
+.pc-btn-quemado:hover{filter:brightness(1.2)}
+.pc-btn-anulado{background:linear-gradient(135deg,#1e1b4b,#312e81);color:#c7d2fe;border:none;padding:8px 10px;border-radius:8px;font-size:.7rem;font-weight:700;cursor:pointer;flex:1;transition:all .15s}
+.pc-btn-anulado:hover{filter:brightness(1.2)}
+.pc-btn-dev{background:linear-gradient(135deg,#065f46,#047857);color:#a7f3d0;border:none;padding:8px;border-radius:8px;font-size:.7rem;font-weight:700;cursor:pointer;width:100%;margin-top:4px;transition:all .15s}
+.pc-btn-dev:hover{filter:brightness(1.2)}
+.pc-btn-reset{background:#334155;color:#94a3b8;border:none;padding:6px 10px;border-radius:8px;font-size:.65rem;cursor:pointer;width:100%;margin-top:3px}
+.pc-btn-reset:hover{background:#475569;color:#fff}
+/* Motivo anulado select */
+.motivo-select{width:100%;background:#1e293b;color:#e2e8f0;border:1px solid #334155;border-radius:7px;padding:5px 8px;font-size:.68rem;margin-top:4px;outline:none}
+.motivo-select:focus{border-color:#6366f1}
+/* Devolución parcial */
+.dev-parcial-box{background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:8px 10px;margin-top:4px}
+.dev-row{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.dev-row label{font-size:.66rem;color:#166534;font-weight:600;min-width:75px}
+.dev-input{flex:1;border:1px solid #86efac;border-radius:6px;padding:3px 7px;font-size:.75rem;font-weight:700;color:#14532d;background:#dcfce7;outline:none;width:60px}
+.dev-diff{font-size:.72rem;font-weight:800;color:#dc2626;text-align:center;margin-top:2px}
+/* Estado marcadores lista */
+.p-item.quemado-item .p-name{text-decoration:line-through;color:#fca5a5}
+.p-item.quemado-item{opacity:.6}
+.p-item.quemado-parcial-item{background:rgba(249,115,22,.12);border-left:3px solid #f97316}
+.p-item.quemado-parcial-item .p-name{color:#fdba74;font-weight:700}
+.p-item.anulado-item .p-name{text-decoration:line-through;color:#c7d2fe}
+.p-item.anulado-item{opacity:.6}
+.p-item.dev-item .p-name{color:#6ee7b7}
+
+.p-act-xc:hover{background:#b45309;transform:scale(1.1)}
+
+/* ── BOTÓN XC EN POPUP ── */
+.pc-btn-xc{background:#ea580c;color:#fff;flex:1}
+.pc-btn-xc:hover{background:#f97316}
+.pc-btn-xc.xc-active{background:#431407;color:#fed7aa;border:1px solid #f97316}
+
+@keyframes pingRed{0%,100%{box-shadow:0 0 0 3px #fca5a5,0 0 12px 4px rgba(220,38,38,.5)}50%{box-shadow:0 0 0 6px #fca5a5,0 0 18px 8px rgba(220,38,38,.7)}}
+
+.no-data{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(15,23,42,.92);border:1px solid #334155;border-radius:12px;padding:20px 28px;text-align:center;z-index:500;display:none}
+.no-data h3{color:#94a3b8;font-size:.9rem;margin-bottom:6px}
+.no-data p{color:#475569;font-size:.75rem}
+
+/* ── BOTÓN SIGUIENTE GRANDE ── */
+#fab-siguiente{
+  position:fixed;bottom:14px;right:204px;z-index:1100;
+  height:36px;padding:0 12px;border-radius:18px;
+  background:linear-gradient(135deg,#1d4ed8,#0ea5e9);
+  border:none;color:#fff;font-size:.78rem;font-weight:700;
+  cursor:pointer;box-shadow:0 4px 16px rgba(14,165,233,.5);
+  display:flex;align-items:center;gap:7px;
+  transition:all .2s;white-space:nowrap;
+}
+#fab-siguiente:hover{transform:scale(1.04);box-shadow:0 6px 20px rgba(14,165,233,.6)}
+#fab-siguiente:disabled{background:#334155;box-shadow:none;opacity:.5;cursor:default}
+
+/* ── BARRA INFERIOR DE INFO ── */
+#bottom-bar{
+  position:fixed;bottom:8px;left:50%;transform:translateX(-50%);
+  z-index:900;
+  background:rgba(15,23,42,.95);border:1px solid #1e3a5f;
+  border-radius:24px;
+  padding:4px 12px;display:inline-flex;align-items:center;gap:8px;
+  backdrop-filter:blur(8px);font-size:.6rem;
+  white-space:nowrap;
+  box-shadow:0 4px 16px rgba(0,0,0,.5);
+}
+.bb-item{display:flex;align-items:center;gap:3px;color:#94a3b8}
+.bb-val{font-weight:700;color:#e2e8f0}
+.bb-sep{width:1px;height:12px;background:#334155}
+#bb-gps{display:flex;align-items:center;gap:3px}
+.gps-dot{width:6px;height:6px;border-radius:50%;background:#334155;flex-shrink:0}
+.gps-dot.active{background:#22c55e;animation:pulse 1.5s infinite}
+#bb-tiempo{color:#60a5fa;font-weight:700}
+
+/* ── GPS MARKER ── */
+.gps-marker{
+  width:16px;height:16px;border-radius:50%;
+  background:#3b82f6;border:3px solid #fff;
+  box-shadow:0 0 0 4px rgba(59,130,246,.3);
+  animation:pingGPS 2s infinite;
+}
+@keyframes pingGPS{0%,100%{box-shadow:0 0 0 4px rgba(59,130,246,.3)}50%{box-shadow:0 0 0 10px rgba(59,130,246,.1)}}
+
+/* ── NOTA POR CLIENTE ── */
+.nota-box{margin-top:6px}
+.nota-box textarea{
+  width:100%;background:#1e293b;color:#e2e8f0;
+  border:1.5px solid #334155;border-radius:8px;
+  padding:5px 8px;font-size:.7rem;resize:none;
+  outline:none;transition:border-color .2s;
+  font-family:'Segoe UI',Arial,sans-serif;
+}
+.nota-box textarea:focus{border-color:#3b82f6}
+.nota-box textarea::placeholder{color:#475569}
+.nota-save-btn{
+  margin-top:4px;padding:3px 10px;border-radius:6px;
+  border:none;background:#1d4ed8;color:#fff;
+  font-size:.65rem;font-weight:700;cursor:pointer;
+}
+.nota-save-btn:hover{background:#2563eb}
+.nota-display{
+  font-size:.68rem;color:#93c5fd;background:#0f172a;
+  border-left:3px solid #3b82f6;padding:3px 8px;
+  border-radius:4px;margin-top:4px;font-style:italic;
+}
+
+/* ── RETENCIÓN BADGE ── */
+.ret-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  background:#1e1b4b;color:#a5b4fc;
+  border:1px solid #4338ca;
+  font-size:.58rem;font-weight:700;padding:1px 7px;
+  border-radius:10px;margin-left:4px;
+}
+
+/* ── PANEL EXPORTAR ── */
+#export-panel{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:320px;background:#0f172a;border:1px solid #1e3a5f;
+  border-radius:16px;padding:20px;z-index:2000;
+  box-shadow:0 16px 48px rgba(0,0,0,.7);display:none;
+}
+#export-panel.show{display:block}
+#export-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1999;display:none}
+#export-overlay.show{display:block}
+.exp-title{font-size:.85rem;font-weight:700;color:#f1f5f9;margin-bottom:12px;display:flex;justify-content:space-between}
+.exp-section{background:#1e293b;border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.exp-row{display:flex;justify-content:space-between;font-size:.72rem;padding:3px 0;border-bottom:1px solid #0f172a}
+.exp-row:last-child{border-bottom:none}
+.exp-label{color:#94a3b8}
+.exp-val{font-weight:700;color:#f1f5f9}
+.exp-val.green{color:#4ade80}
+.exp-val.orange{color:#fb923c}
+.exp-val.red{color:#f87171}
+.exp-val.blue{color:#60a5fa}
+.exp-btns{display:flex;gap:8px;margin-top:12px}
+.exp-btn{flex:1;padding:8px;border-radius:8px;border:none;font-size:.72rem;font-weight:700;cursor:pointer;transition:all .15s}
+.exp-btn-wa{background:#25d366;color:#fff}
+.exp-btn-wa:hover{background:#22c55e}
+.exp-btn-copy{background:#334155;color:#e2e8f0}
+.exp-btn-copy:hover{background:#475569}
+.exp-btn-close{background:#7f1d1d;color:#fca5a5}
+.exp-btn-close:hover{background:#dc2626}
+
+/* ── HISTORIAL PANEL ── */
+#hist-panel{
+  position:fixed;top:0;left:-340px;width:320px;height:100vh;
+  background:#0f172a;border-right:2px solid #1e3a5f;
+  display:flex;flex-direction:column;z-index:1050;
+  transition:left .3s cubic-bezier(.4,0,.2,1);
+  box-shadow:6px 0 24px rgba(0,0,0,.6);
+}
+#hist-panel.open{left:0}
+.hist-header{background:#1e293b;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #0f172a;flex-shrink:0}
+.hist-header h3{font-size:.75rem;font-weight:700;color:#f1f5f9}
+.hist-list{overflow-y:auto;flex:1;min-height:0;padding:8px}
+.hist-item{background:#1e293b;border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer;transition:background .15s;border-left:3px solid #334155}
+.hist-item:hover{background:#1a2539;border-left-color:#3b82f6}
+.hist-date{font-size:.7rem;font-weight:700;color:#e2e8f0}
+.hist-meta{font-size:.6rem;color:#64748b;margin-top:2px}
+.leaflet-control-attribution{display:none !important}
+
+/* ══════════════════════════════════════════════════
+   RESPONSIVE MÓVIL — pantallas pequeñas
+   ══════════════════════════════════════════════════ */
+
+/* Safe area para notch/home indicator en iPhone */
+:root {
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+}
+
+/* Evitar scroll accidental en móvil */
+html, body { overflow: hidden; touch-action: manipulation; }
+
+/* Topbar compacta en móvil */
+@media (max-width: 640px) {
+  .topbar { padding: 6px 10px; flex-wrap: wrap; gap: 4px; }
+  .topbar-left h1 { font-size: .75rem; }
+  .topbar-left p { display: none; }
+  .stat .v { font-size: .8rem; }
+  .stat .l { font-size: .5rem; }
+  .stats { gap: 8px; }
+  .live-badge { font-size: .55rem; padding: 2px 6px; }
+
+  /* Filtros compactos */
+  .filters-bar { padding: 4px 8px; gap: 5px; overflow-x: auto; flex-wrap: nowrap; }
+  .filters-bar label { font-size: .6rem; }
+  .fselect { font-size: .62rem; padding: 3px 5px; min-width: 100px; }
+  .liq-chip { font-size: .58rem; padding: 2px 7px; }
+  .liq-apply { font-size: .58rem; padding: 2px 8px; }
+
+  /* Controles compactos */
+  .controls { padding: 3px 8px; gap: 4px; overflow-x: auto; flex-wrap: nowrap; }
+  .fbtn { font-size: .58rem; padding: 2px 7px; }
+  #search-input { font-size: .65rem; }
+
+  /* Barra de progreso */
+  .prog-wrap { padding: 2px 8px; }
+  .prog-label { font-size: .55rem; }
+  .prog-pct { font-size: .55rem; }
+
+  /* FAB botones derechos — más pequeños y más juntos en móvil */
+  #fab-panel, #fab-resumen, #fab-wa, #fab-legend {
+    width: 40px !important;
+    height: 40px !important;
+  }
+  #fab-panel { bottom: 220px !important; right: 10px !important; }
+  #fab-resumen { bottom: 168px !important; right: 10px !important; }
+  #fab-wa { bottom: 116px !important; right: 10px !important; }
+  #fab-legend { bottom: 64px !important; right: 10px !important; }
+
+  /* NAV cluster — más compacto */
+  #nav-cluster { bottom: 64px !important; left: 6px !important; }
+  #btn-siguiente-c { height: 28px !important; font-size: .58rem !important; max-width: 140px !important; }
+
+  /* Bottom bar — más compacto */
+  #bottom-bar { font-size: .55rem; padding: 3px 8px; gap: 6px; bottom: 10px; }
+  .bb-sep { height: 10px; }
+
+  /* Popup — full width en móvil */
+  .leaflet-popup-content-wrapper { max-width: 92vw !important; }
+  .pc { min-width: unset !important; max-width: 88vw !important; max-height: 70vh !important; }
+  .pc-row { font-size: .65rem !important; }
+  .pc-head { padding: 6px 9px 5px !important; }
+  .pc-body { padding: 4px 9px !important; }
+
+  /* Panel de clientes — full screen en móvil */
+  #side-panel { width: 100vw !important; }
+
+  /* Resumen panel — más ancho en móvil */
+  #resumen-panel { width: 85vw !important; left: 6px !important; }
+
+  /* Export panel centrado */
+  #export-panel { width: 90vw !important; left: 50% !important; transform: translate(-50%, -50%) !important; }
+
+  /* Historial panel full */
+  #hist-panel { width: 85vw !important; }
+
+  /* Legend panel más arriba */
+  #legend-panel { bottom: 108px !important; right: 56px !important; }
+
+  /* Zoom controls — reposicionar */
+  .leaflet-top.leaflet-left { top: 6px !important; left: 6px !important; }
+
+  /* Bottom bar ocupa safe area */
+  #bottom-bar { padding-bottom: calc(6px + var(--sab)); }
+}
+
+/* Tablets (641-1024px) */
+@media (min-width: 641px) and (max-width: 1024px) {
+  .topbar-left p { font-size: .62rem; }
+  .stat .v { font-size: .95rem; }
+}
+
+/* Touch: aumentar área táctil de botones pequeños */
+@media (pointer: coarse) {
+  .fbtn, .filter-btn, .liq-chip { min-height: 32px; }
+  .pc-btn { min-height: 34px !important; font-size: .68rem !important; }
+  .p-act-btn { width: 28px !important; height: 28px !important; }
+  .motivo-select { font-size: .75rem; padding: 5px; }
+  .nota-box textarea { min-height: 40px; }
+}
+
+/* ── CUADRE DE GUÍA ─────────────────────────────────────── */
+.cuadre-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:3000;align-items:center;justify-content:center;padding:16px}
+.cuadre-overlay.show{display:flex}
+.cuadre-box{background:#131c2e;border:1px solid #1e3a5f;border-radius:16px;max-width:440px;width:100%;max-height:88vh;overflow-y:auto;padding:18px}
+.cuadre-box h2{font-size:.95rem;font-weight:800;color:#f1f5f9;display:flex;justify-content:space-between;align-items:center}
+.cuadre-box .sub{font-size:.68rem;color:#64748b;margin-top:2px;margin-bottom:14px}
+.cuadre-field{margin-bottom:12px}
+.cuadre-field label{display:block;font-size:.65rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-bottom:5px}
+.cuadre-input{width:100%;background:#0f172a;border:1.5px solid #334155;color:#f1f5f9;border-radius:8px;padding:9px 11px;font-size:.85rem;font-weight:600}
+.cuadre-input:focus{outline:none;border-color:#3b82f6}
+textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:.78rem}
+.cuadre-sistema{background:#0f2744;border:1px solid #1d4ed8;border-radius:8px;padding:10px 12px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}
+.cuadre-sistema .v{font-size:1.15rem;font-weight:800;color:#60a5fa}
+.cuadre-fotos-input{display:flex;align-items:center;justify-content:center;gap:6px;background:#1e293b;border:1.5px dashed #475569;border-radius:10px;padding:14px;cursor:pointer;font-size:.75rem;color:#94a3b8;font-weight:700}
+.cuadre-thumbs{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.cuadre-thumb{width:56px;height:56px;border-radius:8px;overflow:hidden;border:1.5px solid #334155;position:relative}
+.cuadre-thumb img{width:100%;height:100%;object-fit:cover}
+.cuadre-thumb .rm{position:absolute;top:1px;right:1px;background:#dc2626;color:#fff;border:none;width:16px;height:16px;border-radius:50%;font-size:.6rem;line-height:1;cursor:pointer}
+.cuadre-btn{width:100%;background:#1d4ed8;border:none;color:#fff;padding:11px;border-radius:10px;font-size:.85rem;font-weight:800;cursor:pointer;margin-top:6px}
+.cuadre-btn:disabled{opacity:.5;cursor:not-allowed}
+.cuadre-estado-prev{background:#1e293b;border-left:3px solid #f59e0b;border-radius:6px;padding:8px 10px;margin-bottom:14px;font-size:.72rem;color:#fde68a}
+.cuadre-estado-prev.aprobado{border-color:#22c55e;color:#bbf7d0}
+.cuadre-estado-prev.diferencia{border-color:#dc2626;color:#fecaca}
+.cuadre-msg{text-align:center;font-size:.72rem;font-weight:700;margin-top:8px;min-height:16px}
+
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <div class="spinner"></div>
+  <div class="load-txt">Cargando datos desde Google Sheets...</div>
+  <div class="load-src" id="load-src">Conectando con la API...</div>
+  <div id="error-msg"></div>
+</div>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <h1>🚛 MAPAS DIARIOS — RUTAS EN VIVO</h1>
+    <p id="sub-info">Cargando... &nbsp;|&nbsp; Ecuador</p>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="v" id="s-clientes">—</div><div class="l">Clientes</div></div>
+    <div class="stat"><div class="v" id="s-visitados">—</div><div class="l">Visitados</div></div>
+    <div class="stat"><div class="v green" id="s-km">— km</div><div class="l">Distancia</div></div>
+    <div class="stat"><div class="v" id="s-peso">—</div><div class="l">Kg Total</div></div>
+    <div class="stat"><div class="v" id="s-venta">—</div><div class="l">$ Total</div></div>
+    <div class="stat"><div class="v orange" id="s-drops">—</div><div class="l">Drops &gt;$100</div></div>
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+    <button class="live-badge" id="btn-cuadre" onclick="abrirCuadre()" style="display:none;background:#134e2a;border-color:#22c55e;color:#bbf7d0;cursor:pointer" title="Cuadre de guía">🧾 Cuadre</button>
+    <a class="live-badge" id="btn-resumen" href="resumen.html" style="display:none;background:#1e3a5f;border-color:#3b82f6;color:#93c5fd;text-decoration:none" title="Volver al resumen">📊 Resumen</a>
+    <div class="live-badge" id="user-badge" style="background:#1e293b;border-color:#475569;color:#cbd5e1;cursor:pointer" onclick="logout()" title="Cerrar sesión">👤 <span id="user-name">—</span> · <span id="user-rol">—</span> ⏻</div>
+  </div>
+</div>
+
+<!-- FILTROS -->
+<div class="filters-bar">
+  <div class="fg">
+    <label>📅 Fecha:</label>
+    <select class="fselect" id="sel-fecha" onchange="onFechaChange()"><option value="">Cargando...</option></select>
+  </div>
+  <div class="fsep"></div>
+  <div class="fg">
+    <label>🚛 Camión:</label>
+    <select class="fselect" id="sel-chofer" onchange="onChoferChange()"><option value="">Cargando...</option></select>
+  </div>
+  <div class="fsep"></div>
+  <div class="fg">
+    <label>🏭 Bodega:</label>
+    <select class="fselect" id="sel-bodega" onchange="onBodegaChange()">
+      <option value="">— Selecciona —</option>
+      <option value="riobamba">Riobamba</option>
+      <option value="ambato">Ambato</option>
+    </select>
+  </div>
+  <div class="fsep"></div>
+  <div class="fg">
+    <label>📋 Liquidación:</label>
+    <div class="liq-wrap" id="liq-chips"><span style="font-size:.62rem;color:#475569">Cargando...</span></div>
+    <button class="liq-apply" onclick="applyFiltersAndDraw()">✓ Aplicar</button>
+  </div>
+  <div class="fsep"></div>
+  <button class="icon-btn reload-btn" onclick="recargar()">↻ Actualizar</button>
+  <span id="ultima-act" style="font-size:.56rem;color:#475569"></span>
+</div>
+
+<!-- BANNER RESUMEN -->
+<div class="liq-banner" id="liq-banner" style="display:none">
+  <div class="lb-item">📦 Clientes: <span class="lb-val" id="ban-cli">—</span></div>
+  <div class="lb-item">⚖️ Peso: <span class="lb-val" id="ban-peso">—</span></div>
+  <div class="lb-item">💰 Total: <span class="lb-val" id="ban-total">—</span></div>
+  <div class="lb-item">🔴 Drops &gt;$150: <span class="lb-val lb-high" id="ban-high">—</span></div>
+  <div class="lb-item">🟡 Drops &gt;$100: <span class="lb-val lb-med" id="ban-med">—</span></div>
+</div>
+
+<!-- CONTROLES -->
+<div class="controls">
+  <span>Vendedor:</span>
+  <div id="vendedor-btns">
+    <button class="fbtn on" data-v="ALL" style="border-color:#94a3b8;background:#94a3b8;color:#000" onclick="fv('ALL',this)">Todos</button>
+  </div>
+  <div class="sep"></div>
+  <span>Vista:</span>
+  <button class="icon-btn" id="btn-ruta" style="border-color:#3b82f6;background:#1d4ed8;color:#fff" onclick="toggleRuta(this)">Ruta</button>
+  <button class="icon-btn" id="btn-nums" style="border-color:#22c55e;background:#15803d;color:#fff" onclick="toggleNums(this)">Números</button>
+  <button class="icon-btn dark-btn" id="btn-cluster" onclick="toggleCluster(this)">Cluster</button>
+  <button class="icon-btn dark-btn on" id="btn-dark" onclick="toggleDark(this)" id="btn-dark">☀️ Día</button>
+  <div class="sep"></div>
+  <button class="icon-btn panel-btn" id="btn-panel" 
+  <div class="search-wrap">
+    <span style="color:#475569;font-size:.7rem">🔍</span>
+    <input type="text" id="search-input" placeholder="Buscar cliente..." oninput="onSearch(this.value)">
+  </div>
+</div>
+
+<!-- PROGRESO -->
+<div class="prog-wrap">
+  <span class="prog-label" style="font-size:.58rem">📦</span>
+  <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:0%"></div></div>
+  <span class="prog-pct" id="prog-pct" style="font-size:.58rem">0/0</span>
+  <div class="bb-sep"></div>
+  <span style="font-size:.57rem;color:#60a5fa;white-space:nowrap">⏱ <b id="prog-tiempo">—</b></span>
+  <div class="bb-sep"></div>
+  <span style="font-size:.57rem;color:#94a3b8;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis">📍 <span id="prog-proximo" style="color:#e2e8f0;font-weight:600">—</span></span>
+</div>
+
+<!-- MAP + PANEL -->
+<div id="map-wrap">
+
+<div id="map">
+    <div class="no-data" id="no-data">
+      <h3>Sin datos para mostrar</h3>
+      <p>Selecciona una fecha, camión y al menos una liquidación</p>
+    </div>
+  </div>
+  </div><!-- /map-wrap -->
+  <!-- PANEL LATERAL -->
+  <!-- Overlay para cerrar panel tocando el mapa -->
+<div id="panel-overlay" onclick="closePanel()"></div>
+
+<!-- Drawer flotante -->
+<div id="side-panel">
+  <div class="panel-header">
+    <h3>📋 Lista de Clientes</h3>
+    <button class="panel-close" onclick="closePanel()">✕</button>
+  </div>
+  <div class="panel-search">
+    <input type="text" id="panel-search" placeholder="🔍 Buscar cliente, código, dirección..." oninput="filterPanel(this.value)">
+  </div>
+  <div class="panel-stats">
+    <div class="ps"><div class="pv" id="ps-total">—</div><div class="pl">Total</div></div>
+    <div class="ps"><div class="pv" id="ps-entregados" style="color:#22c55e">0</div><div class="pl">Entregados</div></div>
+    <div class="ps"><div class="pv" id="ps-xc" style="color:#f97316">0</div><div class="pl">Por cobrar</div></div>
+    <div class="ps"><div class="pv" id="ps-drops" style="color:#f87171">—</div><div class="pl">Drops</div></div>
+    <div class="ps"><div class="pv" id="ps-venta" style="color:#60a5fa">—</div><div class="pl">$ Total</div></div>
+  </div>
+  <div class="panel-list" id="panel-list"></div>
+  <div class="panel-footer" id="panel-footer">— clientes</div>
+</div>
+
+<!-- FAB botón flotante Lista -->
+<button id="fab-panel" onclick="openPanel()" title="Lista de clientes">
+  📋
+  <span class="fab-badge" id="fab-badge">0</span>
+</button>
+
+<!-- FAB Resumen de avance -->
+<button id="fab-resumen" onclick="toggleResumen()" title="Resumen de avance">📊</button>
+
+<!-- Panel resumen flotante -->
+<div id="resumen-panel">
+  <div class="rp-title">📊 Avance de Ruta <span id="rp-hora">—</span></div>
+  <div class="rp-row">
+    <div class="rp-label"><div class="rp-dot" style="background:#3b82f6"></div>Total pedidos</div>
+    <div class="rp-vals"><div class="rp-count" id="rp-total">—</div><div class="rp-money" id="rp-total-val">$—</div></div>
+  </div>
+  <div class="rp-row">
+    <div class="rp-label"><div class="rp-dot" style="background:#4b5563"></div>Entregados <span class="rp-pct" id="rp-ent-pct" style="background:#14532d;color:#4ade80">0%</span></div>
+    <div class="rp-vals"><div class="rp-count" id="rp-ent">0</div><div class="rp-money" id="rp-ent-val">$0 recaudado</div></div>
+  </div>
+  <div class="rp-row">
+    <div class="rp-label"><div class="rp-dot" style="background:#f97316"></div>Por cobrar <span class="rp-pct" id="rp-xc-pct" style="background:#431407;color:#fb923c">0%</span></div>
+    <div class="rp-vals"><div class="rp-count" id="rp-xc">0</div><div class="rp-money" id="rp-xc-val">$0 pendiente cobro</div></div>
+  </div>
+  <div class="rp-row">
+    <div class="rp-label"><div class="rp-dot" style="background:#b91c1c"></div>🔥 Quemados</div>
+    <div class="rp-vals"><div class="rp-count" id="rp-quem">0</div><div class="rp-money" id="rp-quem-val">$0</div></div>
+  </div>
+  <div class="rp-row">
+    <div class="rp-label"><div class="rp-dot" style="background:#4338ca"></div>❌ Anulados</div>
+    <div class="rp-vals"><div class="rp-count" id="rp-anul">0</div><div class="rp-money" id="rp-anul-val">$0</div></div>
+  </div>
+  <div class="rp-row">
+    <div class="rp-label"><div class="rp-dot" style="background:#059669"></div>💰 NC Parciales</div>
+    <div class="rp-vals"><div class="rp-count" id="rp-nc">0</div><div class="rp-money" id="rp-nc-val">$0 acumulado</div></div>
+  </div>
+  <div class="rp-row">
+    <div class="rp-label"><div class="rp-dot" style="background:#334155"></div>⏳ Pendientes</div>
+    <div class="rp-vals"><div class="rp-count" id="rp-pend">—</div><div class="rp-money" id="rp-pend-val">$— por entregar</div></div>
+  </div>
+  <div class="rp-bar-wrap"><div class="rp-bar-fill" id="rp-bar" style="width:0%"></div></div>
+</div>
+
+
+<!-- BOTÓN SIGUIENTE CLIENTE -->
+
+
+<!-- FAB REOPTIMIZAR -->
+
+<!-- PANEL REPORTE (duplicado sin usar del "📄 Reporte" que sí funciona vía #export-panel) eliminado -->
+
+
+<!-- MODAL CUADRE DE GUÍA -->
+<div class="cuadre-overlay" id="cuadre-overlay">
+  <div class="cuadre-box">
+    <h2>🧾 Cuadre de Guía <button onclick="cerrarCuadre()" style="background:none;border:none;color:#64748b;font-size:1.1rem;cursor:pointer">✕</button></h2>
+    <div class="sub" id="cuadre-sub">—</div>
+
+    <div id="cuadre-estado-prev-wrap"></div>
+
+    <div class="cuadre-sistema">
+      <span style="font-size:.68rem;color:#93c5fd;font-weight:700">💰 Recaudado según sistema</span>
+      <span class="v" id="cuadre-monto-sistema">$0.00</span>
+    </div>
+
+    <div class="cuadre-field">
+      <label>💵 Monto que vas a depositar</label>
+      <input type="number" step="0.01" min="0" class="cuadre-input" id="cuadre-monto-declarado" placeholder="0.00">
+    </div>
+
+    <div class="cuadre-field">
+      <label>📝 Observaciones (opcional)</label>
+      <textarea class="cuadre-input" id="cuadre-observaciones" placeholder="Ej: depositado en 2 partes, cliente X pagó con transferencia..."></textarea>
+    </div>
+
+    <div class="cuadre-field">
+      <label>📷 Fotos del depósito / comprobante</label>
+      <label class="cuadre-fotos-input" for="cuadre-fotos-input">
+        📷 Tomar foto o elegir de galería
+      </label>
+      <input type="file" id="cuadre-fotos-input" accept="image/*" capture="environment" multiple style="display:none" onchange="agregarFotos(this.files)">
+      <div class="cuadre-thumbs" id="cuadre-thumbs"></div>
+    </div>
+
+    <button class="cuadre-btn" id="cuadre-submit-btn" onclick="enviarCuadre()">✅ Enviar cuadre</button>
+    <div class="cuadre-msg" id="cuadre-msg">&nbsp;</div>
+  </div>
+</div>
+
+
+
+
+
+<!-- CLUSTER NAVEGACIÓN — pill izquierda inferior -->
+<div id="nav-cluster" style="position:fixed;bottom:120px;left:10px;z-index:1000;display:flex;flex-direction:column;gap:4px;align-items:flex-start">
+  <button id="btn-siguiente-c" onclick="irAlSiguiente()"
+    style="background:linear-gradient(135deg,#1d4ed8,#0ea5e9);border:none;color:#fff;
+    height:32px;padding:0 12px;border-radius:16px;font-size:.63rem;font-weight:700;cursor:pointer;
+    box-shadow:0 2px 8px rgba(14,165,233,.4);display:flex;align-items:center;gap:5px;
+    max-width:165px;overflow:hidden;white-space:nowrap">
+    ➡️ <span id="sig-label" style="overflow:hidden;text-overflow:ellipsis">Siguiente</span>
+  </button>
+  <button onclick="reoptimizarDesdeAqui()" title="Re-optimizar ruta"
+    style="background:#1e293b;border:1px solid #334155;color:#94a3b8;
+    height:26px;padding:0 10px;border-radius:13px;cursor:pointer;font-size:.6rem;
+    display:flex;align-items:center;gap:4px;box-shadow:0 1px 4px rgba(0,0,0,.3)">🔄 Re-optimizar</button>
+</div>
+
+<!-- BARRA INFERIOR INFO -->
+<div id="bottom-bar">
+  <div id="bb-gps" onclick="activarGPS()" style="cursor:pointer" title="Toca para activar GPS"><div class="gps-dot" id="gps-dot"></div><span id="gps-txt" style="color:#64748b;font-size:.6rem">Activar GPS</span></div>
+  <div class="bb-sep"></div>
+  <div class="bb-item">⏱️ Tiempo est: <span class="bb-val" id="bb-tiempo">—</span></div>
+  <div class="bb-sep"></div>
+  <div class="bb-item">✅ <span class="bb-val" id="bb-ent">0</span></div>
+  <div class="bb-item">🟠 <span class="bb-val" id="bb-xc">0</span></div>
+  <div class="bb-item">🔥 <span class="bb-val" id="bb-quem">0</span></div>
+  <div class="bb-item">⏳ <span class="bb-val" id="bb-pend">0</span></div>
+  <div style="margin-left:auto;display:flex;gap:4px;align-items:center">
+    <button onclick="abrirExportar()" style="background:#1d4ed8;border:none;color:#fff;padding:3px 10px;border-radius:8px;font-size:.65rem;font-weight:700;cursor:pointer">📄 Reporte</button>
+    <button onclick="abrirHistorial()" style="background:#334155;border:none;color:#e2e8f0;padding:3px 10px;border-radius:8px;font-size:.65rem;font-weight:700;cursor:pointer">🕐 Hist.</button>
+    <button id="btn-install-pwa" onclick="instalarApp()" style="display:none;background:#7c3aed;border:none;color:#fff;padding:3px 10px;border-radius:8px;font-size:.65rem;font-weight:700;cursor:pointer">📲 Instalar</button>
+  </div>
+</div>
+
+<!-- PANEL EXPORTAR -->
+<div id="export-overlay" onclick="cerrarExportar()"></div>
+<div id="export-panel">
+  <div class="exp-title">📄 Reporte de Avance <button onclick="cerrarExportar()" style="background:none;border:none;color:#64748b;font-size:1rem;cursor:pointer">✕</button></div>
+  <div id="exp-content"></div>
+  <div class="exp-btns">
+    <button class="exp-btn exp-btn-copy" onclick="exportarCopiar()">📋 Copiar texto</button>
+    <button class="exp-btn exp-btn-close" onclick="cerrarExportar()">Cerrar</button>
+  </div>
+</div>
+
+<!-- PANEL HISTORIAL -->
+<div id="hist-panel">
+  <div class="hist-header">
+    <h3>🕐 Historial de Rutas</h3>
+    <button onclick="cerrarHistorial()" style="background:none;border:none;color:#64748b;font-size:1rem;cursor:pointer">✕</button>
+  </div>
+  <div class="hist-list" id="hist-list">
+    <div style="color:#475569;font-size:.72rem;text-align:center;padding:20px">Sin historial guardado</div>
+  </div>
+  <div style="padding:10px 14px;border-top:1px solid #1e293b;flex-shrink:0">
+    <button onclick="guardarRutaHoy()" style="width:100%;padding:7px;background:#1d4ed8;border:none;color:#fff;border-radius:8px;font-size:.7rem;font-weight:700;cursor:pointer">💾 Guardar ruta de hoy</button>
+  </div>
+</div>
+<div id="hist-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:1049" onclick="cerrarHistorial()"></div>
+
+<!-- LEYENDA como panel flotante -->
+<div id="legend-panel" style="display:none;position:fixed;bottom:104px;right:14px;z-index:1100;background:rgba(15,23,42,.96);border:1px solid #1e3a5f;border-radius:12px;padding:10px 13px;font-size:.68rem;box-shadow:0 4px 20px rgba(0,0,0,.5)">
+  <h4 style="color:#94a3b8;font-size:.62rem;text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px">Vendedores</h4>
+  <div id="legend-items"><div class="li"><div class="ld" style="background:#94a3b8"></div>Cargando...</div></div>
+  <h4 style="color:#94a3b8;font-size:.62rem;text-transform:uppercase;margin-top:7px;margin-bottom:4px">Prioridad</h4>
+  <div class="li"><div class="ld" style="background:#dc2626;box-shadow:0 0 0 2px #fca5a5"></div>🔴 Alto &gt;$150</div>
+  <div class="li"><div class="ld" style="background:#ca8a04"></div>🟡 Medio &gt;$100</div>
+  <div class="li"><div class="ld" style="background:#f97316"></div>🟠 Por Cobrar</div>
+  <div class="li"><div class="ld" style="background:#111827;border:1px solid #374151"></div>⬛ NC Anulado</div>
+  <div class="li"><div class="ld" style="background:#6b7280;opacity:.5"></div><span style="opacity:.6">✓ Entregado/Quemado</span></div>
+</div>
+<button id="fab-wa" onclick="abrirExportarWA()" title="Compartir por WhatsApp" style="position:fixed;bottom:116px;right:14px;z-index:1100;width:46px;height:46px;border-radius:50%;background:#25d366;border:none;color:#fff;cursor:pointer;box-shadow:0 3px 12px rgba(37,211,102,.4);display:flex;align-items:center;justify-content:center">
+  <svg viewBox="0 0 32 32" width="24" height="24" fill="white"><path d="M16.001 3C9.106 3 3.5 8.605 3.5 15.5c0 2.42.68 4.683 1.86 6.61L3 29l7.06-2.32a12.43 12.43 0 0 0 5.94 1.51h.001c6.895 0 12.5-5.605 12.5-12.5S22.896 3 16.001 3zm0 22.7c-1.86 0-3.65-.5-5.21-1.44l-.374-.222-3.886 1.276 1.293-3.79-.243-.39A10.19 10.19 0 0 1 5.8 15.5c0-5.625 4.576-10.2 10.2-10.2s10.2 4.575 10.2 10.2-4.575 10.2-10.2 10.2zm5.61-7.65c-.307-.154-1.816-.896-2.098-.998-.282-.103-.487-.154-.692.154-.205.308-.794.998-.973 1.203-.18.205-.359.231-.666.077-.307-.154-1.297-.478-2.470-1.524-.913-.814-1.529-1.82-1.708-2.128-.18-.308-.019-.474.135-.627.139-.139.308-.36.462-.54.154-.18.205-.308.308-.513.103-.205.051-.385-.026-.539-.077-.154-.692-1.667-.948-2.283-.25-.6-.504-.518-.692-.527l-.59-.011c-.205 0-.539.077-.821.385-.282.308-1.077 1.052-1.077 2.565s1.103 2.975 1.256 3.18c.154.205 2.171 3.314 5.26 4.648.735.317 1.309.507 1.756.649.738.234 1.41.201 1.941.122.592-.089 1.816-.743 2.072-1.461.256-.718.256-1.334.18-1.461-.077-.128-.282-.205-.59-.36z"/></svg>
+</button>
+<button id="fab-legend" onclick="toggleLegend()" title="Leyenda" style="position:fixed;bottom:54px;right:14px;z-index:1100;width:40px;height:40px;border-radius:50%;background:#0f172a;border:1px solid #334155;color:#94a3b8;font-size:1rem;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center">🗺</button>
+
+<script>
+// ── SESIÓN / LOGIN ────────────────────────────────────────────
+// Roles permitidos para ver y trabajar el mapa. "cartera" NO entra aquí
+// (solo ve el resumen de rutas) — se redirige a resumen.html.
+const ROLES_PERMITIDOS_MAPA = ['admin','bodega','coordinador','transportista','reparto'];
+function getSesion(){
+  try{ return JSON.parse(localStorage.getItem('sesionActiva')||'null'); }catch(e){ return null; }
+}
+(function chequearSesion(){
+  const s=getSesion();
+  if(!s || !s.rol){ window.location.href='login.html'; return; }
+  if(!ROLES_PERMITIDOS_MAPA.includes(s.rol)){ window.location.href='resumen.html'; return; }
+  document.addEventListener('DOMContentLoaded',()=>{
+    const un=document.getElementById('user-name'), ur=document.getElementById('user-rol');
+    if(un)un.textContent=s.usuario||'—';
+    if(ur)ur.textContent=(s.rol||'—').toUpperCase();
+    if(['admin','bodega','coordinador'].includes(s.rol)){
+      const br=document.getElementById('btn-resumen');
+      if(br)br.style.display='flex';
+    }
+    if(['transportista','reparto','admin','bodega','coordinador'].includes(s.rol)){
+      const bc=document.getElementById('btn-cuadre');
+      if(bc)bc.style.display='flex';
+    }
+  });
+})();
+function logout(){
+  if(!confirm('¿Cerrar sesión?'))return;
+  localStorage.removeItem('sesionActiva');
+  window.location.href='login.html';
+}
+
+const API_URL="https://script.google.com/macros/s/AKfycbwzQRnCJHFXni_9Qvs9kh_6BoikPDtb2sAMNChS3gSk9gAn5e31z5PFvKRGRzeoFqK5og/exec";
+const PALETTE=['#4ade80','#60a5fa','#c084fc','#34d399','#f472b6','#a78bfa','#38bdf8','#2dd4bf','#818cf8','#fb923c'];
+const TIER_HIGH=150, TIER_MEDIUM=100;
+const TILE_DARK='https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+const TILE_LIGHT='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+
+let ALL_ROWS=[],DATA=[],colorMap={};
+let allMarkers=[],allLines=[],clusterGroup=null;
+let showRuta=true,showNums=true,useCluster=false,darkMode=false,panelOpen=false;
+let activeVendedor='ALL',activeFecha='',activeChofer='';
+let activeLiqs=new Set();
+let completed=new Set();    // ✅ entregados
+let porCobrar=new Set();    // 🟠 por cobrar
+let quemados=new Set();     // 🔥 pedido quemado (no entregado por logística)
+let anulados=new Map();     // ❌ pedido anulado → motivo string
+let devParcial=new Map();   // 💰 devolución parcial → valor pagado
+let LABEL_OFFSETS={};
+let notas=new Map();        // índice → texto de nota
+let retencionSet=new Set(); // índices con retención 2%
+let quemadoParcial=new Map(); // índice → monto ya quemado (si es parcial, el resto queda pendiente)
+let tileLayer=null;
+
+// ── BODEGAS (puntos de partida de la ruta) ──────────────────
+const BODEGAS = {
+  riobamba: { nombre:'Riobamba', lat:-1.677524, lng:-78.631974 },
+  ambato:   { nombre:'Ambato',   lat:-1.198762, lng:-78.591144 }
+};
+let activeBodega = '';
+let bodegaMarker = null, bodegaLine = null;
+
+const map=L.map('map').setView([-1.685,-78.644],13);
+tileLayer=L.tileLayer(TILE_LIGHT,{attribution:false,maxZoom:19}).addTo(map);
+map.attributionControl.setPrefix(false);
+document.getElementById('sel-bodega').value=activeBodega;
+
+// ── UTILS ─────────────────────────────────────────────────
+function haversine(a,b,c,d){const R=6371,dL=(c-a)*Math.PI/180,dG=(d-b)*Math.PI/180,x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dG/2)**2;return R*2*Math.asin(Math.sqrt(x));}
+function nearestNeighbor(pts){if(!pts.length)return[];const v=new Array(pts.length).fill(false);const r=[0];v[0]=true;for(let i=0;i<pts.length-1;i++){const l=r[r.length-1];let b=-1,bd=Infinity;for(let j=0;j<pts.length;j++){if(!v[j]){const d=haversine(pts[l].lat,pts[l].lng,pts[j].lat,pts[j].lng);if(d<bd){bd=d;b=j;}}}v[b]=true;r.push(b);}return r;}
+// Igual que nearestNeighbor(), pero el punto de partida es externo (la bodega seleccionada)
+// en vez de tomar arbitrariamente el primer cliente de la lista.
+function nearestNeighborFrom(pts, startLat, startLng){
+  if(!pts.length)return[];
+  const v=new Array(pts.length).fill(false);
+  const r=[];
+  let curLat=startLat, curLng=startLng;
+  for(let s=0;s<pts.length;s++){
+    let best=-1,bestD=Infinity;
+    for(let j=0;j<pts.length;j++){
+      if(!v[j]){
+        const d=haversine(curLat,curLng,pts[j].lat,pts[j].lng);
+        if(d<bestD){bestD=d;best=j;}
+      }
+    }
+    v[best]=true; r.push(best); curLat=pts[best].lat; curLng=pts[best].lng;
+  }
+  return r;
+}
+function nk(k){return k.trim().toLowerCase().replace(/\s+/g,'_')}
+function gf(row,...cs){for(const c of cs){if(row[c]!==undefined&&row[c]!=='')return row[c];const n=nk(c);for(const k of Object.keys(row))if(nk(k)===n)return row[k];}return'';}
+function pn(v){if(typeof v==='number')return v;return parseFloat(String(v).replace(/[^0-9.\-]/g,''))||0;}
+function ff(v){if(!v)return'';if(v instanceof Date){const y=v.getFullYear(),m=String(v.getMonth()+1).padStart(2,'0'),d=String(v.getDate()).padStart(2,'0');return`${y}-${m}-${d}`;}const s=String(v).trim();const m1=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m1)return`${m1[3]}-${m1[2].padStart(2,'0')}-${m1[1].padStart(2,'0')}`;return s.slice(0,10);}
+function getTier(t){return t>=TIER_HIGH?'high':t>=TIER_MEDIUM?'medium':'normal';}
+
+// ── FETCH ─────────────────────────────────────────────────
+async function fetchConTimeoutMapa(url, opts, ms){
+  const ctrl=new AbortController();
+  const timer=setTimeout(()=>ctrl.abort(), ms);
+  try{ return await fetch(url, {...opts, signal:ctrl.signal}); }
+  finally{ clearTimeout(timer); }
+}
+async function fetchData(){
+  document.getElementById('load-src').textContent='Consultando Google Apps Script...';
+  const target=API_URL+'?t='+Date.now();
+  const intentos=[
+    async()=>{
+      const res=await fetchConTimeoutMapa(target,{method:'GET',redirect:'follow',mode:'cors'},10000);
+      if(!res.ok)throw new Error('HTTP '+res.status);
+      return await res.json();
+    },
+    async()=>{
+      const P='https://api.allorigins.win/get?url='+encodeURIComponent(target);
+      const res=await fetchConTimeoutMapa(P,{},10000);
+      if(!res.ok)throw new Error('HTTP '+res.status);
+      const w=await res.json();
+      return JSON.parse(w.contents);
+    },
+    async()=>{
+      const P='https://corsproxy.io/?url='+encodeURIComponent(target);
+      const res=await fetchConTimeoutMapa(P,{},10000);
+      if(!res.ok)throw new Error('HTTP '+res.status);
+      return await res.json();
+    }
+  ];
+  let raw, ultimoError=null;
+  for(const intento of intentos){
+    try{ raw=await intento(); ultimoError=null; break; }
+    catch(e){ ultimoError=e; }
+  }
+  if(ultimoError) throw new Error('Sin conexión con el Sheet.');
+  if(!Array.isArray(raw)||!raw.length)throw new Error('Sin datos en el Sheet');
+  return raw.map(row=>{
+    const retStr=String(gf(row,'Retención en la Fuente','Retencion en la Fuente','retencion_fuente','Retencion','retencion')||'').trim().toUpperCase();
+    const hasRet = retStr==='SI';
+    const sumaTotal=pn(gf(row,'Suma de Total','Suma Total','total','Total'));
+    const sumaNeta=pn(gf(row,'Suma Neta','suma_neta','neta'));
+    // Retención 2% se calcula sobre Suma Neta solo si hasRet
+    const retencionVal = hasRet ? parseFloat((sumaNeta*0.02).toFixed(2)) : 0;
+    return {
+      fecha:ff(gf(row,'Fecha Liq','fecha_liq','fecha')),
+      chofer:String(gf(row,'Chofer','chofer')).trim(),
+      liq:String(gf(row,'Num de Liquidación','Num de Liquidacion','num_liquidacion','liquidacion')||'').trim(),
+      vendedor:String(gf(row,'vendedor','Vendedor')).trim(),
+      codigo:String(gf(row,'CodigoCliente','Codigo Cliente','codigo_cliente')),
+      razon:String(gf(row,'Razon','razon','Razón')),
+      dir:String(gf(row,'Direccion','direccion','Dirección')),
+      lng:pn(gf(row,'longitud_x','Longitud','lng','lon')),
+      lat:pn(gf(row,'latitud_y','Latitud','lat')),
+      peso:pn(gf(row,'Suma de Peso','peso','Peso')),
+      sumaNeta:sumaNeta,
+      total:sumaTotal,      // Suma de Total → valor que se muestra en el resumen del cliente
+      hasRet:hasRet,        // true si columna dice SI
+      retencionVal:retencionVal,  // monto 2% sobre Suma Neta
+      nota:'',
+    };
+  }).filter(r=>r.lat!==0&&r.lng!==0&&r.fecha&&r.chofer);
+}
+
+// ── SELECTORES ────────────────────────────────────────────
+function buildFechaSelector(){
+  const fechas=[...new Set(ALL_ROWS.map(r=>r.fecha))].sort().reverse();
+  const sel=document.getElementById('sel-fecha');
+  sel.innerHTML=fechas.map(f=>`<option value="${f}">${f}</option>`).join('');
+  activeFecha=fechas[0]||'';sel.value=activeFecha;
+  buildChoferSelector();
+}
+function buildChoferSelector(){
+  const ch=[...new Set(ALL_ROWS.filter(r=>r.fecha===activeFecha).map(r=>r.chofer))].sort();
+  const sel=document.getElementById('sel-chofer');
+  sel.innerHTML=`<option value="">— Selecciona —</option>`+ch.map(c=>`<option value="${c}">${c}</option>`).join('');
+  activeChofer='';sel.value='';
+  buildLiqChips(true);
+}
+function buildLiqChips(all=false){
+  const rows=ALL_ROWS.filter(r=>r.fecha===activeFecha&&r.chofer===activeChofer);
+  const liqs=[...new Set(rows.map(r=>r.liq).filter(Boolean))].sort((a,b)=>Number(a)-Number(b)||a.localeCompare(b));
+  const c=document.getElementById('liq-chips');
+  if(!liqs.length){c.innerHTML=`<span class="liq-chip sel" style="pointer-events:none">Todas</span>`;activeLiqs=new Set(['__ALL__']);return;}
+  if(all||![...activeLiqs].some(l=>liqs.includes(l)))activeLiqs=new Set(liqs);
+  c.innerHTML='';
+  const ac=document.createElement('label');
+  ac.className='liq-chip'+(liqs.every(l=>activeLiqs.has(l))?' sel':'');
+  ac.innerHTML=`<input type="checkbox"> Todas`;
+  ac.addEventListener('click',e=>{e.preventDefault();if(liqs.every(l=>activeLiqs.has(l)))activeLiqs.clear();else activeLiqs=new Set(liqs);buildLiqChips(false);});
+  c.appendChild(ac);
+  liqs.forEach(liq=>{const ch=document.createElement('label');ch.className='liq-chip'+(activeLiqs.has(liq)?' sel':'');ch.innerHTML=`<input type="checkbox"> Liq ${liq}`;ch.addEventListener('click',e=>{e.preventDefault();if(activeLiqs.has(liq))activeLiqs.delete(liq);else activeLiqs.add(liq);ch.classList.toggle('sel',activeLiqs.has(liq));ac.classList.toggle('sel',liqs.every(l=>activeLiqs.has(l)));});c.appendChild(ch);});
+}
+function onFechaChange(){activeFecha=document.getElementById('sel-fecha').value;buildChoferSelector();applyFiltersAndDraw();}
+function onChoferChange(){activeChofer=document.getElementById('sel-chofer').value;buildLiqChips(true);applyFiltersAndDraw();}
+function onBodegaChange(){
+  activeBodega=document.getElementById('sel-bodega').value;
+  if(!activeBodega){ DATA=[]; applyFiltersAndDraw(); return; } // volvió a "-- Selecciona --"
+  if(!DATA.length){ applyFiltersAndDraw(); return; } // primera vez que se define bodega
+  // Recalcular el orden de toda la ruta anclado a la nueva bodega,
+  // preservando los estados (entregado/por cobrar/quemado/anulado/etc.) de cada cliente.
+  const oldIndexOf=new Map();
+  DATA.forEach((d,i)=>oldIndexOf.set(d,i));
+  const bodega=BODEGAS[activeBodega];
+  const pts=DATA.map(d=>({lat:d.lat,lng:d.lng}));
+  const order=nearestNeighborFrom(pts,bodega.lat,bodega.lng);
+  const reordered=order.map(i=>DATA[i]);
+  DATA=reordered;
+  const newCompleted=new Set(),newXC=new Set(),newQuem=new Set(),newAnul=new Map(),newDev=new Map(),newNotas=new Map(),newRet=new Set(),newQuemP=new Map();
+  DATA.forEach((d,newI)=>{
+    const oldI=oldIndexOf.get(d);
+    if(completed.has(oldI))newCompleted.add(newI);
+    if(porCobrar.has(oldI))newXC.add(newI);
+    if(quemados.has(oldI))newQuem.add(newI);
+    if(anulados.has(oldI))newAnul.set(newI,anulados.get(oldI));
+    if(devParcial.has(oldI))newDev.set(newI,devParcial.get(oldI));
+    if(notas.has(oldI))newNotas.set(newI,notas.get(oldI));
+    if(retencionSet.has(oldI))newRet.add(newI);
+    if(quemadoParcial.has(oldI))newQuemP.set(newI,quemadoParcial.get(oldI));
+  });
+  completed=newCompleted;porCobrar=newXC;quemados=newQuem;
+  anulados=newAnul;devParcial=newDev;notas=newNotas;retencionSet=newRet;quemadoParcial=newQuemP;
+  LABEL_OFFSETS=computeLabelOffsets(DATA);
+  draw(activeVendedor);
+  updateStats();updateProgress();updatePanel();updateBottomBar();
+  saveLocalState();
+}
+function drawBodegaMarker(){
+  if(bodegaMarker){map.removeLayer(bodegaMarker);bodegaMarker=null;}
+  if(!activeBodega) return; // sin bodega seleccionada, no se dibuja marcador
+  const bodega=BODEGAS[activeBodega];
+  if(!bodega) return;
+  bodegaMarker=L.marker([bodega.lat,bodega.lng],{
+    icon:L.divIcon({className:'',html:`<div style="background:#0f172a;border:2.5px solid #fbbf24;width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,.5)">🏭</div>`,iconSize:[30,30],iconAnchor:[15,15]}),
+    zIndexOffset:900
+  }).addTo(map).bindPopup(`<b>🏭 Bodega ${bodega.nombre}</b><br>Punto de partida de la ruta`);
+}
+
+// ── FILTRAR + OPTIMIZAR ────────────────────────────────────
+function applyFiltersAndDraw(){
+  completed.clear();activeVendedor='ALL';
+  const noData=document.getElementById('no-data');
+  if(!activeChofer){
+    DATA=[];clearMap();drawBodegaMarker();
+    noData.querySelector('p').textContent='Selecciona un camión para ver su ruta';
+    noData.style.display='block';
+    updateStats();updateProgress();
+    return;
+  }
+  if(!activeBodega){
+    DATA=[];clearMap();drawBodegaMarker();
+    noData.querySelector('p').textContent='Selecciona la bodega desde la que carga el camión';
+    noData.style.display='block';
+    updateStats();updateProgress();
+    return;
+  }
+  let filtered=ALL_ROWS.filter(r=>r.fecha===activeFecha&&r.chofer===activeChofer);
+  const hasLiq=filtered.some(r=>r.liq);
+  if(hasLiq&&activeLiqs.size&&!activeLiqs.has('__ALL__'))filtered=filtered.filter(r=>activeLiqs.has(r.liq));
+  if(!filtered.length){DATA=[];clearMap();drawBodegaMarker();noData.querySelector('p').textContent='Selecciona una fecha, camión y al menos una liquidación';noData.style.display='block';updateStats();updateProgress();return;}
+  noData.style.display='none';
+  const pts=filtered.map(r=>({lat:r.lat,lng:r.lng}));
+  const bodega=BODEGAS[activeBodega];
+  DATA=nearestNeighborFrom(pts,bodega.lat,bodega.lng).map(i=>filtered[i]);
+  buildColorMap(DATA);buildVendedorBtns(DATA);buildLegend(DATA);
+  updateStats();updateProgress();updateBanner();buildPanel();
+  resetVendedorBtns();
+  draw('ALL');
+  updateBottomBar();
+  loadLocalState();
+  const liqLabel=hasLiq&&activeLiqs.size?` | Liq: ${[...activeLiqs].sort().join(', ')}`:'';
+  document.getElementById('sub-info').textContent=`${activeFecha} | ${activeChofer} | 🏭 ${bodega.nombre}${liqLabel}`;
+}
+
+// ── MAPA ──────────────────────────────────────────────────
+function computeLabelOffsets(arr){
+  const off={};const DEG=0.0008;
+  for(let i=0;i<arr.length;i++){off[i]=0;let c=0;for(let j=0;j<i;j++){if(Math.abs(arr[i].lat-arr[j].lat)<DEG&&Math.abs(arr[i].lng-arr[j].lng)<DEG)c++;}off[i]=c*18;}
+  return off;
+}
+
+function buildColorMap(rows){colorMap={};[...new Set(rows.map(r=>r.vendedor))].sort().forEach((v,i)=>colorMap[v]=PALETTE[i%PALETTE.length]);}
+function buildVendedorBtns(rows){
+  const vs=[...new Set(rows.map(r=>r.vendedor))].sort();
+  const con=document.getElementById('vendedor-btns');
+  con.innerHTML=`<button class="fbtn on" data-v="ALL" style="border-color:#94a3b8;background:#94a3b8;color:#000" onclick="fv('ALL',this)">Todos</button> `;
+  vs.forEach(v=>{const col=colorMap[v];const b=document.createElement('button');b.className='fbtn';b.dataset.v=v;b.style.cssText=`border-color:${col}`;b.textContent=v;b.onclick=function(){fv(v,this);};con.appendChild(b);con.appendChild(document.createTextNode(' '));});
+}
+function resetVendedorBtns(){document.querySelectorAll('.fbtn[data-v]').forEach(b=>{b.classList.remove('on');b.style.background='transparent';b.style.color='#fff';});const a=document.querySelector('.fbtn[data-v="ALL"]');if(a){a.classList.add('on');a.style.background='#94a3b8';a.style.color='#000';}}
+function buildLegend(rows){const vs=[...new Set(rows.map(r=>r.vendedor))].sort();document.getElementById('legend-items').innerHTML=vs.map(v=>`<div class="li"><div class="ld" style="background:${colorMap[v]}"></div>${v}</div>`).join('');}
+
+function makeIcon(vendorColor,num,isFirst,d,offsetY=0){
+  if(!d)d={total:0,razon:'',vendedor:''};
+  const realIdx=DATA.indexOf(d);
+  const visited=completed.has(realIdx);
+  const xc=!visited&&porCobrar.has(realIdx);
+  const isNC=!visited&&!xc&&anulados.has(realIdx);
+  const isQuemIcon=!visited&&!xc&&!isNC&&quemados.has(realIdx);
+  const quemVal=quemadoParcial.has(realIdx)?quemadoParcial.get(realIdx):(isQuemIcon?d.total:0);
+  const pendQuemaIcon=isQuemIcon?Math.max(0,d.total-quemVal):0;
+  const tier=showNums?getTier(d.total):'normal';
+  let dotColor=vendorColor,ring='',pulse='',extraSize=0,tierIcon='';
+  let labelBg='transparent',labelColor='',labelBorder='transparent';
+
+  if(isQuemIcon&&pendQuemaIcon>0.009){dotColor='#c2410c';ring='box-shadow:0 0 0 2px #fdba74,0 0 8px 3px rgba(249,115,22,.5);';}
+  else if(visited||isQuemIcon){dotColor='#4b5563';ring='opacity:.5;';}
+  else if(isNC){dotColor='#111827';ring='opacity:.4;border-color:#374151;';}
+  else if(xc){dotColor='#f97316';ring='box-shadow:0 0 0 2px #fdba74,0 0 8px 3px rgba(249,115,22,.45);';}
+  else if(tier==='high'){dotColor='#dc2626';ring='box-shadow:0 0 0 3px #fca5a5,0 0 14px 5px rgba(239,68,68,.5);';pulse='animation:pingRed 1.2s ease-in-out infinite;';extraSize=6;tierIcon='🔴';labelBg='#7f1d1d';labelColor='#fecaca';labelBorder='#f87171';}
+  else if(tier==='medium'){dotColor='#ca8a04';ring='box-shadow:0 0 0 2px #fde68a,0 0 9px 3px rgba(234,179,8,.45);';extraSize=3;tierIcon='🟡';labelBg='#78350f';labelColor='#fef3c7';labelBorder='#fbbf24';}
+
+  const size=isFirst?34+extraSize:27+extraSize;
+  const fs=num>=100?'7px':num>=10?'8px':'9px';
+  const inner=isFirst?`<div style="font-size:7px;line-height:1">★</div><div style="font-size:7px;font-weight:800">${num}</div>`:`<span style="font-size:${fs};font-weight:800">${visited?'✓':xc?'$':num}</span>`;
+  const nombre=d.razon?d.razon.trim().split(/\s+/).slice(0,3).join(' '):'';
+  const valorLine=tier!=='normal'&&!visited&&!isQuemIcon?`<div style="display:inline-block;background:${labelBg};border:1px solid ${labelBorder};color:${labelColor};font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:5px;box-shadow:0 2px 6px rgba(0,0,0,.5);white-space:nowrap;">${tierIcon} $${d.total.toFixed(0)}</div>`:'';
+  const pendLine=pendQuemaIcon>0.009?`<div style="display:inline-block;background:#7c2d12;border:1px solid #f97316;color:#fed7aa;font-size:9.5px;font-weight:800;padding:1px 6px;border-radius:5px;box-shadow:0 2px 6px rgba(0,0,0,.5);white-space:nowrap;">🔥 Pend $${pendQuemaIcon.toFixed(0)}</div>`:'';
+  const nombreLine=showNums?`<div style="font-size:9px;font-weight:700;color:${darkMode?'#f1f5f9':'#1e293b'};text-shadow:${darkMode?'-1px -1px 0 #0f172a,1px -1px 0 #0f172a,-1px 1px 0 #0f172a,1px 1px 0 #0f172a':'-1px -1px 0 #fff,1px -1px 0 #fff,-1px 1px 0 #fff,1px 1px 0 #fff'};white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis;margin-top:${(valorLine||pendLine)?'2px':'0'};pointer-events:none;${visited?'text-decoration:line-through;opacity:.6;':''}">${nombre}</div>`:'';
+  const connector=offsetY>0?`<div style="position:absolute;left:50%;top:${size+1}px;width:1px;height:${offsetY+2}px;background:rgba(148,163,184,.3);transform:translateX(-50%);pointer-events:none"></div>`:'';
+  const label=showNums?`<div style="position:absolute;top:${size+3+offsetY}px;left:50%;transform:translateX(-50%);text-align:center;line-height:1.4;pointer-events:none;white-space:nowrap;z-index:10;">${valorLine}${pendLine}${nombreLine}</div>`:'';
+  const totalH=size+46+offsetY;
+  return L.divIcon({className:'',html:`<div style="position:relative;width:${size}px;height:${totalH}px;"><div style="background:${dotColor};width:${size}px;height:${size}px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;border:2px solid #fff;${ring}cursor:pointer;${pulse}">${inner}</div>${connector}${label}</div>`,iconSize:[size,totalH],iconAnchor:[size/2,size/2],popupAnchor:[0,-size/2-2]});
+}
+
+// Genera los 2 cuadros inline de quema parcial: cuánto se quema y la diferencia pendiente automática
+function quemaRowHtml(idx, total, defaultQuemado){
+  const pend = Math.max(0, total - defaultQuemado);
+  return `<div id="quema-row-${idx}" style="display:none;gap:3px;align-items:center;margin-top:4px">
+    <div style="flex:1;position:relative">
+      <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:.58rem;color:#c2410c;pointer-events:none">🔥 $</span>
+      <input id="quema-val-${idx}" type="number" step="0.01" min="0" max="${total}" value="${defaultQuemado.toFixed(2)}"
+        oninput="calcQuemaInline(${idx},${total})"
+        style="width:100%;padding:3px 3px 3px 26px;font-size:.62rem;background:#fff7ed;border:1.5px solid #f97316;border-radius:6px;color:#c2410c;font-weight:700;outline:none">
+    </div>
+    <div style="flex:1;position:relative">
+      <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:.55rem;color:#475569;pointer-events:none">Pend $</span>
+      <input id="quema-pend-${idx}" type="number" readonly value="${pend.toFixed(2)}"
+        style="width:100%;padding:3px 3px 3px 32px;font-size:.62rem;background:#f8fafc;border:1.5px solid #94a3b8;border-radius:6px;color:#334155;font-weight:700;outline:none">
+    </div>
+    <button onclick="confirmarQuema(${idx})" id="quema-ok-${idx}"
+      style="background:#c2410c;border:none;color:#fff;padding:3px 6px;border-radius:6px;font-size:.6rem;font-weight:700;cursor:pointer;white-space:nowrap">✓OK</button>
+  </div>`;
+}
+function buildPopup(d,idx){
+  const color = colorMap[d.vendedor] || '#888';
+  const tier = getTier(d.total);
+  const isFirst = idx === 0;
+  const dn = idx < DATA.length-1 ? haversine(d.lat,d.lng,DATA[idx+1].lat,DATA[idx+1].lng) : null;
+  const distInfo = dn!=null
+    ? `<div class="pc-km">➡️ Siguiente: ${(dn*1000).toFixed(0)} m</div>`
+    : `<div class="pc-km">🏁 Último punto de la ruta</div>`;
+  const liqBadge = d.liq ? `<div class="pc-liq">📋 Liq. ${d.liq}</div>` : '';
+  const tierBadge = tier!=='normal'
+    ? `<span style="background:${tier==='high'?'#dc2626':'#ca8a04'};color:#fff;font-size:.55rem;font-weight:700;padding:1px 6px;border-radius:10px;margin-left:4px">${tier==='high'?'🔴 DROP ALTO':'🟡 DROP MEDIO'}</span>`
+    : '';
+  const gmapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${d.lat},${d.lng}&travelmode=driving`;
+  const wazeUrl  = `https://waze.com/ul?ll=${d.lat},${d.lng}&navigate=yes`;
+
+  // Retención: SOLO se calcula y refleja si el cliente está autorizado desde el Sheet (d.hasRet).
+  // El toggle manual ya NO habilita valores para clientes no autorizados — solo muestra alerta.
+  const tieneRet = d.hasRet;
+  const retBadge = tieneRet ? `<span class="ret-badge">⚠️ RET 2%</span>` : '';
+  const retInfo  = tieneRet
+    ? `<div style="font-size:.65rem;color:#818cf8;background:#1e1b4b;padding:3px 8px;border-radius:5px;margin-top:3px">
+        ⚠️ Retención 2%: Suma Neta $${d.sumaNeta?d.sumaNeta.toFixed(2):'—'}
+        → RET: <b style="color:#f87171">$${d.retencionVal?d.retencionVal.toFixed(2):'—'}</b>
+        → Neto: <b style="color:#4ade80">$${(d.sumaNeta&&d.retencionVal)?(d.sumaNeta-d.retencionVal).toFixed(2):'—'}</b>
+      </div>`
+    : '';
+
+  // Estados
+  const isEnt  = completed.has(idx);
+  const isXC   = !isEnt && porCobrar.has(idx);
+  const isQuem = !isEnt && !isXC && quemados.has(idx);
+  const isAnul = !isEnt && !isXC && !isQuem && anulados.has(idx);
+  const isDev  = devParcial.has(idx);
+  const devVal = isDev ? devParcial.get(idx) : d.total;
+  const quemVal = quemadoParcial.has(idx) ? quemadoParcial.get(idx) : (isQuem ? d.total : 0);
+  const pendienteQuema = isQuem ? Math.max(0, d.total - quemVal) : 0;
+
+  let estadoBadge = '';
+  if(isEnt)  estadoBadge = `<span style="background:#14532d;color:#4ade80;font-size:.55rem;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:4px">✅ ENTREGADO</span>`;
+  if(isXC)   estadoBadge = `<span style="background:#431407;color:#fb923c;font-size:.55rem;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:4px">🟠 POR COBRAR</span>`;
+  if(isQuem) estadoBadge = pendienteQuema>0.009
+    ? `<span style="background:#7c2d12;color:#fed7aa;font-size:.55rem;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:4px">🔥 QUEMADO PARCIAL</span>`
+    : `<span style="background:#7f1d1d;color:#fca5a5;font-size:.55rem;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:4px">🔥 QUEMADO</span>`;
+  if(isAnul) estadoBadge = `<span style="background:#1e1b4b;color:#c7d2fe;font-size:.55rem;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:4px">❌ ANULADO</span>`;
+  if(isDev && isEnt) estadoBadge = `<span style="background:#065f46;color:#6ee7b7;font-size:.55rem;font-weight:700;padding:1px 7px;border-radius:10px;margin-left:4px">💰 PAGO PARCIAL</span>`;
+
+  const motivoAnul = isAnul ? `<div style="font-size:.65rem;color:#818cf8;margin-top:3px">Motivo: ${anulados.get(idx)}</div>` : '';
+  const devInfo = isDev
+    ? `<div style="background:#f0fdf4;border-left:3px solid #16a34a;padding:5px 8px;margin-top:6px;border-radius:4px">
+        <div style="font-size:.68rem;color:#166534;font-weight:700">💰 Devolución parcial</div>
+        <div style="font-size:.72rem;color:#14532d;margin-top:2px">Pagado: <b>$${Number(devVal).toFixed(2)}</b> &nbsp;|&nbsp; NC: <b style="color:#dc2626">$${(d.total-Number(devVal)).toFixed(2)}</b></div>
+      </div>`
+    : '';
+  const quemInfo = isQuem
+    ? `<div style="background:${pendienteQuema>0.009?'#fff7ed':'#fef2f2'};border-left:3px solid ${pendienteQuema>0.009?'#f97316':'#7f1d1d'};padding:5px 8px;margin-top:6px;border-radius:4px">
+        <div style="font-size:.68rem;color:#7c2d12;font-weight:700">🔥 ${pendienteQuema>0.009?'Quema parcial':'Quemado total'}</div>
+        <div style="font-size:.72rem;color:#7c2d12;margin-top:2px">Quemado: <b>$${quemVal.toFixed(2)}</b>${pendienteQuema>0.009?` &nbsp;|&nbsp; Pendiente: <b style="color:#dc2626">$${pendienteQuema.toFixed(2)}</b>`:''}</div>
+      </div>`
+    : '';
+  const notaInfo = notas.has(idx)
+    ? `<div style="font-size:.68rem;color:#93c5fd;border-left:3px solid #3b82f6;padding:3px 8px;margin-top:4px;border-radius:4px">📝 ${notas.get(idx)}</div>`
+    : '';
+
+  // Botones de acción
+  let actionsHtml = '';
+  if(isEnt || isXC || isQuem || isAnul){
+    if(isAnul){
+      actionsHtml = '<div style="display:flex;gap:4px">'
+        +'<button class="pc-btn" style="flex:1;background:#14532d;color:#4ade80;font-size:.6rem;padding:5px" onclick="entregarDesdeNC('+idx+')">✅ Entregar</button>'
+        +'<button class="pc-btn" style="flex:1;background:#7f1d1d;color:#fca5a5;font-size:.6rem;padding:5px" onclick="showQuemaParcial('+idx+','+d.total+')">🔥 Quemar</button>'
+        +'<button class="pc-btn" style="flex:1;background:#334155;color:#94a3b8;font-size:.6rem;padding:5px" onclick="resetEstado('+idx+')">↩</button>'
+        +'</div>'
+        + quemaRowHtml(idx, d.total, d.total);
+    } else if(isQuem && pendienteQuema>0.009){
+      actionsHtml = '<div style="display:flex;gap:4px">'
+        +'<button class="pc-btn" style="flex:1;background:#c2410c;color:#fff;font-size:.6rem;padding:5px" onclick="showQuemaParcial('+idx+','+d.total+')">🔥 Quemar pendiente</button>'
+        +'<button class="pc-btn" style="flex:1;background:#334155;color:#94a3b8;font-size:.6rem;padding:5px" onclick="resetEstado('+idx+')">↩</button>'
+        +'</div>'
+        + quemaRowHtml(idx, d.total, quemVal);
+    } else {
+      actionsHtml = '<button class="pc-btn" style="background:#334155;color:#94a3b8;width:100%" onclick="resetEstado('+idx+')">↩ Desmarcar / Cambiar estado</button>';
+    }
+  } else {
+    // Retención inline: botón compacto + 2 cuadros readonly automáticos + cobro de diferencia
+  const retVal2 = tieneRet ? (d.sumaNeta * 0.02) : 0;
+  const netoCobrar = tieneRet ? (d.total - retVal2) : 0;
+  const retBtn = tieneRet
+    ? `<div style="display:flex;gap:3px;align-items:center;margin-top:3px">
+        <button onclick="toggleRetencion(${idx})"
+          style="background:#1e1b4b;border:1px solid #4338ca;color:#a5b4fc;padding:3px 7px;border-radius:7px;font-size:.58rem;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">⚠️ Ret 2%</button>
+        <div style="flex:1;position:relative">
+          <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:.55rem;color:#7c3aed;pointer-events:none">RET</span>
+          <input readonly value="$${retVal2.toFixed(2)}"
+            style="width:100%;padding:3px 3px 3px 26px;font-size:.62rem;background:#f5f3ff;border:1.5px solid #7c3aed;border-radius:6px;color:#7c3aed;font-weight:700;outline:none">
+        </div>
+        <div style="flex:1;position:relative">
+          <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:.55rem;color:#15803d;pointer-events:none">✓</span>
+          <input readonly value="$${netoCobrar.toFixed(2)}"
+            style="width:100%;padding:3px 3px 3px 18px;font-size:.62rem;background:#f0fdf4;border:1.5px solid #16a34a;border-radius:6px;color:#15803d;font-weight:700;outline:none">
+        </div>
+      </div>
+      <button onclick="confirmarCobroRetencion(${idx})"
+        style="background:#15803d;border:none;color:#fff;padding:4px 7px;border-radius:7px;font-size:.6rem;font-weight:700;cursor:pointer;width:100%;margin-top:3px">✅ Cobrar diferencia $${netoCobrar.toFixed(2)}</button>`
+    : `<button onclick="toggleRetencion(${idx})" title="Este cliente NO está autorizado para retención en el Sheet"
+        style="background:#78350f;border:1.5px solid #f59e0b;color:#fde68a;padding:3px 7px;border-radius:7px;font-size:.58rem;font-weight:700;cursor:pointer;white-space:nowrap;margin-top:3px;width:100%">⚠️ Ret 2% — No autorizado</button>`;
+    actionsHtml = `
+    <div style="display:flex;gap:4px;margin-bottom:3px">
+      <button class="pc-btn pc-btn-done"    onclick="toggleVisited(${idx})"    style="flex:1;padding:5px 2px;font-size:.65rem">✅ OK</button>
+      <button class="pc-btn pc-btn-xc"      onclick="togglePorCobrar(${idx})" style="flex:1;padding:5px 2px;font-size:.65rem">💲 XC</button>
+      <button class="pc-btn pc-btn-anulado" onclick="showAnuladoMenu(${idx})" style="flex:1;padding:5px 2px;font-size:.65rem">NC ❌</button>
+    </div>
+    <div id="anulado-menu-${idx}" style="display:none;margin-bottom:3px">
+      <select class="motivo-select" onchange="marcarAnulado(${idx},this.value)">
+        <option value="">— Motivo anulación —</option>
+        <option>Negocio cerrado</option><option>Rechazado comercial</option>
+        <option>Cliente sin dinero</option><option>Diferencia de precios</option>
+        <option>No realiza pedido</option><option>Pedido cruzado</option>
+        <option>Fuera de ruta</option><option>Descuento o crédito no formalizado</option>
+        <option>Pedido incompleto</option><option>Error de facturación</option>
+        <option>Producto en mal estado</option><option>Sin motivo</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:3px;align-items:center;margin-bottom:3px">
+      <button onclick="showDevParcial(${idx},${d.total})"
+        style="background:#065f46;border:none;color:#6ee7b7;padding:3px 7px;border-radius:7px;font-size:.58rem;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">💰 Dev.</button>
+      <div style="flex:1;display:none;gap:2px;align-items:center" id="dev-row-${idx}">
+        <div style="flex:1;position:relative">
+          <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:.58rem;color:#dc2626;pointer-events:none">NC $</span>
+          <input id="dev-nc-${idx}" type="number" step="0.01" min="0" max="${d.total}" value="0"
+            oninput="calcDevInline(${idx},${d.total})"
+            placeholder="0.00"
+            style="width:100%;padding:3px 3px 3px 24px;font-size:.62rem;background:#fef2f2;border:1.5px solid #dc2626;border-radius:6px;color:#dc2626;font-weight:700;outline:none">
+        </div>
+        <div style="flex:1;position:relative">
+          <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:.58rem;color:#15803d;pointer-events:none">✓ $</span>
+          <input id="dev-cobra-${idx}" type="number" readonly
+            value="${d.total.toFixed(2)}"
+            style="width:100%;padding:3px 3px 3px 22px;font-size:.62rem;background:#f0fdf4;border:1.5px solid #16a34a;border-radius:6px;color:#15803d;font-weight:700;outline:none">
+        </div>
+        <button onclick="confirmarDev(${idx})" id="dev-ok-${idx}"
+          style="background:#15803d;border:none;color:#fff;padding:3px 6px;border-radius:6px;font-size:.6rem;font-weight:700;cursor:pointer;white-space:nowrap;display:none">✓OK</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:4px;align-items:center;margin-bottom:2px">
+      <textarea id="nota-input-${idx}" rows="1" placeholder="📝 Nota..." style="flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:3px 6px;font-size:.65rem;resize:none;color:#334155;font-family:inherit">${notas.has(idx)?notas.get(idx):''}</textarea>
+      <button class="nota-save-btn" onclick="saveNota(${idx})" style="flex:0 0 auto;padding:3px 7px;font-size:.6rem">💾</button>
+    </div>
+    ${retBtn}`;
+  }
+
+  return `<div class="pc">
+<div class="pc-head">
+  <div class="pc-code">
+    <div class="pc-num" style="background:${tier==='high'?'#dc2626':tier==='medium'?'#ca8a04':color}">${idx+1}</div>
+    <div>
+      <div class="pc-title">${isFirst?'★ INICIO — ':''}${d.vendedor} ${tierBadge}${retBadge}${estadoBadge}</div>
+      <div class="pc-sub">${d.chofer}</div>
+      ${liqBadge}
+    </div>
+  </div>
+  <div class="pc-badge" style="background:${color}">${d.vendedor}</div>
+</div>
+<div class="pc-body">
+  <div class="pc-row"><span class="pc-key">Fecha Liq</span><span class="pc-val">${d.fecha}</span></div>
+  <div class="pc-row"><span class="pc-key">Código</span><span class="pc-val">${d.codigo}</span></div>
+  <div class="pc-row"><span class="pc-key">Razón</span><span class="pc-val">${d.razon}</span></div>
+  <div class="pc-row"><span class="pc-key">Dirección</span><span class="pc-val">${d.dir}</span></div>
+  
+  ${motivoAnul}${devInfo}${quemInfo}${retInfo}${notaInfo}
+</div>
+<div class="pc-foot">
+  <div class="pc-metric"><div class="mv">${d.peso.toFixed(2)}</div><div class="ml">kg</div></div>
+  <div class="pc-metric"><div class="mv" style="color:${tier==='high'?'#dc2626':tier==='medium'?'#ca8a04':'#1e40af'}">$${d.total.toFixed(0)}</div><div class="ml">Total</div></div>
+  <div class="pc-metric"><div class="mv">#${idx+1}</div><div class="ml">Orden</div></div>
+</div>
+${distInfo}
+<div class="pc-actions">
+  <button class="pc-btn pc-btn-nav" onclick="window.open('${gmapsUrl}','_blank')">🗺️ Google Maps</button>
+  <button class="pc-btn pc-btn-waze" onclick="window.open('${wazeUrl}','_blank')">🚗 Waze</button>
+</div>
+<div style="padding:4px 8px 6px">${actionsHtml}</div>
+<div class="pc-coords">📍 ${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}</div>
+</div>`;
+}
+
+
+
+function clearMap(){
+  allMarkers.forEach(m=>map.removeLayer(m));
+  allLines.forEach(l=>map.removeLayer(l));
+  if(clusterGroup){map.removeLayer(clusterGroup);clusterGroup=null;}
+  allMarkers=[];allLines=[];
+}
+
+function draw(filter){
+  clearMap();
+  const fd=filter==='ALL'?DATA:DATA.filter(d=>d.vendedor===filter);
+  drawBodegaMarker();
+  if(bodegaLine){map.removeLayer(bodegaLine);bodegaLine=null;}
+  if(!fd.length)return;
+
+  const bodega=BODEGAS[activeBodega]||BODEGAS.riobamba;
+  if(showRuta){
+    bodegaLine=L.polyline([[bodega.lat,bodega.lng],[fd[0].lat,fd[0].lng]],{color:'#fbbf24',weight:3,opacity:.8,dashArray:'4,7'}).addTo(map);
+  }
+
+  if(showRuta&&fd.length>1){
+    const line=L.polyline(fd.map(d=>[d.lat,d.lng]),{color:'#3b82f6',weight:3,opacity:.75,dashArray:'8,5'}).addTo(map);
+    allLines.push(line);
+    for(let i=0;i<fd.length-1;i++){
+      const dist=haversine(fd[i].lat,fd[i].lng,fd[i+1].lat,fd[i+1].lng);
+      if(dist<0.35){
+        const mid=[(fd[i].lat+fd[i+1].lat)/2,(fd[i].lng+fd[i+1].lng)/2];
+        const lbl=L.marker(mid,{icon:L.divIcon({className:'',html:`<div style="background:rgba(15,23,42,.8);color:#93c5fd;font-size:9px;padding:1px 4px;border-radius:4px;white-space:nowrap">${(dist*1000).toFixed(0)}m</div>`,iconAnchor:[18,8]})}).addTo(map);
+        allLines.push(lbl);
+      }
+    }
+  }
+
+  LABEL_OFFSETS=computeLabelOffsets(DATA);
+
+  if(useCluster){
+    clusterGroup=L.markerClusterGroup({maxClusterRadius:50,showCoverageOnHover:false});
+    fd.forEach(d=>{
+      const ri=DATA.indexOf(d);
+      const col=colorMap[d.vendedor]||'#888';
+      const icon=makeIcon(col,ri+1,ri===0,d,0);
+      const m=L.marker([d.lat,d.lng],{icon}).bindPopup(buildPopup(d,ri),{maxWidth:320,minWidth:285});
+      clusterGroup.addLayer(m);
+      allMarkers.push(m);
+    });
+    map.addLayer(clusterGroup);
+  } else {
+    fd.forEach(d=>{
+      const ri=DATA.indexOf(d);
+      const col=colorMap[d.vendedor]||'#888';
+      const icon=makeIcon(col,ri+1,ri===0,d,LABEL_OFFSETS[ri]||0);
+      const m=L.marker([d.lat,d.lng],{icon}).addTo(map).bindPopup(buildPopup(d,ri),{maxWidth:320,minWidth:285});
+      allMarkers.push(m);
+    });
+  }
+  map.fitBounds(L.latLngBounds([...fd.map(d=>[d.lat,d.lng]),[bodega.lat,bodega.lng]]),{padding:[40,40]});
+}
+
+// ── SYNC CON SHEET "AVANCE" ─────────────────────────────────
+// Antes, los cambios de estado (entregado, por cobrar, quemado, anulado...)
+// solo se guardaban en localStorage del navegador y NUNCA se enviaban al
+// Apps Script, por eso la pestaña AVANCE del Sheet nunca se actualizaba.
+function estadoActualDe(idx){
+  const d=DATA[idx];
+  if(!d) return {estado:'PENDIENTE',monto:0,motivo:''};
+  if(completed.has(idx)){
+    if(devParcial.has(idx)) return {estado:'ENTREGADO_PARCIAL',monto:devParcial.get(idx),motivo:''};
+    return {estado:'ENTREGADO',monto:d.total,motivo:''};
+  }
+  if(porCobrar.has(idx))  return {estado:'POR_COBRAR',monto:d.total,motivo:''};
+  if(quemados.has(idx)){
+    const q=quemadoParcial.has(idx)?quemadoParcial.get(idx):d.total;
+    return {estado:'QUEMADO',monto:q,motivo:''};
+  }
+  if(anulados.has(idx))   return {estado:'ANULADO',monto:0,motivo:anulados.get(idx)||''};
+  return {estado:'PENDIENTE',monto:0,motivo:''};
+}
+async function syncAvance(idx){
+  const d=DATA[idx];
+  if(!d) return;
+  const {estado,monto,motivo}=estadoActualDe(idx);
+  const sesion=getSesion();
+  try{
+    await fetch(API_URL,{
+      method:'POST',
+      mode:'no-cors', // Apps Script no siempre responde con headers CORS en POST; no necesitamos leer la respuesta
+      headers:{'Content-Type':'text/plain;charset=utf-8'}, // evita preflight OPTIONS que Apps Script no maneja
+      body:JSON.stringify({
+        tipo:'avance',
+        fecha:d.fecha,
+        chofer:d.chofer,
+        codigoCliente:d.codigo,
+        estado, monto, motivo,
+        usuario:(sesion&&sesion.usuario)||d.chofer,
+        rol:(sesion&&sesion.rol)||'reparto',
+        bodega:activeBodega
+      })
+    });
+  }catch(err){
+    console.warn('No se pudo sincronizar avance con el Sheet:',err);
+  }
+}
+
+// Sincronización casi-en-tiempo-real: cada cierto tiempo revisa si OTRO dispositivo
+// (chofer o ayudante) trabajando la misma fecha+camión marcó algún cliente,
+// y aplica esos cambios localmente para que ambos vean lo mismo y no se dupliquen datos.
+let ultimoPollAvance=0;
+async function pollAvanceRemoto(){
+  if(!activeFecha||!activeChofer||!DATA.length) return;
+  try{
+    const url=`${API_URL}?tipo=avance&fecha=${encodeURIComponent(activeFecha)}&chofer=${encodeURIComponent(activeChofer)}&t=${Date.now()}`;
+    const res=await fetchConTimeoutMapa(url,{method:'GET',mode:'cors'},9000);
+    if(!res.ok) return;
+    const rows=await res.json();
+    if(!Array.isArray(rows)) return;
+    let changed=false;
+    rows.forEach(row=>{
+      const codigo=String(row.CodigoCliente||'').trim();
+      const idx=DATA.findIndex(d=>d.codigo===codigo);
+      if(idx<0) return;
+      const estado=String(row.Estado||'').toUpperCase();
+      const monto=parseFloat(row.Monto)||0;
+      const motivo=row.Motivo||'';
+      const before=JSON.stringify(estadoActualDe(idx));
+      completed.delete(idx); porCobrar.delete(idx); quemados.delete(idx); anulados.delete(idx); devParcial.delete(idx); quemadoParcial.delete(idx);
+      if(estado==='ENTREGADO'){ completed.add(idx); }
+      else if(estado==='ENTREGADO_PARCIAL'){ completed.add(idx); devParcial.set(idx,monto); }
+      else if(estado==='POR_COBRAR'){ porCobrar.add(idx); }
+      else if(estado==='QUEMADO'){ quemados.add(idx); quemadoParcial.set(idx, monto||DATA[idx].total); }
+      else if(estado==='ANULADO'){ anulados.set(idx, motivo); }
+      const after=JSON.stringify(estadoActualDe(idx));
+      if(before!==after) changed=true;
+    });
+    if(changed){
+      DATA.forEach((_,i)=>refreshMarkerIcon(i));
+      updateProgress();updateStats();updatePanel();updateBottomBar();
+      saveLocalState();
+      console.log('🔄 Ruta sincronizada: otro dispositivo actualizó el avance');
+    }
+  }catch(err){
+    console.warn('No se pudo sincronizar avance remoto:',err);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// CUADRE DE GUÍA — resumen de cierre + fotos de depósito
+// ══════════════════════════════════════════════════════════════
+let cuadreFotos=[]; // array de dataURL (base64) ya comprimidas, listas para enviar
+
+function calcMontoRecaudadoSistema(){
+  let entVal=0;
+  DATA.forEach((d,i)=>{
+    if(!completed.has(i))return;
+    if(devParcial.has(i)) entVal+=devParcial.get(i);
+    else entVal+=d.total;
+  });
+  return entVal;
+}
+
+async function abrirCuadre(){
+  if(!activeFecha||!activeChofer){
+    alert('Selecciona primero la fecha y el camión.');
+    return;
+  }
+  document.getElementById('cuadre-overlay').classList.add('show');
+  document.getElementById('cuadre-sub').textContent=`${activeChofer} · ${activeFecha}`;
+  document.getElementById('cuadre-monto-sistema').textContent='$'+calcMontoRecaudadoSistema().toFixed(2);
+  document.getElementById('cuadre-monto-declarado').value='';
+  document.getElementById('cuadre-observaciones').value='';
+  document.getElementById('cuadre-thumbs').innerHTML='';
+  document.getElementById('cuadre-msg').textContent='\u00A0';
+  cuadreFotos=[];
+  document.getElementById('cuadre-estado-prev-wrap').innerHTML='<div style="text-align:center;padding:8px;color:#64748b;font-size:.7rem">Consultando si ya enviaste un cuadre hoy...</div>';
+  try{
+    const rows=await fetchConTimeoutMapa(`${API_URL}?tipo=cuadre&fecha=${encodeURIComponent(activeFecha)}&chofer=${encodeURIComponent(activeChofer)}&t=${Date.now()}`,{method:'GET',mode:'cors'},9000).then(r=>r.json());
+    if(Array.isArray(rows)&&rows.length){
+      const r=rows[rows.length-1];
+      const estado=String(r['Estado']||'PENDIENTE').toUpperCase();
+      const claseEstado=estado==='APROBADO'?'aprobado':estado==='DIFERENCIA'?'diferencia':'';
+      const etiqueta=estado==='APROBADO'?'✅ Aprobado por Cartera':estado==='DIFERENCIA'?'⚠️ Cartera marcó una diferencia':'⏳ Pendiente de revisión por Cartera';
+      const nota=r['NotaCartera']?`<div style="margin-top:4px">Nota de Cartera: ${r['NotaCartera']}</div>`:'';
+      document.getElementById('cuadre-estado-prev-wrap').innerHTML=`
+        <div class="cuadre-estado-prev ${claseEstado}">
+          Ya enviaste un cuadre hoy — declaraste <b>$${Number(r['MontoDeclarado']||0).toFixed(2)}</b><br>
+          ${etiqueta}${nota}<br>
+          <span style="opacity:.8">Puedes agregar más fotos o corregir el monto; se actualizará el mismo registro.</span>
+        </div>`;
+      document.getElementById('cuadre-monto-declarado').value=r['MontoDeclarado']||'';
+      document.getElementById('cuadre-observaciones').value=r['Observaciones']||'';
+    } else {
+      document.getElementById('cuadre-estado-prev-wrap').innerHTML='';
+    }
+  }catch(err){
+    document.getElementById('cuadre-estado-prev-wrap').innerHTML='';
+  }
+}
+function cerrarCuadre(){
+  document.getElementById('cuadre-overlay').classList.remove('show');
+}
+
+function comprimirImagen(file, maxW=1100, calidad=0.72){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onload=(ev)=>{
+      const img=new Image();
+      img.onload=()=>{
+        let w=img.width, h=img.height;
+        if(w>maxW){ h=Math.round(h*maxW/w); w=maxW; }
+        const canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        resolve(canvas.toDataURL('image/jpeg',calidad));
+      };
+      img.onerror=()=>reject(new Error('No se pudo leer la imagen'));
+      img.src=ev.target.result;
+    };
+    reader.onerror=()=>reject(new Error('No se pudo leer el archivo'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function agregarFotos(fileList){
+  const msg=document.getElementById('cuadre-msg');
+  msg.style.color='#93c5fd';
+  msg.textContent='Comprimiendo fotos...';
+  for(const file of fileList){
+    try{
+      const dataUrl=await comprimirImagen(file);
+      cuadreFotos.push(dataUrl);
+      const thumb=document.createElement('div');
+      thumb.className='cuadre-thumb';
+      const idx=cuadreFotos.length-1;
+      thumb.innerHTML=`<img src="${dataUrl}"><button class="rm" onclick="quitarFoto(${idx})">✕</button>`;
+      document.getElementById('cuadre-thumbs').appendChild(thumb);
+    }catch(err){ console.warn('Error comprimiendo foto:',err); }
+  }
+  msg.textContent='\u00A0';
+  document.getElementById('cuadre-fotos-input').value='';
+}
+function quitarFoto(idx){
+  cuadreFotos.splice(idx,1);
+  // re-render thumbs con índices correctos
+  const wrap=document.getElementById('cuadre-thumbs');
+  wrap.innerHTML='';
+  cuadreFotos.forEach((dataUrl,i)=>{
+    const thumb=document.createElement('div');
+    thumb.className='cuadre-thumb';
+    thumb.innerHTML=`<img src="${dataUrl}"><button class="rm" onclick="quitarFoto(${i})">✕</button>`;
+    wrap.appendChild(thumb);
+  });
+}
+
+async function enviarCuadre(){
+  const montoDeclarado=parseFloat(document.getElementById('cuadre-monto-declarado').value)||0;
+  const observaciones=document.getElementById('cuadre-observaciones').value.trim();
+  const msg=document.getElementById('cuadre-msg');
+  if(montoDeclarado<=0 && !cuadreFotos.length){
+    msg.style.color='#f87171';
+    msg.textContent='Ingresa el monto o agrega al menos una foto.';
+    return;
+  }
+  const btn=document.getElementById('cuadre-submit-btn');
+  btn.disabled=true;
+  msg.style.color='#93c5fd';
+  msg.textContent='Enviando...';
+  const sesion=getSesion();
+  try{
+    const res=await fetchConTimeoutMapa(API_URL,{
+      method:'POST',
+      mode:'cors',
+      headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({
+        tipo:'cuadre',
+        fecha:activeFecha, chofer:activeChofer, bodega:activeBodega,
+        montoDeclarado, montoSistema:calcMontoRecaudadoSistema(),
+        observaciones, fotos:cuadreFotos,
+        usuario:(sesion&&sesion.usuario)||activeChofer,
+        rol:(sesion&&sesion.rol)||''
+      })
+    },25000);
+    const data=await res.json().catch(()=>({ok:true})); // si el proxy no deja leer, asumimos éxito silencioso
+    if(data && data.error) throw new Error(data.error);
+    msg.style.color='#4ade80';
+    msg.textContent='✅ Cuadre enviado correctamente';
+    setTimeout(()=>{ cerrarCuadre(); btn.disabled=false; },1200);
+  }catch(err){
+    msg.style.color='#f87171';
+    msg.textContent='❌ No se pudo enviar. Verifica tu conexión e intenta de nuevo.';
+    btn.disabled=false;
+  }
+}
+
+
+// ── VISITADOS / ENTREGADOS ─────────────────────────────────
+
+function togglePorCobrar(idx){
+  if(porCobrar.has(idx)){
+    porCobrar.delete(idx);
+  } else {
+    porCobrar.add(idx);
+    completed.delete(idx); // si estaba entregado, quitar esa marca
+  }
+  refreshMarkerIcon(idx);
+  updateProgress();updateStats();updatePanel();
+  map.closePopup();
+  syncAvance(idx);
+}
+
+
+// ── NUEVOS ESTADOS ───────────────────────────────────────
+
+
+function quemarDesdeNC(idx, reopenPopup=true){ const d=DATA[idx]; anulados.delete(idx); quemados.add(idx); completed.delete(idx); porCobrar.delete(idx); if(d) quemadoParcial.set(idx, d.total); refreshMarkerIcon(idx); updateProgress();updateStats();updatePanel();saveLocalState(); syncAvance(idx); if(reopenPopup){ const m=allMarkers[idx]; if(m){m.setPopupContent(buildPopup(DATA[idx],idx));m.openPopup();} } }
+function entregarDesdeNC(idx, reopenPopup=true){ anulados.delete(idx); completed.add(idx); porCobrar.delete(idx); quemados.delete(idx); quemadoParcial.delete(idx); refreshMarkerIcon(idx); updateProgress();updateStats();updatePanel();saveLocalState(); syncAvance(idx); if(reopenPopup){ const m=allMarkers[idx]; if(m){m.setPopupContent(buildPopup(DATA[idx],idx));m.openPopup();} } }
+function resetEstado(idx){
+  completed.delete(idx); porCobrar.delete(idx);
+  quemados.delete(idx); anulados.delete(idx); devParcial.delete(idx); quemadoParcial.delete(idx);
+  refreshMarkerIcon(idx); updateProgress(); updateStats(); updatePanel();
+  map.closePopup();
+  syncAvance(idx);
+}
+
+function marcarQuemado(idx){
+  const d=DATA[idx];
+  quemados.add(idx);
+  completed.delete(idx); porCobrar.delete(idx); anulados.delete(idx);
+  if(d) quemadoParcial.set(idx, d.total);
+  refreshMarkerIcon(idx); updateProgress(); updateStats(); updatePanel();
+  map.closePopup();
+  syncAvance(idx);
+}
+
+function showAnuladoMenu(idx){
+  const m=document.getElementById('anulado-menu-'+idx);
+  if(m) m.style.display=m.style.display==='none'?'block':'none';
+}
+
+function marcarAnulado(idx, motivo, reopenPopup=true){
+  if(!motivo)return;
+  anulados.set(idx, motivo);
+  completed.delete(idx); porCobrar.delete(idx); quemados.delete(idx); quemadoParcial.delete(idx);
+  refreshMarkerIcon(idx); updateProgress(); updateStats(); updatePanel();
+  syncAvance(idx);
+  if(reopenPopup){
+    const m=allMarkers[idx];
+    if(m){m.setPopupContent(buildPopup(DATA[idx],idx));m.openPopup();}
+  }
+}
+
+function showDevParcial(idx, total){
+  const row = document.getElementById('dev-row-'+idx);
+  if(!row) return;
+  const visible = row.style.display === 'flex';
+  if(visible){
+    row.style.display = 'none';
+    const nc = document.getElementById('dev-nc-'+idx);
+    const cobra = document.getElementById('dev-cobra-'+idx);
+    const ok = document.getElementById('dev-ok-'+idx);
+    if(nc) nc.value = '0';
+    if(cobra) cobra.value = total.toFixed(2);
+    if(ok) ok.style.display = 'none';
+  } else {
+    row.style.display = 'flex';
+    setTimeout(()=>{ const nc=document.getElementById('dev-nc-'+idx); if(nc)nc.focus(); }, 60);
+  }
+}
+
+
+function calcDevInline(idx, total){
+  const ncInput = document.getElementById('dev-nc-'+idx);
+  const cobraInput = document.getElementById('dev-cobra-'+idx);
+  const okBtn = document.getElementById('dev-ok-'+idx);
+  if(!ncInput||!cobraInput) return;
+  const nc = Math.min(parseFloat(ncInput.value)||0, total);
+  const cobra = Math.max(0, total - nc);
+  cobraInput.value = cobra.toFixed(2);
+  if(okBtn) okBtn.style.display = nc > 0 ? 'block' : 'none';
+}
+function calcDev(idx, total){
+  const inp=document.getElementById('dev-input-'+idx);
+  const diff=document.getElementById('dev-diff-'+idx);
+  if(!inp||!diff)return;
+  const pagado=Math.min(parseFloat(inp.value)||0, total);
+  const nc=Math.max(0, total-pagado).toFixed(2);
+  diff.textContent='NC (no cobrado): $'+nc;
+  diff.style.color=nc>0?'#dc2626':'#22c55e';
+}
+
+function showQuemaParcial(idx, total){
+  const row = document.getElementById('quema-row-'+idx);
+  if(!row) return;
+  const visible = row.style.display === 'flex';
+  row.style.display = visible ? 'none' : 'flex';
+}
+function calcQuemaInline(idx, total){
+  const qEl = document.getElementById('quema-val-'+idx);
+  const pEl = document.getElementById('quema-pend-'+idx);
+  if(!qEl||!pEl) return;
+  const q = Math.min(Math.max(parseFloat(qEl.value)||0, 0), total);
+  const pend = Math.max(0, total - q);
+  pEl.value = pend.toFixed(2);
+}
+function confirmarQuema(idx){
+  const d = DATA[idx]; if(!d) return;
+  const qEl = document.getElementById('quema-val-'+idx);
+  const q = Math.min(Math.max(parseFloat(qEl?qEl.value:d.total)||0, 0), d.total);
+  quemadoParcial.set(idx, q);
+  quemados.add(idx);
+  anulados.delete(idx); completed.delete(idx); porCobrar.delete(idx);
+  refreshMarkerIcon(idx); updateProgress(); updateStats(); updatePanel();
+  saveLocalState(); syncAvance(idx);
+  const m=allMarkers[idx];
+  if(m){m.setPopupContent(buildPopup(DATA[idx],idx));m.openPopup();}
+}
+
+function confirmarDev(idx){
+  const d=DATA[idx]; if(!d)return;
+  // New inline inputs (cobra = what client pays)
+  const cobraEl = document.getElementById('dev-cobra-'+idx);
+  const ncEl    = document.getElementById('dev-nc-'+idx);
+  let pagado = d.total;
+  if(cobraEl){ pagado = parseFloat(cobraEl.value)||d.total; }
+  else { const inp=document.getElementById('dev-input-'+idx); pagado=parseFloat(inp?inp.value:d.total)||d.total; }
+  devParcial.set(idx, pagado);
+  completed.add(idx);
+  porCobrar.delete(idx); quemados.delete(idx); anulados.delete(idx);
+  refreshMarkerIcon(idx); updateProgress(); updateStats(); updatePanel();
+  saveLocalState();
+  syncAvance(idx);
+  map.closePopup();
+}
+function toggleVisited(idx){
+  if(completed.has(idx)){
+    completed.delete(idx);
+  } else {
+    completed.add(idx);
+    porCobrar.delete(idx); // si estaba "por cobrar", quitarlo
+  }
+  refreshMarkerIcon(idx);
+  updateProgress();updateStats();updatePanel();
+  map.closePopup();
+  syncAvance(idx);
+}
+
+// ── PANEL LATERAL ─────────────────────────────────────────
+
+function filterPanel(q){
+  const items=document.querySelectorAll('.p-item');
+  const ql=q.toLowerCase();
+  let shown=0;
+  items.forEach(el=>{
+    const name=(el.querySelector('.p-name')||{}).textContent||'';
+    const meta=(el.querySelector('.p-meta')||{}).textContent||'';
+    const match=!ql||name.toLowerCase().includes(ql)||meta.toLowerCase().includes(ql);
+    el.style.display=match?'flex':'none';
+    if(match)shown++;
+  });
+  document.getElementById('panel-footer').textContent=
+    q?`${shown} resultado(s) para "${q}"`:
+    `${completed.size} de ${DATA.length} entregados`;
+}
+function buildPanel(){
+  const list=document.getElementById('panel-list');
+  list.innerHTML='';
+  DATA.forEach((d,i)=>{
+    const tier=getTier(d.total);
+    const vis=completed.has(i);
+    const col=colorMap[d.vendedor]||'#888';
+    const dotCol=tier==='high'?'#dc2626':tier==='medium'?'#ca8a04':col;
+    const div=document.createElement('div');
+    div.className=`p-item ${tier} ${vis?'visited':''}`;
+    div.id=`pi-${i}`;
+    div.innerHTML=`
+      <span class="p-num">${i+1}</span>
+      <div class="p-dot" style="background:${dotCol}"></div>
+      <div class="p-info">
+        <div class="p-name">${d.razon}</div>
+        <div class="p-meta">
+          <span class="p-total ${tier}">$${d.total.toFixed(0)}</span>
+          <span>${d.vendedor}</span>
+          ${d.liq?`<span>Liq ${d.liq}</span>`:''}
+          <span id="pq-${i}" style="display:none;color:#fb923c;font-weight:800">🔥 Pend $0</span>
+        </div>
+      </div>
+      <div class="p-actions">
+        <button class="p-act-btn p-act-done"   title="Entregado"    data-action="deliver" data-idx="${i}">✅</button>
+        <button class="p-act-btn p-act-xc"     title="Por cobrar"   data-action="xc"      data-idx="${i}" style="font-size:.58rem;font-weight:800">XC</button>
+        <button class="p-act-btn" style="background:#7f1d1d;color:#fca5a5;font-size:.6rem" title="Quemar (solo si fue Anulado)" data-action="quemado" data-idx="${i}">🔥</button>
+        <button class="p-act-btn" style="background:#1e1b4b;color:#c7d2fe;font-size:.6rem" title="Anulado" data-action="anulado" data-idx="${i}">❌</button>
+        <button class="p-act-btn p-act-undone" title="Desmarcar"    data-action="undo"    data-idx="${i}">↩</button>
+      </div>
+      <div id="anulado-menu-p-${i}" style="display:none;padding:4px 0 0" onclick="event.stopPropagation()">
+        <select class="motivo-select" style="width:100%;font-size:.62rem;padding:3px 5px;border-radius:6px" onchange="marcarAnulado(${i},this.value,false); toggleAnuladoMenuPanel(${i},true)">
+          <option value="">— Motivo anulación —</option>
+          <option>Negocio cerrado</option><option>Rechazado comercial</option>
+          <option>Cliente sin dinero</option><option>Diferencia de precios</option>
+          <option>No realiza pedido</option><option>Pedido cruzado</option>
+          <option>Fuera de ruta</option><option>Descuento o crédito no formalizado</option>
+          <option>Pedido incompleto</option><option>Error de facturación</option>
+          <option>Producto en mal estado</option><option>Sin motivo</option>
+        </select>
+      </div>`;
+
+    // Click en .p-info → solo navega y abre popup, panel permanece abierto
+    div.querySelector('.p-info').addEventListener('click',(e)=>{
+      e.stopPropagation();
+      const m=allMarkers[i];
+      if(m){
+        if(useCluster&&clusterGroup){
+          clusterGroup.zoomToShowLayer(m,()=>{ setTimeout(()=>m.openPopup(),200); });
+        } else {
+          map.setView([d.lat,d.lng],17);
+          setTimeout(()=>m.openPopup(),150);
+        }
+      }
+    });
+
+    // Botón ✅ Entregar — marca como cobrado, pinta gris en mapa y lista
+    div.querySelector('[data-action="deliver"]').addEventListener('click',(e)=>{
+      e.stopPropagation();
+      completed.add(i);
+      porCobrar.delete(i); anulados.delete(i); quemados.delete(i);
+      refreshMarkerIcon(i);
+      updateProgress();updateStats();updatePanel();
+      saveLocalState();
+      syncAvance(i);
+    });
+
+    // Botón ↩ Desmarcar — quita marca, restaura color en mapa y lista
+    div.querySelector('[data-action="undo"]').addEventListener('click',(e)=>{
+      e.stopPropagation();
+      resetEstado(i);
+    });
+
+    // Botón XC — Por cobrar (naranja fijo)
+    div.querySelector('[data-action="xc"]').addEventListener('click',(e)=>{
+      e.stopPropagation();
+      if(porCobrar.has(i)){
+        porCobrar.delete(i);
+      } else {
+        porCobrar.add(i);
+        completed.delete(i);
+      }
+      refreshMarkerIcon(i);
+      updateProgress();updateStats();updatePanel();
+      syncAvance(i);
+    });
+
+    // Botón 🔥 Quemar — solo debe estar visible/habilitado si el pedido ya fue Anulado
+    div.querySelector('[data-action="quemado"]').addEventListener('click',(e)=>{
+      e.stopPropagation();
+      if(!anulados.has(i)) return; // seguridad extra: no quemar si no fue anulado antes
+      quemarDesdeNC(i, false);
+    });
+
+    // Botón ❌ Anulado — despliega selector de motivo (igual que en el popup del mapa)
+    div.querySelector('[data-action="anulado"]').addEventListener('click',(e)=>{
+      e.stopPropagation();
+      toggleAnuladoMenuPanel(i);
+    });
+
+    list.appendChild(div);
+  });
+  updatePanel();
+}
+
+function toggleAnuladoMenuPanel(i, forceHide){
+  const m=document.getElementById('anulado-menu-p-'+i);
+  if(!m) return;
+  m.style.display = forceHide ? 'none' : (m.style.display==='none' ? 'block' : 'none');
+}
+
+function panelToggleVisited(idx){
+  if(completed.has(idx)) completed.delete(idx);
+  else completed.add(idx);
+  updateProgress(); updateStats(); updatePanel();
+  // Redibujar solo el marcador afectado sin redibujar todo el mapa
+  const d=DATA[idx];
+  if(d){
+    const col=colorMap[d.vendedor]||'#888';
+    const newIcon=makeIcon(col,idx+1,idx===0,d,LABEL_OFFSETS[idx]||0);
+    if(allMarkers[idx]) allMarkers[idx].setIcon(newIcon);
+  }
+}
+
+
+// Redibuja el ícono de un marcador según su estado actual (visited o no)
+function refreshMarkerIcon(i){
+  const d=DATA[i];
+  if(!d||!allMarkers[i])return;
+  const col=colorMap[d.vendedor]||'#888';
+  allMarkers[i].setIcon(makeIcon(col,i+1,i===0,d,LABEL_OFFSETS[i]||0));
+}
+function getEstadoColor(i){
+  if(completed.has(i))   return devParcial.has(i)?'#059669':'#4b5563'; // dev=verde oscuro, normal=gris
+  if(porCobrar.has(i))   return '#f97316'; // naranja
+  if(quemados.has(i))    return '#b91c1c'; // rojo oscuro
+  if(anulados.has(i))    return '#4338ca'; // morado
+  return null; // usa color vendedor
+}
+
+function updatePanel(){
+  DATA.forEach((d,i)=>{
+    const el=document.getElementById(`pi-${i}`);
+    if(!el)return;
+    const vis=completed.has(i);
+    const xc=!vis&&porCobrar.has(i);
+    const isQ=quemados.has(i), isA=anulados.has(i), isDev=devParcial.has(i);
+    const quemVal=quemadoParcial.has(i)?quemadoParcial.get(i):(isQ?d.total:0);
+    const pendQuema=isQ?Math.max(0,d.total-quemVal):0;
+    const stateClass=vis?(isDev?'dev-item':'visited'):xc?'xc-item':isQ?(pendQuema>0.009?'quemado-parcial-item':'quemado-item'):isA?'anulado-item':'';
+    el.className=`p-item ${getTier(DATA[i].total)} ${stateClass}`;
+    const pq=document.getElementById(`pq-${i}`);
+    if(pq){
+      if(pendQuema>0.009){ pq.style.display='inline'; pq.textContent=`🔥 Pend $${pendQuema.toFixed(0)}`; }
+      else { pq.style.display='none'; }
+    }
+    const btnDone=el.querySelector('[data-action="deliver"]');
+    const btnUndo=el.querySelector('[data-action="undo"]');
+    const btnXC=el.querySelector('[data-action="xc"]');
+    // Estado normal: mostrar ✅ y XC
+    // Estado entregado (vis): mostrar solo ↩
+    // Estado por cobrar (xc): mostrar solo ↩
+    const anyState=vis||xc||quemados.has(i)||anulados.has(i);
+    // Normal: Entregado + XC + Anulado disponibles, Quemado bloqueado.
+    // Anulado: Entregado (revisita) + Quemado habilitados, XC/Anulado ocultos.
+    // Entregado / Por cobrar / Quemado: solo Desmarcar.
+    if(btnDone)btnDone.style.display=(vis||xc||isQ)?'none':'flex';           // visible en normal y en anulado
+    if(btnXC)btnXC.style.display=anyState?'none':'flex';                     // solo normal
+    if(btnUndo)btnUndo.style.display=anyState?'flex':'none';
+    const btnQ=el.querySelector('[data-action="quemado"]');
+    const btnA=el.querySelector('[data-action="anulado"]');
+    if(btnQ)btnQ.style.display=isA?'flex':'none';                           // solo habilitado si ya fue Anulado
+    if(btnA)btnA.style.display=anyState?'none':'flex';                      // solo normal
+    if(!isA){ const menu=document.getElementById('anulado-menu-p-'+i); if(menu) menu.style.display='none'; }
+  });
+  const tot=DATA.length,vis=completed.size;
+  // FAB badge
+  const badge=document.getElementById('fab-badge');
+  if(badge){badge.textContent=tot-vis;badge.style.background=vis===tot&&tot>0?'#22c55e':'#3b82f6';}
+  // Panel stats
+  const drops=DATA.filter(d=>getTier(d.total)==='high').length;
+  const totalV=DATA.reduce((s,d)=>s+d.total,0);
+  const ps_t=document.getElementById('ps-total');const ps_e=document.getElementById('ps-entregados');
+  const ps_d=document.getElementById('ps-drops');const ps_v=document.getElementById('ps-venta');
+  if(ps_t)ps_t.textContent=tot;if(ps_e)ps_e.textContent=vis;
+  if(ps_d)ps_d.textContent=drops;if(ps_v)ps_v.textContent='$'+totalV.toFixed(0);
+  // Footer
+  // XC count for footer
+  const xcCount=porCobrar.size;
+  const badge2=document.getElementById('fab-badge');
+  const pending=tot-vis-xcCount;
+  if(badge2){badge2.textContent=pending>0?pending:'✓';badge2.style.background=pending===0?'#22c55e':'#3b82f6';}
+  // Panel stats XC
+  const ps_xc=document.getElementById('ps-xc');const ps_vis=document.getElementById('ps-entregados');
+  if(ps_xc)ps_xc.textContent=xcCount;if(ps_vis)ps_vis.textContent=vis;
+  const footer=document.getElementById('panel-footer');
+  if(footer)footer.textContent=`✅ ${vis} entregados · 🟠 ${xcCount} por cobrar · ${pending} pendientes`;
+  // Sync all marker icons
+  DATA.forEach((_,i)=>refreshMarkerIcon(i));
+  // Update resumen if visible
+  if(document.getElementById('resumen-panel')&&document.getElementById('resumen-panel').classList.contains('show'))updateResumen();
+  updateBottomBar();
+  saveLocalState();
+}
+
+// ── BUSCAR ────────────────────────────────────────────────
+function onSearch(val){
+  const q=val.trim().toLowerCase();
+  if(!q){document.querySelectorAll('.p-item').forEach(el=>el.style.display='');return;}
+  const matchFn=(d)=>
+    d.razon.toLowerCase().includes(q) ||
+    d.codigo.toLowerCase().includes(q) ||
+    d.dir.toLowerCase().includes(q) ||
+    d.total.toFixed(2).includes(q) ||
+    String(Math.round(d.total)).includes(q);
+  let anyMatch=false;
+  DATA.forEach((d,i)=>{
+    const el=document.getElementById(`pi-${i}`);
+    const match=matchFn(d);
+    if(match)anyMatch=true;
+    if(!el)return;
+    el.style.display=match?'':'none';
+  });
+  if(anyMatch && !panelOpen) openPanel();
+  // Centro mapa en primer resultado
+  const first=DATA.find(matchFn);
+  if(first){const m=allMarkers[DATA.indexOf(first)];if(m){map.setView([first.lat,first.lng],17);m.openPopup();}}
+}
+
+// ── STATS ─────────────────────────────────────────────────
+function updateStats(){
+  const tp=DATA.reduce((s,d)=>s+d.peso,0);
+  const tv=DATA.reduce((s,d)=>s+d.total,0);
+  let km=0;for(let i=0;i<DATA.length-1;i++)km+=haversine(DATA[i].lat,DATA[i].lng,DATA[i+1].lat,DATA[i+1].lng);
+  const drops=DATA.filter(d=>getTier(d.total)!=='normal').length;
+  document.getElementById('s-clientes').textContent=DATA.length||'—';
+  document.getElementById('s-visitados').textContent=`${completed.size}/${DATA.length}`;
+  document.getElementById('s-km').textContent=DATA.length?(km.toFixed(1)+' km'):'— km';
+  document.getElementById('s-peso').textContent=DATA.length?(tp.toFixed(1)+' kg'):'—';
+  document.getElementById('s-venta').textContent=DATA.length?('$ '+tv.toFixed(2)):'—';
+  document.getElementById('s-drops').textContent=drops||'—';
+}
+function updateProgress(){
+  const n=completed.size,tot=DATA.length,pct=tot?Math.round(n/tot*100):0;
+  document.getElementById('prog-fill').style.width=pct+'%';
+  document.getElementById('prog-pct').textContent=`${n} / ${tot} (${pct}%)`;
+}
+function updateBanner(){
+  const ban=document.getElementById('liq-banner');
+  if(!DATA.length){ban.style.display='none';return;}
+  ban.style.display='flex';
+  const tp=DATA.reduce((s,d)=>s+d.peso,0);
+  const tv=DATA.reduce((s,d)=>s+d.total,0);
+  const hi=DATA.filter(d=>d.total>=TIER_HIGH).length;
+  const me=DATA.filter(d=>d.total>=TIER_MEDIUM&&d.total<TIER_HIGH).length;
+  document.getElementById('ban-cli').textContent=DATA.length;
+  document.getElementById('ban-peso').textContent=tp.toFixed(1)+' kg';
+  document.getElementById('ban-total').textContent='$ '+tv.toFixed(2);
+  document.getElementById('ban-high').textContent=hi;
+  document.getElementById('ban-med').textContent=me;
+}
+
+// ── CONTROLES ─────────────────────────────────────────────
+function fv(v,btn){
+  activeVendedor=v;
+  document.querySelectorAll('.fbtn[data-v]').forEach(b=>{b.classList.remove('on');b.style.background='transparent';b.style.color='#fff';});
+  btn.classList.add('on');btn.style.background=btn.style.borderColor;btn.style.color=v==='ALL'?'#000':'#fff';
+  draw(activeVendedor);
+}
+function toggleRuta(btn){
+  showRuta=!showRuta;
+  btn.style.background=showRuta?'#1d4ed8':'transparent';
+  btn.style.borderColor=showRuta?'#3b82f6':'#475569';
+  btn.style.color=showRuta?'#fff':'#64748b';
+  draw(activeVendedor);
+}
+function toggleNums(btn){
+  showNums=!showNums;
+  btn.style.background=showNums?'#15803d':'transparent';
+  btn.style.borderColor=showNums?'#22c55e':'#475569';
+  btn.style.color=showNums?'#fff':'#64748b';
+  draw(activeVendedor);
+}
+function toggleCluster(btn){
+  useCluster=!useCluster;
+  btn.classList.toggle('on',useCluster);
+  draw(activeVendedor);
+}
+function toggleDark(btn){
+  darkMode=!darkMode;
+  if(tileLayer)map.removeLayer(tileLayer);
+  tileLayer=L.tileLayer(darkMode?TILE_DARK:TILE_LIGHT,{attribution:false,maxZoom:19}).addTo(map);
+  btn.textContent=darkMode?'🌙 Noche':'☀️ Día';
+  btn.classList.toggle('on',darkMode);
+  draw(activeVendedor);
+}
+function toggleResumen(){
+  const panel=document.getElementById('resumen-panel');
+  const showing=panel.classList.toggle('show');
+  if(showing) updateResumen();
+}
+function updateResumen(){
+  const tot=DATA.length;
+  const vis=completed.size;
+  const xcCount=porCobrar.size;
+  const quemCount=quemados.size;
+  const anulCount=anulados.size;
+  const pend=tot-vis-xcCount-quemCount-anulCount;
+
+  const totalVal=DATA.reduce((s,d)=>s+d.total,0);
+  // Entregados: suma lo que SÍ pagaron (devParcial usa valor pagado, resto usa total)
+  let entVal=0, ncParcial=0;
+  DATA.forEach((d,i)=>{
+    if(!completed.has(i))return;
+    if(devParcial.has(i)){
+      const pag=devParcial.get(i);
+      entVal+=pag;
+      ncParcial+=(d.total-pag);
+    } else { entVal+=d.total; }
+  });
+  const xcVal=DATA.filter((_,i)=>porCobrar.has(i)).reduce((s,d)=>s+d.total,0);
+  const quemVal=DATA.filter((_,i)=>quemados.has(i)).reduce((s,d)=>s+d.total,0);
+  const anulVal=DATA.filter((_,i)=>anulados.has(i)).reduce((s,d)=>s+d.total,0);
+  const pendVal=totalVal-entVal-xcVal-quemVal-anulVal-ncParcial;
+
+  const closed=vis+xcCount+quemCount+anulCount;
+  const pctEnt=tot?Math.round(vis/tot*100):0;
+  const pctXC=tot?Math.round(xcCount/tot*100):0;
+  const pctDone=tot?Math.round(closed/tot*100):0;
+  const now=new Date();
+
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('rp-hora',now.toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'}));
+  set('rp-total',tot); set('rp-total-val','$'+totalVal.toFixed(2)+' total');
+  set('rp-ent',vis);   set('rp-ent-val','$'+entVal.toFixed(2)+' recaudado');
+  set('rp-ent-pct',pctEnt+'%');
+  set('rp-xc',xcCount); set('rp-xc-val','$'+xcVal.toFixed(2)+' pendiente cobro');
+  set('rp-xc-pct',pctXC+'%');
+  set('rp-quem',quemCount); set('rp-quem-val','$'+quemVal.toFixed(2));
+  set('rp-anul',anulCount); set('rp-anul-val','$'+anulVal.toFixed(2));
+  set('rp-nc',devParcial.size); set('rp-nc-val','NC acumulado: $'+ncParcial.toFixed(2));
+  set('rp-pend',pend>0?pend:0); set('rp-pend-val','$'+Math.max(0,pendVal).toFixed(2)+' por entregar');
+  const bar=document.getElementById('rp-bar');if(bar)bar.style.width=pctDone+'%';
+}
+
+function openPanel(){
+  panelOpen=true;
+  document.getElementById('side-panel').classList.add('open');
+  document.getElementById('panel-overlay').classList.add('show');
+  document.getElementById('panel-search').value='';
+  filterPanel('');
+  document.getElementById('fab-panel').style.display='none';
+}
+function closePanel(){
+  panelOpen=false;
+  document.getElementById('side-panel').classList.remove('open');
+  document.getElementById('panel-overlay').classList.remove('show');
+  document.getElementById('fab-panel').style.display='flex';
+  setTimeout(()=>map.invalidateSize(),310);
+}
+
+
+
+
+
+
+function recargar(){
+  const btn=document.querySelector('.reload-btn');
+  btn.classList.add('loading');btn.textContent='↻ Actualizando...';
+  completed.clear();updateProgress();
+  loadAndRender().finally(()=>{btn.classList.remove('loading');btn.textContent='↻ Actualizar';});
+}
+
+// ── WHATSAPP SHARE ────────────────────────────────────────
+function shareWhatsApp(){
+  const drops=DATA.filter(d=>getTier(d.total)!=='normal');
+  const tv=DATA.reduce((s,d)=>s+d.total,0);
+  const url=encodeURIComponent(window.location.href);
+  const msg=encodeURIComponent(
+    `🚛 *Ruta ${activeFecha}*\n`+
+    `👤 ${activeChofer}\n`+
+    `📦 ${DATA.length} clientes | 💰 $${tv.toFixed(2)}\n`+
+    (drops.length?`⚠️ ${drops.length} drops fuertes (>$${TIER_MEDIUM})\n`:'')+
+    `\n🗺️ Ver mapa: ${decodeURIComponent(url)}`
+  );
+  window.open(`https://wa.me/?text=${msg}`,'_blank');
+}
+
+// ── CARGA PRINCIPAL ───────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════
+// 1. IR AL SIGUIENTE CLIENTE
+// ══════════════════════════════════════════════════════════════
+function irAlSiguiente(){
+  const nextIdx = DATA.findIndex((_,i) =>
+    !completed.has(i) && !porCobrar.has(i) && !quemados.has(i) && !anulados.has(i)
+  );
+  if(nextIdx < 0){ alert('🎉 ¡Todos los clientes han sido gestionados!'); return; }
+  const d = DATA[nextIdx];
+  // Solo centra el mapa y abre el popup — el usuario elige Google Maps/Waze desde ahí
+  map.setView([d.lat, d.lng], 17);
+  setTimeout(()=>{ if(allMarkers[nextIdx]) allMarkers[nextIdx].openPopup(); }, 250);
+}
+function updateFabSiguiente(){
+  const nextIdx = DATA.findIndex((_,i) =>
+    !completed.has(i) && !porCobrar.has(i) && !quemados.has(i) && !anulados.has(i)
+  );
+  const lbl = document.getElementById('sig-label');
+  const btn = document.getElementById('btn-siguiente-c');
+  if(nextIdx < 0){
+    if(lbl) lbl.textContent = '🎉 Completa';
+    if(btn) btn.style.opacity = '.5';
+    return;
+  }
+  if(btn) btn.style.opacity = '1';
+  if(lbl) lbl.textContent = `#${nextIdx+1} ${DATA[nextIdx].razon.split(' ').slice(0,2).join(' ')}`;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 2. RE-OPTIMIZAR DESDE CLIENTE ACTUAL
+// ══════════════════════════════════════════════════════════════
+function reoptimizarDesdeAqui(){
+  const pendientes = DATA
+    .map((d,i)=>({d,i}))
+    .filter(({i})=> !completed.has(i) && !porCobrar.has(i) && !quemados.has(i) && !anulados.has(i));
+  if(pendientes.length < 2){ alert('No hay suficientes clientes pendientes para re-optimizar.'); return; }
+
+  // Si tenemos GPS, partir desde ahí; sino desde el primero pendiente
+  let startLat = pendientes[0].d.lat, startLng = pendientes[0].d.lng;
+  if(gpsMarker){ startLat = gpsMarker.getLatLng().lat; startLng = gpsMarker.getLatLng().lng; }
+
+  const pts = pendientes.map(p=>({lat:p.d.lat,lng:p.d.lng,orig:p.i}));
+  const visited = new Array(pts.length).fill(false);
+  const route = [];
+  let curLat = startLat, curLng = startLng;
+  for(let s=0; s<pts.length; s++){
+    let best=-1, bestD=Infinity;
+    for(let j=0;j<pts.length;j++){
+      if(!visited[j]){
+        const d=haversine(curLat,curLng,pts[j].lat,pts[j].lng);
+        if(d<bestD){bestD=d;best=j;}
+      }
+    }
+    visited[best]=true;
+    route.push(pts[best].orig);
+    curLat=pts[best].lat; curLng=pts[best].lng;
+  }
+
+  // Mapear cada objeto de DATA (por referencia) a su índice ANTES de reordenar,
+  // para no depender de ALL_ROWS (que tiene otro orden/tamaño) ni de indexOf por valor.
+  const oldIndexOf = new Map();
+  DATA.forEach((d,i)=> oldIndexOf.set(d,i));
+
+  // Rebuild DATA: completados primero, luego re-ordenados
+  const done = DATA.filter((_,i)=> completed.has(i)||porCobrar.has(i)||quemados.has(i)||anulados.has(i));
+  const reordered = route.map(i=>DATA[i]);
+  DATA = [...done, ...reordered];
+
+  // Reset state maps a los nuevos índices, usando la referencia guardada arriba
+  const newCompleted=new Set(), newXC=new Set(), newQuem=new Set(), newAnul=new Map(), newDev=new Map(), newNotas=new Map(), newRet=new Set(), newQuemP=new Map();
+  DATA.forEach((d,newI)=>{
+    const oldI = oldIndexOf.get(d);
+    if(completed.has(oldI)) newCompleted.add(newI);
+    if(porCobrar.has(oldI)) newXC.add(newI);
+    if(quemados.has(oldI)) newQuem.add(newI);
+    if(anulados.has(oldI)) newAnul.set(newI, anulados.get(oldI));
+    if(devParcial.has(oldI)) newDev.set(newI, devParcial.get(oldI));
+    if(notas.has(oldI)) newNotas.set(newI, notas.get(oldI));
+    if(retencionSet.has(oldI)) newRet.add(newI);
+    if(quemadoParcial.has(oldI)) newQuemP.set(newI, quemadoParcial.get(oldI));
+  });
+  completed=newCompleted; porCobrar=newXC; quemados=newQuem;
+  anulados=newAnul; devParcial=newDev; notas=newNotas; retencionSet=newRet; quemadoParcial=newQuemP;
+
+  LABEL_OFFSETS = computeLabelOffsets(DATA);
+  draw(activeVendedor);
+  updateStats(); updateProgress(); updatePanel(); updateFabSiguiente(); updateBottomBar();
+  alert(`✅ Ruta re-optimizada. ${pendientes.length} clientes reordenados.`);
+}
+
+// ══════════════════════════════════════════════════════════════
+// 3. NOTAS POR CLIENTE (se llaman desde buildPopup)
+// ══════════════════════════════════════════════════════════════
+
+function toggleRetencion(idx){
+  const d = DATA[idx];
+  if(!d) return;
+  if(!d.hasRet){
+    // Cliente NO autorizado en el Sheet ("Agentes de Retención") — se bloquea sin mensaje emergente.
+    return;
+  }
+  // Cliente autorizado: refresca la vista (los valores ya se calculan automáticamente desde d.hasRet)
+  refreshMarkerIcon(idx);
+  saveLocalState();
+  const m=allMarkers[idx];
+  if(m){m.setPopupContent(buildPopup(DATA[idx],idx));m.openPopup();}
+}
+function confirmarCobroRetencion(idx){
+  const d = DATA[idx];
+  if(!d || !d.hasRet) return; // seguridad: solo clientes autorizados pueden cobrar la diferencia
+  const retVal = d.retencionVal || parseFloat((d.sumaNeta*0.02).toFixed(2));
+  const netoCobrar = d.total - retVal;
+  devParcial.set(idx, netoCobrar);
+  completed.add(idx);
+  porCobrar.delete(idx); quemados.delete(idx); anulados.delete(idx);
+  refreshMarkerIcon(idx); updateProgress(); updateStats(); updatePanel();
+  saveLocalState();
+  syncAvance(idx);
+  const m=allMarkers[idx];
+  if(m){m.setPopupContent(buildPopup(DATA[idx],idx));m.openPopup();}
+}
+function saveNota(idx){
+  const input = document.getElementById(`nota-input-${idx}`);
+  if(!input) return;
+  const val = input.value.trim();
+  if(val) notas.set(idx, val); else notas.delete(idx);
+  // Refresh popup
+  const m = allMarkers[idx];
+  if(m){ m.setPopupContent(buildPopup(DATA[idx], idx)); m.openPopup(); }
+  saveLocalState();
+}
+
+// ══════════════════════════════════════════════════════════════
+// 4. GPS EN TIEMPO REAL
+// ══════════════════════════════════════════════════════════════
+let gpsMarker = null, gpsWatchId = null;
+function initGPS(){
+  // GPS deshabilitado por defecto — el usuario debe activarlo manualmente
+  // tocando el indicador GPS en la barra inferior. Esto evita que el
+  // navegador muestre el popup de permiso automáticamente al abrir el mapa.
+  updateGPSDot(false,'Toca para activar');
+}
+function activarGPS(){
+  if(!navigator.geolocation){ updateGPSDot(false,'No soportado'); return; }
+  if(gpsWatchId){ return; } // ya activo
+  startGPSWatch();
+}
+function startGPSWatch(){
+  gpsWatchId = navigator.geolocation.watchPosition(pos=>{
+    localStorage.setItem('gps_permission','granted');
+    const lat=pos.coords.latitude, lng=pos.coords.longitude;
+    updateGPSDot(true, `${lat.toFixed(4)},${lng.toFixed(4)}`);
+    if(!gpsMarker){
+      gpsMarker = L.marker([lat,lng],{
+        icon: L.divIcon({className:'',html:'<div class="gps-marker"></div>',iconSize:[16,16],iconAnchor:[8,8]}),
+        zIndexOffset:1000
+      }).addTo(map).bindTooltip('📍 Tu ubicación',{permanent:false});
+    } else { gpsMarker.setLatLng([lat,lng]); }
+    updateTiempoEstimado(lat,lng);
+  }, err=>{
+    updateGPSDot(false, err.code===1?'Denegado':'Sin señal');
+  }, {enableHighAccuracy:true,maximumAge:10000});
+}
+function updateGPSDot(active, txt){
+  const dot=document.getElementById('gps-dot');
+  const label=document.getElementById('gps-txt');
+  if(dot){ dot.className='gps-dot'+(active?' active':''); }
+  if(label){ label.textContent=active?'GPS activo':'Sin GPS'; label.style.color=active?'#4ade80':'#64748b'; }
+}
+
+// ══════════════════════════════════════════════════════════════
+// 5. TIEMPO ESTIMADO DE RUTA
+// ══════════════════════════════════════════════════════════════
+function updateTiempoEstimado(fromLat, fromLng){
+  const pendientes = DATA.filter((_,i)=>!completed.has(i)&&!porCobrar.has(i)&&!quemados.has(i)&&!anulados.has(i));
+  // Update next client name
+  const nextIdx = DATA.findIndex((_,i)=>!completed.has(i)&&!porCobrar.has(i)&&!quemados.has(i)&&!anulados.has(i));
+  const nextEl = document.getElementById('prog-proximo');
+  if(nextEl){
+    nextEl.textContent = nextIdx>=0 ? DATA[nextIdx].razon.split(' ').slice(0,2).join(' ') : '—';
+  }
+  if(!pendientes.length){
+    const el=document.getElementById('prog-tiempo'); if(el)el.textContent='✅';
+    return;
+  }
+  let totalKm=0, curLat=fromLat||DATA[0].lat, curLng=fromLng||DATA[0].lng;
+  pendientes.forEach(d=>{ totalKm+=haversine(curLat,curLng,d.lat,d.lng); curLat=d.lat; curLng=d.lng; });
+  const driveMin=Math.round(totalKm/30*60), stopMin=pendientes.length*3, totalMin=driveMin+stopMin;
+  const h=Math.floor(totalMin/60), m=totalMin%60;
+  const txt = h>0?`${h}h${m}m`:`${m}m`;
+  ['prog-tiempo','bb-tiempo'].forEach(id=>{ const el=document.getElementById(id); if(el)el.textContent=txt; });
+}
+
+// ══════════════════════════════════════════════════════════════
+// BARRA INFERIOR UPDATE
+// ══════════════════════════════════════════════════════════════
+function updateBottomBar(){
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('bb-ent', completed.size);
+  set('bb-xc', porCobrar.size);
+  set('bb-quem', quemados.size);
+  const pend=DATA.length-completed.size-porCobrar.size-quemados.size-anulados.size;
+  set('bb-pend', Math.max(0,pend));
+  updateFabSiguiente();
+  if(!gpsMarker) updateTiempoEstimado(null,null);
+}
+
+// ══════════════════════════════════════════════════════════════
+// 6. EXPORTAR REPORTE
+// ══════════════════════════════════════════════════════════════
+
+function abrirExportarWA(){ window.open("https://wa.me/?text="+encodeURIComponent(getReporteTexto()),"_blank"); }
+function abrirExportar(){
+  generarReporte();
+  document.getElementById('export-panel').classList.add('show');
+  document.getElementById('export-overlay').classList.add('show');
+}
+function cerrarExportar(){
+  document.getElementById('export-panel').classList.remove('show');
+  document.getElementById('export-overlay').classList.remove('show');
+}
+function generarReporte(){
+  const tot=DATA.length;
+  const vis=completed.size, xcCount=porCobrar.size, quemCount=quemados.size, anulCount=anulados.size;
+  const pend=Math.max(0,tot-vis-xcCount-quemCount-anulCount);
+  const totalVal=DATA.reduce((s,d)=>s+d.total,0);
+  let entVal=0,ncVal=0;
+  DATA.forEach((d,i)=>{ if(!completed.has(i))return; if(devParcial.has(i)){const p=devParcial.get(i);entVal+=p;ncVal+=(d.total-p);}else{entVal+=d.total;} });
+  const xcVal=DATA.filter((_,i)=>porCobrar.has(i)).reduce((s,d)=>s+d.total,0);
+  let quemVal=0, quemPendVal=0, quemPendCount=0;
+  DATA.forEach((d,i)=>{
+    if(!quemados.has(i))return;
+    const q=quemadoParcial.has(i)?quemadoParcial.get(i):d.total;
+    const pendQ=Math.max(0,d.total-q);
+    quemVal+=q;
+    if(pendQ>0.009){quemPendVal+=pendQ;quemPendCount++;}
+  });
+  const anulVal=DATA.filter((_,i)=>anulados.has(i)).reduce((s,d)=>s+d.total,0);
+  const now=new Date().toLocaleString('es-EC');
+
+  // Detalle anulados con motivo
+  let anulDetalle='';
+  anulados.forEach((motivo,i)=>{ const d=DATA[i]; if(d) anulDetalle+=`<div class="exp-row"><span class="exp-label" style="font-size:.58rem">${d.razon.split(' ').slice(0,3).join(' ')}</span><span class="exp-val" style="font-size:.6rem;color:#818cf8">${motivo}</span></div>`; });
+
+  document.getElementById('exp-content').innerHTML=`
+    <div class="exp-section">
+      <div class="exp-row"><span class="exp-label">🚛 Camión</span><span class="exp-val">${activeChofer}</span></div>
+      <div class="exp-row"><span class="exp-label">📅 Fecha</span><span class="exp-val">${activeFecha}</span></div>
+      <div class="exp-row"><span class="exp-label">🕐 Generado</span><span class="exp-val" style="font-size:.62rem">${now}</span></div>
+    </div>
+    <div class="exp-section">
+      <div class="exp-row"><span class="exp-label">📦 Total pedidos</span><span class="exp-val blue">${tot} — $${totalVal.toFixed(2)}</span></div>
+      <div class="exp-row"><span class="exp-label">✅ Entregados</span><span class="exp-val green">${vis} — $${entVal.toFixed(2)}</span></div>
+      <div class="exp-row"><span class="exp-label">🟠 Por cobrar</span><span class="exp-val orange">${xcCount} — $${xcVal.toFixed(2)}</span></div>
+      <div class="exp-row"><span class="exp-label">🔥 Quemados</span><span class="exp-val red">${quemCount} — $${quemVal.toFixed(2)}</span></div>
+      ${quemPendCount>0?`<div class="exp-row"><span class="exp-label">⚠️ Quemados c/ pendiente</span><span class="exp-val orange">${quemPendCount} — $${quemPendVal.toFixed(2)}</span></div>`:''}
+      <div class="exp-row"><span class="exp-label">❌ Anulados</span><span class="exp-val" style="color:#818cf8">${anulCount} — $${anulVal.toFixed(2)}</span></div>
+      <div class="exp-row"><span class="exp-label">💰 NC Parciales</span><span class="exp-val red">${devParcial.size} — $${ncVal.toFixed(2)}</span></div>
+      <div class="exp-row"><span class="exp-label">⏳ Pendientes</span><span class="exp-val">${pend}</span></div>
+    </div>
+    ${anulDetalle?`<div class="exp-section"><div style="font-size:.6rem;color:#64748b;font-weight:700;margin-bottom:4px">MOTIVOS DE ANULACIÓN</div>${anulDetalle}</div>`:''}`;
+
+  // Guardar en historial automáticamente al exportar
+  saveLocalState();
+}
+function getReporteTexto(){
+  const tot=DATA.length, vis=completed.size, xcCount=porCobrar.size;
+  const quemCount=quemados.size, anulCount=anulados.size;
+  const pend=Math.max(0,tot-vis-xcCount-quemCount-anulCount);
+  const totalVal=DATA.reduce((s,d)=>s+d.total,0);
+  let entVal=0,ncVal=0;
+  DATA.forEach((d,i)=>{if(!completed.has(i))return;if(devParcial.has(i)){const p=devParcial.get(i);entVal+=p;ncVal+=(d.total-p);}else{entVal+=d.total;}});
+  const xcVal=DATA.filter((_,i)=>porCobrar.has(i)).reduce((s,d)=>s+d.total,0);
+  let quemVal=0, quemPendVal=0, quemPendCount=0;
+  DATA.forEach((d,i)=>{
+    if(!quemados.has(i))return;
+    const q=quemadoParcial.has(i)?quemadoParcial.get(i):d.total;
+    const pend=Math.max(0,d.total-q);
+    quemVal+=q;
+    if(pend>0.009){quemPendVal+=pend;quemPendCount++;}
+  });
+  const anulVal=DATA.filter((_,i)=>anulados.has(i)).reduce((s,d)=>s+d.total,0);
+  const now=new Date().toLocaleString('es-EC');
+  let txt=`🚛 *REPORTE DE RUTA*\n`;
+  txt+=`${activeChofer} | ${activeFecha}\n`;
+  txt+=`🕐 ${now}\n\n`;
+  txt+=`📦 Total: ${tot} pedidos — $${totalVal.toFixed(2)}\n`;
+  txt+=`✅ Entregados: ${vis} — $${entVal.toFixed(2)} recaudado\n`;
+  txt+=`🟠 Por cobrar: ${xcCount} — $${xcVal.toFixed(2)}\n`;
+  txt+=`🔥 Quemados: ${quemCount} — $${quemVal.toFixed(2)}\n`;
+  if(quemPendCount>0) txt+=`⚠️ Quemados con pendiente: ${quemPendCount} — $${quemPendVal.toFixed(2)} por quemar/cobrar aún\n`;
+  txt+=`❌ Anulados: ${anulCount} — $${anulVal.toFixed(2)}\n`;
+  if(ncVal>0) txt+=`💰 NC Parciales: ${devParcial.size} — $${ncVal.toFixed(2)}\n`;
+  txt+=`⏳ Pendientes: ${pend}\n`;
+  if(anulados.size){
+    txt+=`\n📋 MOTIVOS ANULACIÓN:\n`;
+    anulados.forEach((motivo,i)=>{const d=DATA[i];if(d)txt+=`• ${d.razon.split(' ').slice(0,3).join(' ')}: ${motivo}\n`;});
+  }
+  return txt;
+}
+function exportarWA(){
+  const txt=getReporteTexto();
+  window.open('https://wa.me/?text='+encodeURIComponent(txt),'_blank');
+}
+function exportarCopiar(){
+  const txt=getReporteTexto();
+  navigator.clipboard.writeText(txt).then(()=>alert('✅ Reporte copiado al portapapeles'));
+}
+
+// ══════════════════════════════════════════════════════════════
+// 7. HISTORIAL LOCAL
+// ══════════════════════════════════════════════════════════════
+function saveLocalState(){
+  try{
+    const state={
+      fecha:activeFecha, chofer:activeChofer,
+      completed:[...completed], porCobrar:[...porCobrar],
+      quemados:[...quemados],
+      anulados:[...anulados.entries()],
+      devParcial:[...devParcial.entries()],
+      notas:[...notas.entries()],
+      retencion:[...retencionSet],
+      quemadoParcial:[...quemadoParcial.entries()],
+      savedAt:new Date().toISOString()
+    };
+    // Save current route state
+    localStorage.setItem('mapaState_current', JSON.stringify(state));
+    // Save to historial
+    const key=`mapaHist_${activeFecha}_${activeChofer.replace(/\s/g,'_')}`;
+    localStorage.setItem(key, JSON.stringify({...state, summary: getReporteTexto()}));
+  }catch(e){console.warn('LocalStorage not available');}
+}
+function loadLocalState(){
+  try{
+    const raw=localStorage.getItem('mapaState_current');
+    if(!raw)return;
+    const s=JSON.parse(raw);
+    if(s.fecha===activeFecha && s.chofer===activeChofer){
+      completed=new Set(s.completed||[]);
+      porCobrar=new Set(s.porCobrar||[]);
+      quemados=new Set(s.quemados||[]);
+      anulados=new Map(s.anulados||[]);
+      devParcial=new Map((s.devParcial||[]).map(([k,v])=>[k,Number(v)]));
+      notas=new Map(s.notas||[]);
+      retencionSet=new Set(s.retencion||[]);
+      quemadoParcial=new Map((s.quemadoParcial||[]).map(([k,v])=>[k,Number(v)]));
+      DATA.forEach((_,i)=>refreshMarkerIcon(i));
+      updateProgress();updateStats();updatePanel();updateBottomBar();
+      console.log('Estado restaurado desde caché local');
+    }
+  }catch(e){console.warn('No se pudo restaurar estado:',e);}
+}
+function guardarRutaHoy(){
+  saveLocalState();
+  loadHistorialPanel();
+  alert('✅ Ruta guardada en el historial local');
+}
+function abrirHistorial(){
+  loadHistorialPanel();
+  document.getElementById('hist-panel').classList.add('open');
+  document.getElementById('hist-overlay').style.display='block';
+}
+function cerrarHistorial(){
+  document.getElementById('hist-panel').classList.remove('open');
+  document.getElementById('hist-overlay').style.display='none';
+}
+function loadHistorialPanel(){
+  const list=document.getElementById('hist-list');
+  if(!list)return;
+  const keys=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k&&k.startsWith('mapaHist_'))keys.push(k);
+  }
+  if(!keys.length){list.innerHTML='<div style="color:#475569;font-size:.72rem;text-align:center;padding:20px">Sin historial guardado</div>';return;}
+  keys.sort().reverse();
+  list.innerHTML=keys.map(k=>{
+    try{
+      const s=JSON.parse(localStorage.getItem(k));
+      const vis=(s.completed||[]).length, xc=(s.porCobrar||[]).length;
+      const quem=(s.quemados||[]).length, anulC=(s.anulados||[]).length;
+      const savedAt=s.savedAt?new Date(s.savedAt).toLocaleString('es-EC'):'—';
+      return `<div class="hist-item" onclick="verHistorial('${k}')">
+        <div class="hist-date">📅 ${s.fecha} — ${s.chofer}</div>
+        <div class="hist-meta">✅${vis} 🟠${xc} 🔥${quem} ❌${anulC} · ${savedAt}</div>
+        <button onclick="event.stopPropagation();borrarHistorial('${k}')" style="margin-top:4px;background:#7f1d1d;border:none;color:#fca5a5;padding:2px 7px;border-radius:5px;font-size:.58rem;cursor:pointer">🗑 Borrar</button>
+      </div>`;
+    }catch{return '';}
+  }).join('');
+}
+function verHistorial(k){
+  try{
+    const s=JSON.parse(localStorage.getItem(k));
+    alert(s.summary||'Sin resumen disponible');
+  }catch{alert('No se pudo cargar el historial');}
+}
+function borrarHistorial(k){
+  if(!confirm('¿Borrar este registro del historial?'))return;
+  localStorage.removeItem(k);
+  loadHistorialPanel();
+}
+
+
+let primeraCarga=true;
+function aplicarParamsURL(){
+  const params=new URLSearchParams(window.location.search);
+  const fecha=params.get('fecha'), chofer=params.get('chofer'), bodega=params.get('bodega');
+  const selFecha=document.getElementById('sel-fecha');
+  if(fecha && [...selFecha.options].some(o=>o.value===fecha)){
+    selFecha.value=fecha; activeFecha=fecha; buildChoferSelector();
+  }
+  if(chofer){
+    const selCh=document.getElementById('sel-chofer');
+    if([...selCh.options].some(o=>o.value===chofer)){
+      selCh.value=chofer; activeChofer=chofer; buildLiqChips(true);
+    }
+  }
+  if(bodega && BODEGAS[bodega]){
+    activeBodega=bodega;
+    document.getElementById('sel-bodega').value=bodega;
+  }
+}
+async function loadAndRender(){
+  try{
+    ALL_ROWS=await fetchData();
+    buildFechaSelector();
+    if(primeraCarga){ aplicarParamsURL(); primeraCarga=false; }
+    applyFiltersAndDraw();
+    document.getElementById('ultima-act').textContent=`Act: ${new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'})}`;
+    document.getElementById('overlay').classList.add('hidden');
+  }catch(err){
+    document.getElementById('load-src').textContent='';
+    const em=document.getElementById('error-msg');
+    em.style.display='block';
+    em.innerHTML=`❌ Error al cargar datos:<br><b>${err.message}</b><br><br>Verifica que el Apps Script esté publicado<br>con acceso <b>"Cualquier persona"</b>.`;
+    console.error(err);
+  }
+}
+
+// Close legend on map click
+// Close resumen panel when clicking the map
+map.on('click', function(){
+  const lp = document.getElementById('legend-panel');
+  if(lp) lp.style.display='none';
+  const rp = document.getElementById('resumen-panel');
+  if(rp && rp.classList.contains('show')) rp.classList.remove('show');
+});
+function toggleLegend(){
+  const lp=document.getElementById('legend-panel');
+  if(!lp)return;
+  lp.style.display = (lp.style.display==='none'||!lp.style.display) ? 'block' : 'none';
+}
+
+// ── INICIALIZACIÓN ────────────────────────────────────────
+// Auto-refresh cada 5 minutos (sin limpiar estado de entregas)
+setInterval(()=>{ loadAndRender(); }, 5 * 60 * 1000);
+// Sincronización de avance entre dispositivos (chofer + ayudante) cada 12s
+setInterval(()=>{ pollAvanceRemoto(); }, 12 * 1000);
+
+// Carga inicial
+loadAndRender();
+
+// GPS: no auto-iniciar (el usuario activa tocando el indicador)
+// initGPS() se llama solo desde activarGPS()
+</script>
+</body>
+</html>
