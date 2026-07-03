@@ -1,6 +1,9 @@
 # Claude Code (archivos locales del asistente, no publicar)
 .claude/
 
+# Backend Apps Script — contiene PINs y lógica sensible, NO publicar
+backend/
+
 # Sistema
 Thumbs.db
 Desktop.ini

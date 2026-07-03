@@ -42,6 +42,9 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;heigh
     <div class="pin-dot"></div>
     <div class="pin-dot"></div>
     <div class="pin-dot"></div>
+    <div class="pin-dot"></div>
+    <div class="pin-dot"></div>
+    <div class="pin-dot"></div>
   </div>
 
   <div class="msg" id="msg">&nbsp;</div>
@@ -69,7 +72,7 @@ if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator
 const API_URL="https://script.google.com/macros/s/AKfycbwzQRnCJHFXni_9Qvs9kh_6BoikPDtb2sAMNChS3gSk9gAn5e31z5PFvKRGRzeoFqK5og/exec";
 let pin='';
 let verificando=false;
-const MAXLEN=3; // los PINs actuales son de 3 dígitos; si agregas uno más largo, se autoextiende al escribir
+const MAXLEN=6; // PINs de 6 dígitos
 
 // Si ya hay sesión activa, saltar directo a donde corresponde
 (function(){
@@ -81,7 +84,7 @@ const MAXLEN=3; // los PINs actuales son de 3 dígitos; si agregas uno más larg
 
 function renderDots(){
   const wrap=document.getElementById('pin-display');
-  const len=Math.max(3,pin.length);
+  const len=Math.max(6,pin.length);
   wrap.innerHTML='';
   for(let i=0;i<len;i++){
     const d=document.createElement('div');
@@ -132,30 +135,9 @@ function jsonpLogin(qs, ms){
 
 // Intenta JSONP (directo) y, si falla, prueba con 2 proxies CORS de respaldo distintos.
 async function loginRequest(pin){
+  // Solo JSONP directo (sin proxies de terceros, que verían el PIN).
   const qs='tipo=login&pin='+encodeURIComponent(pin);
-  const target=API_URL+'?'+qs+'&t='+Date.now();
-  const intentos=[
-    async()=>{ return await jsonpLogin(qs, 12000); },
-    async()=>{
-      const P='https://api.allorigins.win/get?url='+encodeURIComponent(target);
-      const res=await fetchConTimeout(P,{},12000);
-      if(!res.ok) throw new Error('HTTP '+res.status);
-      const w=await res.json();
-      return JSON.parse(w.contents);
-    },
-    async()=>{
-      const P='https://corsproxy.io/?url='+encodeURIComponent(target);
-      const res=await fetchConTimeout(P,{},12000);
-      if(!res.ok) throw new Error('HTTP '+res.status);
-      return await res.json();
-    }
-  ];
-  let ultimoError=null;
-  for(const intento of intentos){
-    try{ return await intento(); }
-    catch(e){ ultimoError=e; }
-  }
-  throw ultimoError;
+  return await jsonpLogin(qs, 12000);
 }
 
 async function intentarLogin(){
@@ -175,7 +157,7 @@ async function intentarLogin(){
   document.querySelectorAll('.key').forEach(k=>k.style.pointerEvents='');
   if(data && data.ok){
     setMsg('✅ Bienvenido, '+data.usuario, 'ok');
-    localStorage.setItem('sesionActiva', JSON.stringify({usuario:data.usuario, rol:data.rol, ts:Date.now()}));
+    localStorage.setItem('sesionActiva', JSON.stringify({usuario:data.usuario, rol:data.rol, token:data.token||'', ts:Date.now()}));
     setTimeout(()=>redirigir(data.rol), 500);
   } else {
     setMsg('❌ PIN incorrecto');

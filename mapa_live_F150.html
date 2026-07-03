@@ -956,6 +956,16 @@ const ROLES_PERMITIDOS_MAPA = ['admin','bodega','coordinador','transportista','r
 function getSesion(){
   try{ return JSON.parse(localStorage.getItem('sesionActiva')||'null'); }catch(e){ return null; }
 }
+// Token de sesión firmado por el servidor; se adjunta a cada petición.
+function getToken(){ const s=getSesion(); return (s&&s.token)||''; }
+let _redirigiendoLogin=false;
+function sesionExpirada(){
+  if(_redirigiendoLogin) return;
+  _redirigiendoLogin=true;
+  try{ localStorage.removeItem('sesionActiva'); }catch(e){}
+  alert('Tu sesión expiró o no es válida. Ingresa de nuevo.');
+  window.location.href='login.html';
+}
 (function chequearSesion(){
   const s=getSesion();
   if(!s || !s.rol){ window.location.href='login.html'; return; }
@@ -1059,69 +1069,27 @@ function jsonpMapa(qs, ms){
     let done=false;
     const limpiar=()=>{ try{delete window[cb];}catch(e){window[cb]=undefined;} if(script.parentNode)script.parentNode.removeChild(script); };
     const timer=setTimeout(()=>{ if(done)return; done=true; limpiar(); reject(new Error('Tiempo agotado')); }, ms);
-    window[cb]=(data)=>{ if(done)return; done=true; clearTimeout(timer); limpiar(); resolve(data); };
+    window[cb]=(data)=>{ if(done)return; done=true; clearTimeout(timer); limpiar();
+      if(data && data.auth===false){ sesionExpirada(); reject(new Error(data.error||'Sesión expirada')); return; }
+      resolve(data); };
     script.onerror=()=>{ if(done)return; done=true; clearTimeout(timer); limpiar(); reject(new Error('Error de red')); };
-    script.src=API_URL+'?'+qs+'&callback='+cb+'&t='+Date.now();
+    script.src=API_URL+'?'+qs+'&callback='+cb+'&token='+encodeURIComponent(getToken())+'&t='+Date.now();
     document.head.appendChild(script);
   });
 }
 // Lista liviana de fechas disponibles (solo strings, no trae todas las columnas)
 async function fetchFechas(){
-  try{ const r=await jsonpMapa('tipo=fechas',25000); return Array.isArray(r)?r:[]; }catch(e){/* proxies */}
-  const target=API_URL+'?tipo=fechas&t='+Date.now();
-  const intentos=[
-    async()=>{
-      const P='https://api.allorigins.win/get?url='+encodeURIComponent(target);
-      const res=await fetchConTimeoutMapa(P,{},25000);
-      if(!res.ok)throw new Error('HTTP '+res.status);
-      const w=await res.json();
-      return JSON.parse(w.contents);
-    },
-    async()=>{
-      const P='https://corsproxy.io/?url='+encodeURIComponent(target);
-      const res=await fetchConTimeoutMapa(P,{},25000);
-      if(!res.ok)throw new Error('HTTP '+res.status);
-      return await res.json();
-    }
-  ];
-  let raw, ultimoError=null;
-  for(const intento of intentos){
-    try{ raw=await intento(); ultimoError=null; break; }
-    catch(e){ ultimoError=e; }
-  }
-  if(ultimoError) throw new Error('Sin conexión con el Sheet.');
-  return Array.isArray(raw)?raw:[];
+  // Solo JSONP directo (sin proxies de terceros, que verían token y datos).
+  const r=await jsonpMapa('tipo=fechas',25000);
+  return Array.isArray(r)?r:[];
 }
 async function fetchData(fecha){
   document.getElementById('load-src').textContent='Consultando Google Apps Script...';
   const qs='tipo=mapa'+(fecha?('&fecha='+encodeURIComponent(fecha)):'');
   let raw;
-  // 1º intento: JSONP directo (sin proxies)
+  // Solo JSONP directo (sin proxies de terceros).
   try{ raw=await jsonpMapa(qs,25000); }
-  catch(e){
-    const target=API_URL+'?'+qs+'&t='+Date.now();
-    const intentos=[
-      async()=>{
-        const P='https://api.allorigins.win/get?url='+encodeURIComponent(target);
-        const res=await fetchConTimeoutMapa(P,{},25000);
-        if(!res.ok)throw new Error('HTTP '+res.status);
-        const w=await res.json();
-        return JSON.parse(w.contents);
-      },
-      async()=>{
-        const P='https://corsproxy.io/?url='+encodeURIComponent(target);
-        const res=await fetchConTimeoutMapa(P,{},25000);
-        if(!res.ok)throw new Error('HTTP '+res.status);
-        return await res.json();
-      }
-    ];
-    let ultimoError=null;
-    for(const intento of intentos){
-      try{ raw=await intento(); ultimoError=null; break; }
-      catch(e2){ ultimoError=e2; }
-    }
-    if(ultimoError) throw new Error('Sin conexión con el Sheet.');
-  }
+  catch(e){ throw new Error('Sin conexión con el Sheet.'); }
   if(!Array.isArray(raw)||!raw.length)throw new Error('Sin datos en el Sheet');
   return raw.map(row=>{
     const retStr=String(gf(row,'Retención en la Fuente','Retencion en la Fuente','retencion_fuente','Retencion','retencion')||'').trim().toUpperCase();
@@ -1626,6 +1594,7 @@ async function syncAvance(idx){
       headers:{'Content-Type':'text/plain;charset=utf-8'}, // evita preflight OPTIONS que Apps Script no maneja
       body:JSON.stringify({
         tipo:'avance',
+        token:(sesion&&sesion.token)||'',
         fecha:d.fecha,
         chofer:d.chofer,
         codigoCliente:d.codigo,
@@ -1807,6 +1776,7 @@ async function enviarCuadre(){
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body:JSON.stringify({
         tipo:'cuadre',
+        token:(sesion&&sesion.token)||'',
         fecha:activeFecha, chofer:activeChofer, bodega:activeBodega,
         montoDeclarado, montoSistema:calcMontoRecaudadoSistema(),
         observaciones, fotos:cuadreFotos,
@@ -1814,7 +1784,8 @@ async function enviarCuadre(){
         rol:(sesion&&sesion.rol)||''
       })
     },25000);
-    const data=await res.json().catch(()=>({ok:true})); // si el proxy no deja leer, asumimos éxito silencioso
+    const data=await res.json().catch(()=>({ok:true})); // si no se puede leer, asumimos éxito silencioso
+    if(data && data.auth===false){ sesionExpirada(); return; }
     if(data && data.error) throw new Error(data.error);
     msg.style.color='#4ade80';
     msg.textContent='✅ Cuadre enviado correctamente';

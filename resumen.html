@@ -132,6 +132,15 @@ const API_URL="https://script.google.com/macros/s/AKfycbwzQRnCJHFXni_9Qvs9kh_6Bo
 
 // ── SESIÓN ────────────────────────────────────────────────
 function getSesion(){ try{ return JSON.parse(localStorage.getItem('sesionActiva')||'null'); }catch(e){ return null; } }
+function getToken(){ const s=getSesion(); return (s&&s.token)||''; }
+let _redirigiendoLogin=false;
+function sesionExpirada(){
+  if(_redirigiendoLogin) return;
+  _redirigiendoLogin=true;
+  try{ localStorage.removeItem('sesionActiva'); }catch(e){}
+  alert('Tu sesión expiró o no es válida. Ingresa de nuevo.');
+  window.location.href='login.html';
+}
 const ROLES_RESUMEN=['admin','bodega','coordinador','cartera'];
 const sesion=getSesion();
 if(!sesion || !sesion.rol){ window.location.href='login.html'; }
@@ -175,37 +184,17 @@ function jsonp(qs, ms){
     let done=false;
     const limpiar=()=>{ try{delete window[cb];}catch(e){window[cb]=undefined;} if(script.parentNode)script.parentNode.removeChild(script); };
     const timer=setTimeout(()=>{ if(done)return; done=true; limpiar(); reject(new Error('Tiempo agotado')); }, ms);
-    window[cb]=(data)=>{ if(done)return; done=true; clearTimeout(timer); limpiar(); resolve(data); };
+    window[cb]=(data)=>{ if(done)return; done=true; clearTimeout(timer); limpiar();
+      if(data && data.auth===false){ sesionExpirada(); reject(new Error(data.error||'Sesión expirada')); return; }
+      resolve(data); };
     script.onerror=()=>{ if(done)return; done=true; clearTimeout(timer); limpiar(); reject(new Error('Error de red')); };
-    script.src=API_URL+'?'+qs+'&callback='+cb+'&t='+Date.now();
+    script.src=API_URL+'?'+qs+'&callback='+cb+'&token='+encodeURIComponent(getToken())+'&t='+Date.now();
     document.head.appendChild(script);
   });
 }
 async function fetchJSON(qs){
-  // 1º intento: JSONP (directo, sin proxies). Si falla, caen los proxies como respaldo.
-  try{ return await jsonp(qs, 25000); }catch(e){ /* sigue a proxies */ }
-  const target=API_URL+'?'+qs+'&t='+Date.now();
-  const intentos=[
-    async()=>{
-      const P='https://api.allorigins.win/get?url='+encodeURIComponent(target);
-      const res=await fetchConTimeoutR(P,{},25000);
-      if(!res.ok)throw new Error('HTTP '+res.status);
-      const w=await res.json();
-      return JSON.parse(w.contents);
-    },
-    async()=>{
-      const P='https://corsproxy.io/?url='+encodeURIComponent(target);
-      const res=await fetchConTimeoutR(P,{},25000);
-      if(!res.ok)throw new Error('HTTP '+res.status);
-      return await res.json();
-    }
-  ];
-  let ultimoError=null;
-  for(const intento of intentos){
-    try{ return await intento(); }
-    catch(e){ ultimoError=e; }
-  }
-  throw new Error('Sin conexión con el Sheet.');
+  // Solo JSONP directo (sin proxies de terceros, que verían token y datos).
+  return await jsonp(qs, 25000);
 }
 
 let MAPA_ROWS=[], AVANCE_ROWS=[], CUADRE_ROWS=[];
@@ -290,7 +279,7 @@ async function marcarCuadre(fecha,chofer,estado){
     await fetchConTimeoutR(API_URL,{
       method:'POST', mode:'no-cors',
       headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify({tipo:'cuadre_revision',fecha,chofer,estado,notaCartera})
+      body:JSON.stringify({tipo:'cuadre_revision',token:getToken(),fecha,chofer,estado,notaCartera})
     },25000);
   }catch(e){ /* no-cors: no podemos leer respuesta, seguimos igual */ }
   const row=CUADRE_ROWS.find(r=>r.fecha===fecha&&r.chofer===chofer);
