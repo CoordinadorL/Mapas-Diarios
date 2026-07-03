@@ -673,6 +673,7 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
     <div class="live-badge"><div class="live-dot"></div>LIVE</div>
     <button class="live-badge" id="btn-cuadre" onclick="abrirCuadre()" style="display:none;background:#134e2a;border-color:#22c55e;color:#bbf7d0;cursor:pointer" title="Cuadre de guía">🧾 Cuadre</button>
     <a class="live-badge" id="btn-resumen" href="resumen.html" style="display:none;background:#1e3a5f;border-color:#3b82f6;color:#93c5fd;text-decoration:none" title="Volver al resumen">📊 Resumen</a>
+    <button class="live-badge" id="btn-cierre-liq" onclick="cerrarLiquidacion()" style="display:none;background:#7c2d12;border-color:#f97316;color:#fed7aa;cursor:pointer;font-weight:700" title="Cerrar liquidación y liberar la selección de mapa">🔒 Cierre de liquidación</button>
     <div class="live-badge" id="user-badge" style="background:#1e293b;border-color:#475569;color:#cbd5e1;cursor:pointer" onclick="logout()" title="Cerrar sesión">👤 <span id="user-name">—</span> · <span id="user-rol">—</span> ⏻</div>
   </div>
 </div>
@@ -706,6 +707,11 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
   <div class="fsep"></div>
   <button class="icon-btn reload-btn" onclick="recargar()">↻ Actualizar</button>
   <span id="ultima-act" style="font-size:.56rem;color:#475569"></span>
+</div>
+
+<!-- BANNER JORNADA (solo transportista/reparto con jornada activa) -->
+<div id="jornada-banner" style="display:none;background:#0c1a2e;border-bottom:1px solid #f97316;padding:4px 14px;align-items:center;gap:8px;font-size:.62rem;color:#fdba74">
+  🔒 <b>Jornada activa</b> — <span id="jornada-info"></span> · estás fijo en este mapa hasta el <b>cierre de liquidación</b>
 </div>
 
 <!-- BANNER RESUMEN -->
@@ -832,6 +838,19 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
 
 <!-- PANEL REPORTE (duplicado sin usar del "📄 Reporte" que sí funciona vía #export-panel) eliminado -->
 
+
+<!-- MODAL INICIO DE JORNADA (solo transportista/reparto) -->
+<div class="cuadre-overlay" id="jornada-modal">
+  <div class="cuadre-box" style="max-width:380px">
+    <h2>🚦 Inicio de jornada</h2>
+    <div class="sub">Vas a fijar este mapa para tu jornada. No podrás cambiar de camión, fecha ni liquidación hasta hacer el <b>Cierre de liquidación</b>.</div>
+    <div class="cuadre-sistema" style="display:block;text-align:center">
+      <div id="jornada-modal-info" style="font-size:.9rem;color:#e2e8f0;line-height:1.7"></div>
+    </div>
+    <button class="cuadre-btn" onclick="iniciarJornada()">🚦 Iniciar jornada</button>
+    <button class="cuadre-btn" style="background:#334155;margin-top:8px" onclick="cancelarInicioJornada()">Cambiar selección</button>
+  </div>
+</div>
 
 <!-- MODAL CUADRE DE GUÍA -->
 <div class="cuadre-overlay" id="cuadre-overlay">
@@ -987,6 +1006,7 @@ function sesionExpirada(){
 function logout(){
   if(!confirm('¿Cerrar sesión?'))return;
   localStorage.removeItem('sesionActiva');
+  localStorage.removeItem('jornadaActiva'); // no heredar el mapa fijo a otro usuario del mismo equipo
   window.location.href='login.html';
 }
 
@@ -1216,7 +1236,9 @@ function drawBodegaMarker(){
 
 // ── FILTRAR + OPTIMIZAR ────────────────────────────────────
 function applyFiltersAndDraw(){
-  completed.clear();activeVendedor='ALL';
+  // Limpiar TODOS los estados (no solo completed) para no mezclar datos entre camiones.
+  completed.clear();porCobrar.clear();quemados.clear();anulados.clear();devParcial.clear();notas.clear();retencionSet.clear();quemadoParcial.clear();
+  activeVendedor='ALL';
   const noData=document.getElementById('no-data');
   if(!activeChofer){
     DATA=[];clearMap();drawBodegaMarker();
@@ -1248,6 +1270,8 @@ function applyFiltersAndDraw(){
   loadLocalState();
   const liqLabel=hasLiq&&activeLiqs.size?` | Liq: ${[...activeLiqs].sort().join(', ')}`:'';
   document.getElementById('sub-info').textContent=`${activeFecha} | ${activeChofer} | 🏭 ${bodega.nombre}${liqLabel}`;
+  actualizarUIJornada();
+  quizasPedirInicioJornada();
 }
 
 // ── MAPA ──────────────────────────────────────────────────
@@ -2667,7 +2691,14 @@ function saveLocalState(){
 }
 function loadLocalState(){
   try{
-    const raw=localStorage.getItem('mapaState_current');
+    // Restaura el estado propio de ESTE camión+fecha (guardado en su espacio por-camión),
+    // no el último genérico. Así cambiar de camión y volver ya no pierde ni mezcla el avance.
+    const key=`mapaHist_${activeFecha}_${activeChofer.replace(/\s/g,'_')}`;
+    let raw=localStorage.getItem(key);
+    if(!raw){
+      const cur=localStorage.getItem('mapaState_current');
+      if(cur){ const c=JSON.parse(cur); if(c.fecha===activeFecha && c.chofer===activeChofer) raw=cur; }
+    }
     if(!raw)return;
     const s=JSON.parse(raw);
     if(s.fecha===activeFecha && s.chofer===activeChofer){
@@ -2681,9 +2712,103 @@ function loadLocalState(){
       quemadoParcial=new Map((s.quemadoParcial||[]).map(([k,v])=>[k,Number(v)]));
       DATA.forEach((_,i)=>refreshMarkerIcon(i));
       updateProgress();updateStats();updatePanel();updateBottomBar();
-      console.log('Estado restaurado desde caché local');
+      console.log('Estado restaurado desde caché local (por camión)');
     }
   }catch(e){console.warn('No se pudo restaurar estado:',e);}
+}
+
+// ══════════════════════════════════════════════════════════════
+// JORNADA — bloqueo de un solo mapa para transportista / reparto
+// El chofer elige fecha+camión+bodega+liquidación una vez, "inicia jornada"
+// y queda fijo en ese mapa (no puede saltar a otro) hasta el "Cierre de
+// liquidación". La selección se guarda: si cierra/reabre la app, vuelve al
+// mismo mapa. El avance NO se borra al cerrar (puede reingresar a poner fotos).
+// ══════════════════════════════════════════════════════════════
+const ROLES_JORNADA=['transportista','reparto'];
+let _ultimaSigModalJornada=null;
+function esRolChofer(){ const s=getSesion(); return !!(s && ROLES_JORNADA.includes(s.rol)); }
+function getJornada(){ try{ return JSON.parse(localStorage.getItem('jornadaActiva')||'null'); }catch(e){ return null; } }
+function setJornada(j){ try{ if(j) localStorage.setItem('jornadaActiva', JSON.stringify(j)); else localStorage.removeItem('jornadaActiva'); }catch(e){} }
+function selSignatureJornada(){ return `${activeFecha}|${activeChofer}|${activeBodega}|${[...activeLiqs].sort().join(',')}`; }
+
+// Habilita/deshabilita los selectores de fecha/camión/bodega/liquidación.
+function bloquearSelectores(bloq){
+  ['sel-fecha','sel-chofer','sel-bodega'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el){ el.disabled=bloq; el.style.opacity=bloq?'.5':''; el.style.cursor=bloq?'not-allowed':''; }
+  });
+  const chips=document.getElementById('liq-chips');
+  if(chips){ chips.style.pointerEvents=bloq?'none':''; chips.style.opacity=bloq?'.5':''; }
+  const apply=document.querySelector('.liq-apply');
+  if(apply){ apply.style.display=bloq?'none':''; }
+}
+
+// Refleja en la UI el estado actual de la jornada (banner, botón cierre, bloqueo).
+function actualizarUIJornada(){
+  const btn=document.getElementById('btn-cierre-liq');
+  const banner=document.getElementById('jornada-banner');
+  const j=getJornada();
+  const activa=esRolChofer() && j && j.iniciada;
+  if(activa){
+    bloquearSelectores(true);
+    if(btn) btn.style.display='flex';
+    if(banner){ banner.style.display='flex'; const info=document.getElementById('jornada-info'); if(info) info.textContent=`${j.chofer} · ${j.fecha}`; }
+  } else {
+    bloquearSelectores(false);
+    if(btn) btn.style.display='none';
+    if(banner) banner.style.display='none';
+  }
+}
+
+// Si es chofer, no hay jornada activa y ya hay ruta dibujada → ofrecer iniciar jornada.
+function quizasPedirInicioJornada(){
+  if(!esRolChofer()) return;
+  if(getJornada()) return;
+  if(!DATA.length) return;
+  const sig=selSignatureJornada();
+  if(sig===_ultimaSigModalJornada) return; // ya se preguntó por esta misma selección
+  _ultimaSigModalJornada=sig;
+  const b=BODEGAS[activeBodega];
+  const liqTxt=(activeLiqs.size && !activeLiqs.has('__ALL__'))?`<br>📋 Liq: ${[...activeLiqs].sort().join(', ')}`:'';
+  document.getElementById('jornada-modal-info').innerHTML=`🚛 <b>${activeChofer}</b><br>📅 ${activeFecha} · 🏭 ${b?b.nombre:'—'}${liqTxt}`;
+  document.getElementById('jornada-modal').classList.add('show');
+}
+function iniciarJornada(){
+  setJornada({ fecha:activeFecha, chofer:activeChofer, bodega:activeBodega, liqs:[...activeLiqs], iniciada:true, ts:new Date().toISOString() });
+  document.getElementById('jornada-modal').classList.remove('show');
+  actualizarUIJornada();
+}
+function cancelarInicioJornada(){
+  document.getElementById('jornada-modal').classList.remove('show');
+  // No se bloquea; puede cambiar la selección y se volverá a preguntar.
+}
+
+// Reaplica la selección guardada de la jornada (usado al cargar/refrescar).
+function aplicarSeleccionJornada(){
+  const j=getJornada();
+  if(!j) return;
+  const selCh=document.getElementById('sel-chofer');
+  if(selCh && [...selCh.options].some(o=>o.value===j.chofer)){ selCh.value=j.chofer; activeChofer=j.chofer; }
+  if(j.bodega && BODEGAS[j.bodega]){ activeBodega=j.bodega; const sb=document.getElementById('sel-bodega'); if(sb) sb.value=j.bodega; }
+  buildLiqChips(true);
+  if(j.liqs && j.liqs.length){ activeLiqs=new Set(j.liqs); buildLiqChips(false); }
+}
+
+// Cierre de liquidación: libera la selección (avance se conserva).
+function cerrarLiquidacion(){
+  const j=getJornada();
+  if(!j){ actualizarUIJornada(); return; }
+  const pend=DATA.reduce((n,d,i)=> n + ((completed.has(i)||porCobrar.has(i)||quemados.has(i)||anulados.has(i))?0:1), 0);
+  let msg=`¿Cerrar la liquidación de ${j.chofer} (${j.fecha})?`;
+  if(pend>0) msg+=`\n\n⚠️ Quedan ${pend} cliente(s) sin marcar. Se cerrará de todos modos.`;
+  msg+='\n\nDespués podrás elegir otra ruta, o volver a esta (tu avance queda guardado) para registrar las fotos de los depósitos.';
+  if(!confirm(msg)) return;
+  setJornada(null);
+  _ultimaSigModalJornada=null;
+  actualizarUIJornada();
+  if(confirm('¿Registrar ahora el Cuadre de guía (dinero recaudado + fotos de depósito)?')){
+    abrirCuadre();
+  }
 }
 function guardarRutaHoy(){
   saveLocalState();
@@ -2765,14 +2890,17 @@ async function loadAndRender(){
     // así que lanzamos AMBAS consultas en paralelo (fechas + datos) en vez de una tras otra.
     const params=new URLSearchParams(window.location.search);
     const fechaURL=params.get('fecha');
-    if(primeraCarga && fechaURL){
-      activeFecha=fechaURL;
-      const [fechas, rows]=await Promise.all([ fetchFechas(), fetchData(fechaURL) ]);
+    // Chofer con jornada activa: su mapa manda sobre la URL y se mantiene fijo.
+    const jornadaAct=(esRolChofer() && getJornada() && getJornada().iniciada) ? getJornada() : null;
+    const fechaForzada=fechaURL || (jornadaAct ? jornadaAct.fecha : '');
+    if(primeraCarga && fechaForzada){
+      activeFecha=fechaForzada;
+      const [fechas, rows]=await Promise.all([ fetchFechas(), fetchData(fechaForzada) ]);
       FECHAS_DISPONIBLES=fechas;
       buildFechaSelector();
       ALL_ROWS=rows;
       buildChoferSelector();
-      aplicarChoferBodegaDesdeURL();
+      if(jornadaAct) aplicarSeleccionJornada(); else aplicarChoferBodegaDesdeURL();
       primeraCarga=false;
     } else {
       FECHAS_DISPONIBLES=await fetchFechas();
@@ -2781,10 +2909,12 @@ async function loadAndRender(){
       ALL_ROWS=await fetchData(activeFecha);
       buildChoferSelector();
       if(primeraCarga){ aplicarChoferBodegaDesdeURL(); primeraCarga=false; }
+      if(jornadaAct) aplicarSeleccionJornada(); // refresco: mantener fija la selección de la jornada
     }
     applyFiltersAndDraw();
     document.getElementById('ultima-act').textContent=`Act: ${new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'})}`;
     document.getElementById('overlay').classList.add('hidden');
+    actualizarUIJornada();
   }catch(err){
     document.getElementById('load-src').textContent='';
     const em=document.getElementById('error-msg');
