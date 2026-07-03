@@ -841,13 +841,15 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
 
 <!-- MODAL INICIO DE JORNADA (solo transportista/reparto) -->
 <div class="cuadre-overlay" id="jornada-modal">
-  <div class="cuadre-box" style="max-width:380px">
+  <div class="cuadre-box" style="max-width:400px">
     <h2>🚦 Inicio de jornada</h2>
-    <div class="sub">Vas a fijar este mapa para tu jornada. No podrás cambiar de camión, fecha ni liquidación hasta hacer el <b>Cierre de liquidación</b>.</div>
+    <div class="sub">Confirma tu ruta. Quedarás fijo en este mapa hasta el <b>Cierre de liquidación</b>.</div>
     <div class="cuadre-sistema" style="display:block;text-align:center">
       <div id="jornada-modal-info" style="font-size:.9rem;color:#e2e8f0;line-height:1.7"></div>
     </div>
-    <button class="cuadre-btn" onclick="iniciarJornada()">🚦 Iniciar jornada</button>
+    <div id="jornada-liq-wrap"></div>
+    <div id="jornada-liq-msg" style="text-align:center;font-size:.68rem;color:#f87171;min-height:14px;margin-top:6px"></div>
+    <button class="cuadre-btn" id="jornada-iniciar-btn" onclick="iniciarJornada()">🚦 Iniciar ruta</button>
     <button class="cuadre-btn" style="background:#334155;margin-top:8px" onclick="cancelarInicioJornada()">Cambiar selección</button>
   </div>
 </div>
@@ -2760,7 +2762,13 @@ function actualizarUIJornada(){
   }
 }
 
+// Liquidaciones disponibles para el camión+fecha activos.
+function liqsDisponibles(){
+  const rows=ALL_ROWS.filter(r=>r.fecha===activeFecha&&r.chofer===activeChofer);
+  return [...new Set(rows.map(r=>r.liq).filter(Boolean))].sort((a,b)=>Number(a)-Number(b)||a.localeCompare(b));
+}
 // Si es chofer, no hay jornada activa y ya hay ruta dibujada → ofrecer iniciar jornada.
+// Si el camión tiene 1 sola liquidación, arranca directo; con 2 o más, deja elegir cuáles lleva.
 function quizasPedirInicioJornada(){
   if(!esRolChofer()) return;
   if(getJornada()) return;
@@ -2769,14 +2777,34 @@ function quizasPedirInicioJornada(){
   if(sig===_ultimaSigModalJornada) return; // ya se preguntó por esta misma selección
   _ultimaSigModalJornada=sig;
   const b=BODEGAS[activeBodega];
-  const liqTxt=(activeLiqs.size && !activeLiqs.has('__ALL__'))?`<br>📋 Liq: ${[...activeLiqs].sort().join(', ')}`:'';
-  document.getElementById('jornada-modal-info').innerHTML=`🚛 <b>${activeChofer}</b><br>📅 ${activeFecha} · 🏭 ${b?b.nombre:'—'}${liqTxt}`;
+  document.getElementById('jornada-modal-info').innerHTML=`🚛 <b>${activeChofer}</b><br>📅 ${activeFecha} · 🏭 ${b?b.nombre:'—'}`;
+  const liqs=liqsDisponibles();
+  const wrap=document.getElementById('jornada-liq-wrap');
+  document.getElementById('jornada-liq-msg').textContent='';
+  if(liqs.length>=2){
+    wrap.innerHTML=`<div style="font-size:.66rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin:12px 0 8px;text-align:center">📋 Elige las liquidaciones que llevas</div>`
+      +`<div id="jornada-liq-list" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center">`
+      +liqs.map(l=>`<label class="liq-chip sel" data-liq="${l}"><input type="checkbox" checked style="display:none"> Liq ${l}</label>`).join('')
+      +`</div>`;
+    wrap.querySelectorAll('.liq-chip').forEach(ch=>ch.addEventListener('click',e=>{ e.preventDefault(); ch.classList.toggle('sel'); }));
+  } else if(liqs.length===1){
+    wrap.innerHTML=`<div style="text-align:center;font-size:.72rem;color:#94a3b8;margin:12px 0">📋 Liquidación única: <b style="color:#e2e8f0">Liq ${liqs[0]}</b></div>`;
+  } else {
+    wrap.innerHTML='';
+  }
   document.getElementById('jornada-modal').classList.add('show');
 }
 function iniciarJornada(){
+  const liqs=liqsDisponibles();
+  if(liqs.length>=2){
+    const sel=[...document.querySelectorAll('#jornada-liq-list .liq-chip.sel')].map(c=>c.dataset.liq);
+    if(!sel.length){ document.getElementById('jornada-liq-msg').textContent='Selecciona al menos una liquidación para iniciar.'; return; }
+    activeLiqs=new Set(sel);
+  }
   setJornada({ fecha:activeFecha, chofer:activeChofer, bodega:activeBodega, liqs:[...activeLiqs], iniciada:true, ts:new Date().toISOString() });
   document.getElementById('jornada-modal').classList.remove('show');
-  actualizarUIJornada();
+  buildLiqChips(false);   // refleja la selección elegida en los chips del filtro
+  applyFiltersAndDraw();  // redibuja SOLO las liquidaciones elegidas y bloquea (jornada ya activa)
 }
 function cancelarInicioJornada(){
   document.getElementById('jornada-modal').classList.remove('show');
