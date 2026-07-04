@@ -135,10 +135,11 @@ tr:hover td{background:#16213a}
       <h3 style="font-size:.95rem;color:#f1f5f9;margin:0">📍 Corregir ubicación de cliente</h3>
       <button onclick="cerrarGeoEditor()" style="background:none;border:none;color:#64748b;font-size:1.2rem;cursor:pointer">✕</button>
     </div>
-    <div style="margin-bottom:10px">
+    <div style="margin-bottom:6px">
       <label style="font-size:.66rem;color:#94a3b8;font-weight:700">Código de cliente</label>
-      <input id="geo-ed-cod" placeholder="Ej: 3572047" style="width:100%;background:#0f172a;border:1.5px solid #334155;color:#f1f5f9;border-radius:8px;padding:8px 10px;font-size:.82rem;margin-top:3px">
+      <input id="geo-ed-cod" placeholder="Ej: 3572047" oninput="geoEdInfo()" style="width:100%;background:#0f172a;border:1.5px solid #334155;color:#f1f5f9;border-radius:8px;padding:8px 10px;font-size:.82rem;margin-top:3px">
     </div>
+    <div id="geo-ed-info" style="font-size:.76rem;color:#cbd5e1;margin:0 0 10px;line-height:1.55;min-height:16px"></div>
     <div style="display:flex;gap:16px;margin-bottom:10px;font-size:.74rem;color:#cbd5e1">
       <label style="cursor:pointer"><input type="radio" name="geo-metodo" value="pin" checked onchange="geoEdModo()"> ✋ Arrastrar pin</label>
       <label style="cursor:pointer"><input type="radio" name="geo-metodo" value="manual" onchange="geoEdModo()"> ⌨️ Ingresar coordenadas</label>
@@ -241,6 +242,8 @@ async function cargarRango(desde,hasta){
     fecha:ff(gf(row,'Fecha Liq','fecha_liq','fecha')),
     chofer:String(gf(row,'Chofer','chofer')).trim(),
     codigo:String(gf(row,'CodigoCliente','Codigo Cliente','codigo_cliente')),
+    razon:String(gf(row,'Razon','razon','Razón')).trim(),
+    dir:String(gf(row,'Direccion','direccion','Dirección')).trim(),
     total:pn(gf(row,'Suma de Total','Suma Total','total','Total')),
     peso:pn(gf(row,'Suma de Peso','peso','Peso')),
   })).filter(r=>r.fecha&&r.chofer);
@@ -623,29 +626,44 @@ function geoLatestPorCodigo(){
   });
   return Object.values(m).sort((a,b)=>b.ts.localeCompare(a.ts));
 }
+function infoCliente(cod){
+  const r=MAPA_ROWS.find(x=>x.codigo===String(cod));
+  return { razon:(r&&r.razon)||'', dir:(r&&r.dir)||'' };
+}
+function geoEdInfo(){
+  const cod=document.getElementById('geo-ed-cod').value.trim();
+  const info=infoCliente(cod);
+  const el=document.getElementById('geo-ed-info');
+  if(el) el.innerHTML = (info.razon||info.dir) ? ('👤 <b>'+(info.razon||'—')+'</b><br>📍 '+(info.dir||'—')) : '<span style="color:#64748b">Cliente no encontrado en las rutas cargadas.</span>';
+}
 function renderGeoPanel(){
   const lista=geoLatestPorCodigo();
-  const filas = lista.length ? lista.map(g=>`<tr>
-    <td><b>${g.codigo}</b></td>
-    <td>${isNaN(g.lat)?'—':g.lat.toFixed(6)}, ${isNaN(g.lng)?'—':g.lng.toFixed(6)}</td>
+  const filas = lista.length ? lista.map(g=>{
+    const info=infoCliente(g.codigo);
+    return `<tr>
+    <td style="max-width:190px;white-space:normal;word-break:break-word"><b>${g.codigo}</b>${info.razon?`<br><span style="font-size:.72rem;color:#cbd5e1">${info.razon}</span>`:''}</td>
+    <td style="max-width:230px;white-space:normal;word-break:break-word;font-size:.72rem;color:#94a3b8">${info.dir||'—'}</td>
+    <td style="white-space:nowrap">${isNaN(g.lat)?'—':g.lat.toFixed(6)}, ${isNaN(g.lng)?'—':g.lng.toFixed(6)}</td>
     <td>${g.usuario||'—'}</td>
     <td style="font-size:.72rem;color:#94a3b8">${g.ts||'—'}</td>
     <td style="white-space:nowrap">
       <button onclick="abrirGeoEditor('${g.codigo}',${g.lat},${g.lng})" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:4px 9px;font-size:.62rem;font-weight:700;cursor:pointer;margin-right:4px">✏️ Corregir</button>
       <button onclick="revertirGeo('${g.codigo}')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:6px;padding:4px 9px;font-size:.62rem;font-weight:700;cursor:pointer">↩ Revertir</button>
-    </td></tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:#475569;padding:16px">Sin ubicaciones corregidas todavía.</td></tr>';
+    </td></tr>`;
+  }).join('') : '<tr><td colspan="6" style="text-align:center;color:#475569;padding:16px">Sin ubicaciones corregidas todavía.</td></tr>';
   return `
     <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
       <span>📍 Ubicaciones corregidas de clientes</span>
       <button onclick="abrirGeoEditor('',null,null)" style="background:#15803d;color:#fff;border:none;border-radius:8px;padding:6px 11px;font-size:.7rem;font-weight:700;cursor:pointer">➕ Nueva corrección</button>
     </div>
-    <table><thead><tr><th>Código</th><th>Coordenadas (lat, lng)</th><th>Corregido por</th><th>Fecha</th><th>Acciones</th></tr></thead>
+    <table><thead><tr><th>Cliente</th><th>Dirección</th><th>Coordenadas (lat, lng)</th><th>Corregido por</th><th>Fecha</th><th>Acciones</th></tr></thead>
     <tbody>${filas}</tbody></table>`;
 }
 function abrirGeoEditor(cod, lat, lng){
   document.getElementById('geo-editor-overlay').style.display='flex';
   const codInput=document.getElementById('geo-ed-cod');
   codInput.value=cod||''; codInput.readOnly=!!cod;
+  geoEdInfo();
   document.getElementById('geo-ed-msg').textContent='';
   const la=(lat!=null && !isNaN(lat))?Number(lat):-1.66414;
   const lo=(lng!=null && !isNaN(lng))?Number(lng):-78.65467;
