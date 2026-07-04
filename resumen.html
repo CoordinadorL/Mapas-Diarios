@@ -225,6 +225,7 @@ async function cargarRango(desde,hasta){
     monto:pn(row['Monto']),
     motivo:row['Motivo']||'',
     bodega:String(row['Bodega']||'').toLowerCase().trim(),
+    metodoPago:String(row['MetodoPago']||'').toUpperCase().trim(),
   }));
   CUADRE_ROWS=(cuadre||[]).map(row=>({
     ts:String(row['Timestamp']||''),
@@ -311,22 +312,30 @@ function resumenCamion(fecha,chofer){
     const prev=porCodigo.get(r.codigo);
     if(!prev||r.ts>prev.ts) porCodigo.set(r.codigo,r);
   });
-  let entregados=0,recaudado=0,porCobrarN=0,porCobrarVal=0,quemadosN=0,quemadoVal=0,quemPendVal=0,quemPendN=0,anuladosN=0;
+  let entregados=0,recaudado=0,ncVal=0,ncN=0,porCobrarN=0,porCobrarVal=0,quemadosN=0,quemadoVal=0,anuladosN=0;
+  const met={EFECTIVO:0,TRANSFERENCIA:0,CHEQUE:0,CREDITO:0};
   porCodigo.forEach(r=>{
     const pedido=pedidos.find(p=>p.codigo===r.codigo);
     const total=pedido?pedido.total:r.monto;
-    if(r.estado==='ENTREGADO'||r.estado==='ENTREGADO_PARCIAL'){ entregados++; recaudado+=r.monto; }
-    else if(r.estado==='POR_COBRAR'){ porCobrarN++; porCobrarVal+=total; }
-    else if(r.estado==='QUEMADO'){
-      quemadosN++; quemadoVal+=r.monto;
-      const pend=Math.max(0,total-r.monto);
-      if(pend>0.009){ quemPendN++; quemPendVal+=pend; }
+    const m=(r.metodoPago && met[r.metodoPago]!==undefined)?r.metodoPago:'EFECTIVO';
+    if(r.estado==='ENTREGADO'||r.estado==='ENTREGADO_PARCIAL'){
+      entregados++; recaudado+=r.monto; met[m]+=r.monto;
+      const nc=Math.max(0,total-r.monto); if(nc>0.009){ ncVal+=nc; ncN++; }
     }
+    else if(r.estado==='QUEMADO'){
+      // Quemado de NC: lo quemado es dinero recaudado (cuenta en Entregados); la diferencia es NC.
+      entregados++; recaudado+=r.monto; met[m]+=r.monto; quemadosN++; quemadoVal+=r.monto;
+      const nc=Math.max(0,total-r.monto); if(nc>0.009){ ncVal+=nc; ncN++; }
+    }
+    else if(r.estado==='POR_COBRAR'){ porCobrarN++; porCobrarVal+=total; }
     else if(r.estado==='ANULADO'){ anuladosN++; }
   });
-  const pendientes=Math.max(0,totalPedidos-entregados-porCobrarN-quemadosN-anuladosN);
-  const pct=totalPedidos?Math.round((entregados+quemadosN+anuladosN+porCobrarN)/totalPedidos*100):0; // % de ruta "resuelta" (con algún estado)
-  return {chofer,fecha,bodega:bodegaDe(fecha,chofer),totalPedidos,totalMonto,totalPeso,entregados,recaudado,porCobrarN,porCobrarVal,quemadosN,quemadoVal,quemPendN,quemPendVal,anuladosN,pendientes,pct};
+  const pendientes=Math.max(0,totalPedidos-entregados-porCobrarN-anuladosN);
+  const pct=totalPedidos?Math.round((entregados+anuladosN+porCobrarN)/totalPedidos*100):0; // % de ruta "resuelta"
+  return {chofer,fecha,bodega:bodegaDe(fecha,chofer),totalPedidos,totalMonto,totalPeso,
+    entregados,recaudado,
+    efectivo:met.EFECTIVO,transferencia:met.TRANSFERENCIA,cheque:met.CHEQUE,credito:met.CREDITO,aDepositar:met.EFECTIVO,
+    ncVal,ncN,porCobrarN,porCobrarVal,quemadosN,quemadoVal,anuladosN,pendientes,pct};
 }
 
 function pillEstadoCuadre(estado){
@@ -411,16 +420,17 @@ async function render(){
   }
 
   // Totales globales
-  const tot={pedidos:0,monto:0,entregados:0,recaudado:0,porCobrarVal:0,quemPendVal:0,anulados:0};
-  resumenes.forEach(r=>{tot.pedidos+=r.totalPedidos;tot.monto+=r.totalMonto;tot.entregados+=r.entregados;tot.recaudado+=r.recaudado;tot.porCobrarVal+=r.porCobrarVal;tot.quemPendVal+=r.quemPendVal;tot.anulados+=r.anuladosN;});
+  const tot={pedidos:0,monto:0,entregados:0,recaudado:0,efectivo:0,porCobrarVal:0,ncVal:0,anulados:0};
+  resumenes.forEach(r=>{tot.pedidos+=r.totalPedidos;tot.monto+=r.totalMonto;tot.entregados+=r.entregados;tot.recaudado+=r.recaudado;tot.efectivo+=r.efectivo;tot.porCobrarVal+=r.porCobrarVal;tot.ncVal+=r.ncVal;tot.anulados+=r.anuladosN;});
 
   let html=`
   <div class="cards">
     <div class="card"><div class="v">${resumenes.length}</div><div class="l">Camiones</div></div>
     <div class="card"><div class="v">${tot.pedidos}</div><div class="l">Clientes totales</div></div>
     <div class="card green"><div class="v">$${tot.recaudado.toFixed(0)}</div><div class="l">Recaudado</div></div>
+    <div class="card green"><div class="v">$${tot.efectivo.toFixed(0)}</div><div class="l">💵 Efectivo a depositar</div></div>
     <div class="card orange"><div class="v">$${tot.porCobrarVal.toFixed(0)}</div><div class="l">Por cobrar</div></div>
-    <div class="card red"><div class="v">$${tot.quemPendVal.toFixed(0)}</div><div class="l">Pendiente en quemados</div></div>
+    <div class="card red"><div class="v">$${tot.ncVal.toFixed(0)}</div><div class="l">NC (no cobrado)</div></div>
     <div class="card"><div class="v">${tot.anulados}</div><div class="l">Anulados</div></div>
   </div>
 
@@ -428,7 +438,7 @@ async function render(){
   <table>
     <thead><tr>
       <th>Camión</th><th>Bodega</th><th>Avance</th><th>Clientes</th><th>Entregados</th>
-      <th>Por cobrar</th><th>Quemados</th><th>Anulados</th><th>$ Total</th><th>$ Recaudado</th><th></th>
+      <th>Por cobrar</th><th>NC</th><th>Quemado</th><th>Anulados</th><th>$ Total</th><th>$ Recaudado</th><th>Formas de pago</th><th>💵 Depositar</th><th></th>
     </tr></thead>
     <tbody>`;
   resumenes.sort((a,b)=>a.chofer.localeCompare(b.chofer)).forEach(r=>{
@@ -440,10 +450,13 @@ async function render(){
       <td>${r.totalPedidos}</td>
       <td><span class="pill green">${r.entregados}</span></td>
       <td>${r.porCobrarN} <span style="color:#64748b">($${r.porCobrarVal.toFixed(0)})</span></td>
-      <td>${r.quemadosN}${r.quemPendN>0?` <span class="pill orange">${r.quemPendN} pend $${r.quemPendVal.toFixed(0)}</span>`:''}</td>
+      <td style="color:${r.ncVal>0.009?'#f87171':'#64748b'}">$${r.ncVal.toFixed(0)}</td>
+      <td>${r.quemadosN>0?`${r.quemadosN} <span style="color:#fb923c">($${r.quemadoVal.toFixed(0)})</span>`:'—'}</td>
       <td>${r.anuladosN}</td>
       <td>$${r.totalMonto.toFixed(0)}</td>
       <td style="color:#4ade80;font-weight:700">$${r.recaudado.toFixed(0)}</td>
+      <td style="font-size:.62rem;color:#94a3b8;white-space:nowrap">💵$${r.efectivo.toFixed(0)} · 🏦$${r.transferencia.toFixed(0)} · 🧾$${r.cheque.toFixed(0)} · 📄$${r.credito.toFixed(0)}</td>
+      <td style="color:#4ade80;font-weight:800">$${r.aDepositar.toFixed(0)}</td>
       <td><a class="btn-map" href="mapa_live_F150.html?fecha=${encodeURIComponent(r.fecha)}&chofer=${encodeURIComponent(r.chofer)}&bodega=${encodeURIComponent(r.bodega||'')}">🗺️ Ver</a></td>
     </tr>`;
   });
@@ -468,12 +481,17 @@ function renderDetalleCartera(cont, r, fecha){
     <div class="detail-row"><span class="k">📦 Clientes</span><span class="v">${r.totalPedidos}</span></div>
     <div class="detail-row"><span class="k">✅ Entregados</span><span class="v" style="color:#4ade80">${r.entregados}</span></div>
     <div class="detail-row"><span class="k">🟠 Por cobrar</span><span class="v" style="color:#fb923c">${r.porCobrarN} — $${r.porCobrarVal.toFixed(2)}</span></div>
-    <div class="detail-row"><span class="k">🔥 Quemados</span><span class="v">${r.quemadosN} — $${r.quemadoVal.toFixed(2)}</span></div>
-    ${r.quemPendN>0?`<div class="detail-row"><span class="k">⚠️ Pendiente en quemados</span><span class="v" style="color:#f97316">$${r.quemPendVal.toFixed(2)}</span></div>`:''}
+    <div class="detail-row"><span class="k">🔥 Quemado (de NC · ya en recaudado)</span><span class="v" style="color:#fb923c">${r.quemadosN} — $${r.quemadoVal.toFixed(2)}</span></div>
+    <div class="detail-row"><span class="k">💰 NC (no cobrado)</span><span class="v" style="color:#f87171">${r.ncN} — $${r.ncVal.toFixed(2)}</span></div>
     <div class="detail-row"><span class="k">❌ Anulados</span><span class="v">${r.anuladosN}</span></div>
     <div class="detail-row"><span class="k">⏳ Pendientes</span><span class="v">${r.pendientes}</span></div>
     <div class="detail-row"><span class="k">💰 Total ruta</span><span class="v">$${r.totalMonto.toFixed(2)}</span></div>
     <div class="detail-row"><span class="k">✅ Recaudado</span><span class="v" style="color:#4ade80">$${r.recaudado.toFixed(2)}</span></div>
+    <div class="detail-row" style="padding-left:14px"><span class="k">💵 Efectivo</span><span class="v" style="color:#4ade80">$${r.efectivo.toFixed(2)}</span></div>
+    <div class="detail-row" style="padding-left:14px"><span class="k">🏦 Transferencia</span><span class="v">$${r.transferencia.toFixed(2)}</span></div>
+    <div class="detail-row" style="padding-left:14px"><span class="k">🧾 Cheque</span><span class="v">$${r.cheque.toFixed(2)}</span></div>
+    <div class="detail-row" style="padding-left:14px"><span class="k">📄 Crédito (paga después)</span><span class="v" style="color:#fbbf24">$${r.credito.toFixed(2)}</span></div>
+    <div class="detail-row" style="border-top:2px solid #1e3a5f"><span class="k" style="font-weight:800;color:#4ade80">💵 A DEPOSITAR (efectivo)</span><span class="v" style="color:#4ade80;font-size:1rem">$${r.aDepositar.toFixed(2)}</span></div>
     <div class="detail-row"><span class="k">📈 Avance</span><span class="v">${r.pct}%</span></div>
   </div>
   ${renderTablaCuadres(fecha, [r.chofer])}`;
@@ -501,32 +519,33 @@ async function renderRango(){
   }
   const fechasEnRango=[...FECHAS_DISPONIBLES].filter(f=>f>=desde&&f<=hasta).sort();
 
-  let totRecaudado=0, totPedidos=0, totAnulados=0, totQuemPend=0, totMonto=0;
+  let totRecaudado=0, totEfectivo=0, totPedidos=0, totAnulados=0, totNC=0, totMonto=0;
   const porCamionAcum={};
   let filaDias='';
 
   fechasEnRango.forEach(f=>{
     const choferesDia=[...new Set(MAPA_ROWS.filter(r=>r.fecha===f).map(r=>r.chofer))];
-    let recD=0,pedD=0,anulD=0,quemPendD=0,montoD=0;
+    let recD=0,efeD=0,pedD=0,anulD=0,ncD=0,montoD=0;
     choferesDia.forEach(c=>{
       const r=resumenCamion(f,c);
-      recD+=r.recaudado; pedD+=r.totalPedidos; anulD+=r.anuladosN; quemPendD+=r.quemPendVal; montoD+=r.totalMonto;
-      if(!porCamionAcum[c]) porCamionAcum[c]={pedidos:0,recaudado:0,anulados:0,quemPend:0,total:0,dias:0};
+      recD+=r.recaudado; efeD+=r.efectivo; pedD+=r.totalPedidos; anulD+=r.anuladosN; ncD+=r.ncVal; montoD+=r.totalMonto;
+      if(!porCamionAcum[c]) porCamionAcum[c]={pedidos:0,recaudado:0,efectivo:0,anulados:0,nc:0,total:0,dias:0};
       porCamionAcum[c].pedidos+=r.totalPedidos;
       porCamionAcum[c].recaudado+=r.recaudado;
+      porCamionAcum[c].efectivo+=r.efectivo;
       porCamionAcum[c].anulados+=r.anuladosN;
-      porCamionAcum[c].quemPend+=r.quemPendVal;
+      porCamionAcum[c].nc+=r.ncVal;
       porCamionAcum[c].total+=r.totalMonto;
       porCamionAcum[c].dias+=1;
     });
-    totRecaudado+=recD; totPedidos+=pedD; totAnulados+=anulD; totQuemPend+=quemPendD; totMonto+=montoD;
-    filaDias+=`<tr><td>${f}</td><td>${choferesDia.length}</td><td>${pedD}</td><td style="color:#4ade80;font-weight:700">$${recD.toFixed(2)}</td><td>${anulD}</td><td style="color:${quemPendD>0.009?'#f97316':'#64748b'}">$${quemPendD.toFixed(2)}</td></tr>`;
+    totRecaudado+=recD; totEfectivo+=efeD; totPedidos+=pedD; totAnulados+=anulD; totNC+=ncD; totMonto+=montoD;
+    filaDias+=`<tr><td>${f}</td><td>${choferesDia.length}</td><td>${pedD}</td><td style="color:#4ade80;font-weight:700">$${recD.toFixed(2)}</td><td style="color:#4ade80;font-weight:800">$${efeD.toFixed(2)}</td><td>${anulD}</td><td style="color:${ncD>0.009?'#f87171':'#64748b'}">$${ncD.toFixed(2)}</td></tr>`;
   });
 
   let filasCamion='';
   Object.keys(porCamionAcum).sort().forEach(c=>{
     const a=porCamionAcum[c];
-    filasCamion+=`<tr><td><b>${c}</b></td><td>${a.dias}</td><td>${a.pedidos}</td><td>$${a.total.toFixed(2)}</td><td style="color:#4ade80;font-weight:700">$${a.recaudado.toFixed(2)}</td><td>${a.anulados}</td><td style="color:${a.quemPend>0.009?'#f97316':'#64748b'}">$${a.quemPend.toFixed(2)}</td></tr>`;
+    filasCamion+=`<tr><td><b>${c}</b></td><td>${a.dias}</td><td>${a.pedidos}</td><td>$${a.total.toFixed(2)}</td><td style="color:#4ade80;font-weight:700">$${a.recaudado.toFixed(2)}</td><td style="color:#4ade80;font-weight:800">$${a.efectivo.toFixed(2)}</td><td>${a.anulados}</td><td style="color:${a.nc>0.009?'#f87171':'#64748b'}">$${a.nc.toFixed(2)}</td></tr>`;
   });
 
   wrap.innerHTML=`
@@ -535,15 +554,16 @@ async function renderRango(){
       <div class="card"><div class="v">${totPedidos}</div><div class="l">Pedidos totales</div></div>
       <div class="card"><div class="v">$${totMonto.toFixed(0)}</div><div class="l">Facturado</div></div>
       <div class="card green"><div class="v">$${totRecaudado.toFixed(0)}</div><div class="l">Recaudado</div></div>
-      <div class="card red"><div class="v">$${totQuemPend.toFixed(0)}</div><div class="l">Pendiente en quemados</div></div>
+      <div class="card green"><div class="v">$${totEfectivo.toFixed(0)}</div><div class="l">💵 Efectivo</div></div>
+      <div class="card red"><div class="v">$${totNC.toFixed(0)}</div><div class="l">NC (no cobrado)</div></div>
       <div class="card orange"><div class="v">${totAnulados}</div><div class="l">Anulados</div></div>
     </div>
     <div class="section-title">📈 Por día</div>
-    <table><thead><tr><th>Fecha</th><th>Camiones</th><th>Pedidos</th><th>Recaudado</th><th>Anulados</th><th>Pend. quemados</th></tr></thead>
-    <tbody>${filaDias||'<tr><td colspan="6" style="text-align:center;color:#475569;padding:16px">Sin rutas en este rango</td></tr>'}</tbody></table>
+    <table><thead><tr><th>Fecha</th><th>Camiones</th><th>Pedidos</th><th>Recaudado</th><th>💵 Efectivo</th><th>Anulados</th><th>NC</th></tr></thead>
+    <tbody>${filaDias||'<tr><td colspan="7" style="text-align:center;color:#475569;padding:16px">Sin rutas en este rango</td></tr>'}</tbody></table>
     <div class="section-title">🚛 Por camión (acumulado del rango)</div>
-    <table><thead><tr><th>Camión</th><th>Días activo</th><th>Pedidos</th><th>$ Total</th><th>$ Recaudado</th><th>Anulados</th><th>Pend. quemados</th></tr></thead>
-    <tbody>${filasCamion||'<tr><td colspan="7" style="text-align:center;color:#475569;padding:16px">Sin datos</td></tr>'}</tbody></table>`;
+    <table><thead><tr><th>Camión</th><th>Días activo</th><th>Pedidos</th><th>$ Total</th><th>$ Recaudado</th><th>💵 Efectivo</th><th>Anulados</th><th>NC</th></tr></thead>
+    <tbody>${filasCamion||'<tr><td colspan="8" style="text-align:center;color:#475569;padding:16px">Sin datos</td></tr>'}</tbody></table>`;
 }
 
 cargarTodo();
