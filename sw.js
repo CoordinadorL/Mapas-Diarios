@@ -2,7 +2,7 @@
 // Service Worker — Mapas Diarios PWA
 // Permite instalación en pantalla de inicio y caché básico
 // ═══════════════════════════════════════════════════════════
-const CACHE_NAME = 'mapas-diarios-v7';
+const CACHE_NAME = 'mapas-diarios-v8';
 
 // Recursos a cachear para uso offline básico
 const CACHE_ASSETS = [

@@ -1328,18 +1328,20 @@ function makeIcon(vendorColor,num,isFirst,d,offsetY=0){
 
 // Genera los 2 cuadros inline de quema parcial: cuánto se quema y la diferencia pendiente automática
 function quemaRowHtml(idx, total, defaultQuemado){
-  const pend = Math.max(0, total - defaultQuemado);
+  // Igual que la devolución parcial: se escribe lo QUEMADO (recaudado) y la NC (diferencia) sale sola.
+  const q = Number(defaultQuemado)||0;
+  const nc = Math.max(0, total - q);
   return `<div id="quema-row-${idx}" style="display:none;gap:3px;align-items:center;margin-top:4px">
     <div style="flex:1;position:relative">
       <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:.58rem;color:#c2410c;pointer-events:none">🔥 $</span>
-      <input id="quema-val-${idx}" type="number" step="0.01" min="0" max="${total}" value="${defaultQuemado.toFixed(2)}"
+      <input id="quema-val-${idx}" type="number" step="0.01" min="0" max="${total}" value="${q?q.toFixed(2):''}" placeholder="0.00"
         oninput="calcQuemaInline(${idx},${total})"
         style="width:100%;padding:3px 3px 3px 26px;font-size:.62rem;background:#fff7ed;border:1.5px solid #f97316;border-radius:6px;color:#c2410c;font-weight:700;outline:none">
     </div>
     <div style="flex:1;position:relative">
-      <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:.55rem;color:#475569;pointer-events:none">Pend $</span>
-      <input id="quema-pend-${idx}" type="number" readonly value="${pend.toFixed(2)}"
-        style="width:100%;padding:3px 3px 3px 32px;font-size:.62rem;background:#f8fafc;border:1.5px solid #94a3b8;border-radius:6px;color:#334155;font-weight:700;outline:none">
+      <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:.55rem;color:#dc2626;pointer-events:none">NC $</span>
+      <input id="quema-nc-${idx}" type="number" readonly value="${nc.toFixed(2)}"
+        style="width:100%;padding:3px 3px 3px 30px;font-size:.62rem;background:#fef2f2;border:1.5px solid #dc2626;border-radius:6px;color:#dc2626;font-weight:700;outline:none">
     </div>
     <button onclick="confirmarQuema(${idx})" id="quema-ok-${idx}"
       style="background:#c2410c;border:none;color:#fff;padding:3px 6px;border-radius:6px;font-size:.6rem;font-weight:700;cursor:pointer;white-space:nowrap">✓OK</button>
@@ -1400,8 +1402,8 @@ function buildPopup(d,idx){
     : '';
   const quemInfo = isQuem
     ? `<div style="background:${pendienteQuema>0.009?'#fff7ed':'#fef2f2'};border-left:3px solid ${pendienteQuema>0.009?'#f97316':'#7f1d1d'};padding:5px 8px;margin-top:6px;border-radius:4px">
-        <div style="font-size:.68rem;color:#7c2d12;font-weight:700">🔥 ${pendienteQuema>0.009?'Quema parcial':'Quemado total'}</div>
-        <div style="font-size:.72rem;color:#7c2d12;margin-top:2px">Quemado: <b>$${quemVal.toFixed(2)}</b>${pendienteQuema>0.009?` &nbsp;|&nbsp; Pendiente: <b style="color:#dc2626">$${pendienteQuema.toFixed(2)}</b>`:''}</div>
+        <div style="font-size:.68rem;color:#7c2d12;font-weight:700">🔥 Quema de NC</div>
+        <div style="font-size:.72rem;color:#7c2d12;margin-top:2px">Recaudado: <b>$${quemVal.toFixed(2)}</b>${pendienteQuema>0.009?` &nbsp;|&nbsp; NC: <b style="color:#dc2626">$${pendienteQuema.toFixed(2)}</b>`:''}</div>
       </div>`
     : '';
   const notaInfo = notas.has(idx)
@@ -1915,14 +1917,14 @@ function showQuemaParcial(idx, total){
   if(!row) return;
   const visible = row.style.display === 'flex';
   row.style.display = visible ? 'none' : 'flex';
+  if(!visible){ setTimeout(()=>{ const el=document.getElementById('quema-val-'+idx); if(el) el.focus(); }, 60); }
 }
 function calcQuemaInline(idx, total){
   const qEl = document.getElementById('quema-val-'+idx);
-  const pEl = document.getElementById('quema-pend-'+idx);
-  if(!qEl||!pEl) return;
+  const ncEl = document.getElementById('quema-nc-'+idx);
+  if(!qEl||!ncEl) return;
   const q = Math.min(Math.max(parseFloat(qEl.value)||0, 0), total);
-  const pend = Math.max(0, total - q);
-  pEl.value = pend.toFixed(2);
+  ncEl.value = Math.max(0, total - q).toFixed(2);
 }
 function confirmarQuema(idx){
   const d = DATA[idx]; if(!d) return;
@@ -2596,14 +2598,16 @@ function generarReporte(){
     } else { entVal+=d.total; }
   });
   const xcVal=DATA.filter((_,i)=>porCobrar.has(i)).reduce((s,d)=>s+d.total,0);
-  let quemVal=0, quemPendVal=0, quemPendCount=0;
+  // Quemado de NC: lo quemado es dinero recaudado (suma a Entregados); la diferencia va a NC parcial.
+  let quemMonto=0;
   DATA.forEach((d,i)=>{
     if(!quemados.has(i))return;
-    const q=quemadoParcial.has(i)?quemadoParcial.get(i):d.total;
-    const pendQ=Math.max(0,d.total-q);
-    quemVal+=q;
-    if(pendQ>0.009){quemPendVal+=pendQ;quemPendCount++;}
+    const q=Math.min(quemadoParcial.has(i)?quemadoParcial.get(i):d.total, d.total);
+    entVal+=q; quemMonto+=q;
+    const dif=Math.max(0,d.total-q);
+    if(dif>0.009){ ncVal+=dif; ncCount++; }
   });
+  const entregadosCount = vis + quemCount; // los quemados también recaudaron → cuentan en Entregados
   const anulVal=DATA.filter((_,i)=>anulados.has(i)).reduce((s,d)=>s+d.total,0);
   const now=new Date().toLocaleString('es-EC');
 
@@ -2619,13 +2623,12 @@ function generarReporte(){
     </div>
     <div class="exp-section">
       <div class="exp-row"><span class="exp-label">📦 Total pedidos</span><span class="exp-val blue">${tot} — $${totalVal.toFixed(2)}</span></div>
-      <div class="exp-row"><span class="exp-label">✅ Entregados</span><span class="exp-val green">${vis} — $${entVal.toFixed(2)}</span></div>
+      <div class="exp-row"><span class="exp-label">✅ Entregados</span><span class="exp-val green">${entregadosCount} — $${entVal.toFixed(2)}</span></div>
       <div class="exp-row"><span class="exp-label">🟠 Por cobrar</span><span class="exp-val orange">${xcCount} — $${xcVal.toFixed(2)}</span></div>
-      <div class="exp-row"><span class="exp-label">🔥 Quemados</span><span class="exp-val red">${quemCount} — $${quemVal.toFixed(2)}</span></div>
-      ${quemPendCount>0?`<div class="exp-row"><span class="exp-label">⚠️ Quemados c/ pendiente</span><span class="exp-val orange">${quemPendCount} — $${quemPendVal.toFixed(2)}</span></div>`:''}
-      <div class="exp-row"><span class="exp-label">❌ Anulados</span><span class="exp-val" style="color:#818cf8">${anulCount} — $${anulVal.toFixed(2)}</span></div>
       <div class="exp-row"><span class="exp-label">💰 NC Parciales</span><span class="exp-val red">${ncCount} — $${ncVal.toFixed(2)}</span></div>
       <div class="exp-row"><span class="exp-label">🧾 Retención 2%</span><span class="exp-val" style="color:#c084fc">${retenCount} — $${retenVal.toFixed(2)}</span></div>
+      <div class="exp-row"><span class="exp-label">🔥 Quemado (de NC · ya en Entregados)</span><span class="exp-val" style="color:#fb923c">${quemCount} — $${quemMonto.toFixed(2)}</span></div>
+      <div class="exp-row"><span class="exp-label">❌ Anulados</span><span class="exp-val" style="color:#818cf8">${anulCount} — $${anulVal.toFixed(2)}</span></div>
       <div class="exp-row"><span class="exp-label">⏳ Pendientes</span><span class="exp-val">${pend}</span></div>
     </div>
     ${anulDetalle?`<div class="exp-section"><div style="font-size:.6rem;color:#64748b;font-weight:700;margin-bottom:4px">MOTIVOS DE ANULACIÓN</div>${anulDetalle}</div>`:''}`;
@@ -2649,27 +2652,27 @@ function getReporteTexto(){
     } else { entVal+=d.total; }
   });
   const xcVal=DATA.filter((_,i)=>porCobrar.has(i)).reduce((s,d)=>s+d.total,0);
-  let quemVal=0, quemPendVal=0, quemPendCount=0;
+  let quemMonto=0;
   DATA.forEach((d,i)=>{
     if(!quemados.has(i))return;
-    const q=quemadoParcial.has(i)?quemadoParcial.get(i):d.total;
-    const pend=Math.max(0,d.total-q);
-    quemVal+=q;
-    if(pend>0.009){quemPendVal+=pend;quemPendCount++;}
+    const q=Math.min(quemadoParcial.has(i)?quemadoParcial.get(i):d.total, d.total);
+    entVal+=q; quemMonto+=q;
+    const dif=Math.max(0,d.total-q);
+    if(dif>0.009){ ncVal+=dif; ncCount++; }
   });
+  const entregadosCount = vis + quemCount;
   const anulVal=DATA.filter((_,i)=>anulados.has(i)).reduce((s,d)=>s+d.total,0);
   const now=new Date().toLocaleString('es-EC');
   let txt=`🚛 *REPORTE DE RUTA*\n`;
   txt+=`${activeChofer} | ${activeFecha}\n`;
   txt+=`🕐 ${now}\n\n`;
   txt+=`📦 Total: ${tot} pedidos — $${totalVal.toFixed(2)}\n`;
-  txt+=`✅ Entregados: ${vis} — $${entVal.toFixed(2)} recaudado\n`;
+  txt+=`✅ Entregados: ${entregadosCount} — $${entVal.toFixed(2)} recaudado\n`;
   txt+=`🟠 Por cobrar: ${xcCount} — $${xcVal.toFixed(2)}\n`;
-  txt+=`🔥 Quemados: ${quemCount} — $${quemVal.toFixed(2)}\n`;
-  if(quemPendCount>0) txt+=`⚠️ Quemados con pendiente: ${quemPendCount} — $${quemPendVal.toFixed(2)} por quemar/cobrar aún\n`;
-  txt+=`❌ Anulados: ${anulCount} — $${anulVal.toFixed(2)}\n`;
   if(ncVal>0) txt+=`💰 NC Parciales: ${ncCount} — $${ncVal.toFixed(2)}\n`;
   if(retenCount>0) txt+=`🧾 Retención 2%: ${retenCount} — $${retenVal.toFixed(2)}\n`;
+  if(quemCount>0) txt+=`🔥 Quemado (de NC · ya en Entregados): ${quemCount} — $${quemMonto.toFixed(2)}\n`;
+  txt+=`❌ Anulados: ${anulCount} — $${anulVal.toFixed(2)}\n`;
   txt+=`⏳ Pendientes: ${pend}\n`;
   if(anulados.size){
     txt+=`\n📋 MOTIVOS ANULACIÓN:\n`;
