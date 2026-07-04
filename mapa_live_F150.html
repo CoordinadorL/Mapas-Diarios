@@ -1032,7 +1032,9 @@ let LABEL_OFFSETS={};
 let notas=new Map();        // índice → texto de nota
 let retencionSet=new Set(); // índices con retención 2%
 let quemadoParcial=new Map(); // índice → monto ya quemado (si es parcial, el resto queda pendiente)
+let metodoPago=new Map();   // índice → forma de pago de lo recaudado: EFECTIVO | TRANSFERENCIA | CHEQUE | CREDITO
 let tileLayer=null;
+const METODOS={EFECTIVO:{lbl:'💵 Efectivo',color:'#16a34a'},TRANSFERENCIA:{lbl:'🏦 Transf.',color:'#2563eb'},CHEQUE:{lbl:'🧾 Cheque',color:'#7c3aed'},CREDITO:{lbl:'📄 Crédito',color:'#b45309'}};
 
 // ── BODEGAS (puntos de partida de la ruta) ──────────────────
 const BODEGAS = {
@@ -1206,7 +1208,7 @@ function onBodegaChange(){
   const order=nearestNeighborFrom(pts,bodega.lat,bodega.lng);
   const reordered=order.map(i=>DATA[i]);
   DATA=reordered;
-  const newCompleted=new Set(),newXC=new Set(),newQuem=new Set(),newAnul=new Map(),newDev=new Map(),newNotas=new Map(),newRet=new Set(),newQuemP=new Map();
+  const newCompleted=new Set(),newXC=new Set(),newQuem=new Set(),newAnul=new Map(),newDev=new Map(),newNotas=new Map(),newRet=new Set(),newQuemP=new Map(),newMetodo=new Map();
   DATA.forEach((d,newI)=>{
     const oldI=oldIndexOf.get(d);
     if(completed.has(oldI))newCompleted.add(newI);
@@ -1217,9 +1219,10 @@ function onBodegaChange(){
     if(notas.has(oldI))newNotas.set(newI,notas.get(oldI));
     if(retencionSet.has(oldI))newRet.add(newI);
     if(quemadoParcial.has(oldI))newQuemP.set(newI,quemadoParcial.get(oldI));
+    if(metodoPago.has(oldI))newMetodo.set(newI,metodoPago.get(oldI));
   });
   completed=newCompleted;porCobrar=newXC;quemados=newQuem;
-  anulados=newAnul;devParcial=newDev;notas=newNotas;retencionSet=newRet;quemadoParcial=newQuemP;
+  anulados=newAnul;devParcial=newDev;notas=newNotas;retencionSet=newRet;quemadoParcial=newQuemP;metodoPago=newMetodo;
   LABEL_OFFSETS=computeLabelOffsets(DATA);
   draw(activeVendedor);
   updateStats();updateProgress();updatePanel();updateBottomBar();
@@ -1239,7 +1242,7 @@ function drawBodegaMarker(){
 // ── FILTRAR + OPTIMIZAR ────────────────────────────────────
 function applyFiltersAndDraw(){
   // Limpiar TODOS los estados (no solo completed) para no mezclar datos entre camiones.
-  completed.clear();porCobrar.clear();quemados.clear();anulados.clear();devParcial.clear();notas.clear();retencionSet.clear();quemadoParcial.clear();
+  completed.clear();porCobrar.clear();quemados.clear();anulados.clear();devParcial.clear();notas.clear();retencionSet.clear();quemadoParcial.clear();metodoPago.clear();
   activeVendedor='ALL';
   const noData=document.getElementById('no-data');
   if(!activeChofer){
@@ -1331,7 +1334,7 @@ function quemaRowHtml(idx, total, defaultQuemado){
   // Igual que la devolución parcial: se escribe lo QUEMADO (recaudado) y la NC (diferencia) sale sola.
   const q = Number(defaultQuemado)||0;
   const nc = Math.max(0, total - q);
-  return `<div id="quema-row-${idx}" style="display:none;gap:3px;align-items:center;margin-top:4px">
+  return `<div id="quema-row-${idx}" style="display:none;gap:3px;align-items:center;margin-top:4px;flex-wrap:wrap">
     <div style="flex:1;position:relative">
       <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:.58rem;color:#c2410c;pointer-events:none">🔥 $</span>
       <input id="quema-val-${idx}" type="number" step="0.01" min="0" max="${total}" value="${q?q.toFixed(2):''}" placeholder="0.00"
@@ -1343,8 +1346,10 @@ function quemaRowHtml(idx, total, defaultQuemado){
       <input id="quema-nc-${idx}" type="number" readonly value="${nc.toFixed(2)}"
         style="width:100%;padding:3px 3px 3px 30px;font-size:.62rem;background:#fef2f2;border:1.5px solid #dc2626;border-radius:6px;color:#dc2626;font-weight:700;outline:none">
     </div>
-    <button onclick="confirmarQuema(${idx})" id="quema-ok-${idx}"
-      style="background:#c2410c;border:none;color:#fff;padding:3px 6px;border-radius:6px;font-size:.6rem;font-weight:700;cursor:pointer;white-space:nowrap">✓OK</button>
+    <div style="flex-basis:100%">
+      <div style="font-size:.55rem;color:#64748b;font-weight:700;text-align:center;margin:2px 0">¿Cómo pagó lo quemado?</div>
+      ${metodoBtnsHtml('confirmarQuema', idx)}
+    </div>
   </div>`;
 }
 function buildPopup(d,idx){
@@ -1415,11 +1420,12 @@ function buildPopup(d,idx){
   if(isEnt || isXC || isQuem || isAnul){
     if(isAnul){
       actionsHtml = '<div style="display:flex;gap:4px">'
-        +'<button class="pc-btn" style="flex:1;background:#14532d;color:#4ade80;font-size:.6rem;padding:5px" onclick="entregarDesdeNC('+idx+')">✅ Entregar</button>'
+        +'<button class="pc-btn" style="flex:1;background:#14532d;color:#4ade80;font-size:.6rem;padding:5px" onclick="showMetodoEntrega('+idx+')">✅ Entregar</button>'
         +'<button class="pc-btn" style="flex:1;background:#7f1d1d;color:#fca5a5;font-size:.6rem;padding:5px" onclick="showQuemaParcial('+idx+','+d.total+')">🔥 Quemar</button>'
         +'<button class="pc-btn" style="flex:1;background:#334155;color:#94a3b8;font-size:.6rem;padding:5px" onclick="resetEstado('+idx+')">↩</button>'
         +'</div>'
-        + quemaRowHtml(idx, d.total, d.total);
+        +'<div id="metodo-row-'+idx+'" style="display:none;margin-top:4px"><div style="font-size:.56rem;color:#64748b;font-weight:700;text-align:center;margin-bottom:2px">¿Cómo pagó?</div>'+metodoBtnsHtml('entregarConMetodo', idx)+'</div>'
+        + quemaRowHtml(idx, d.total, 0);
     } else if(isQuem && pendienteQuema>0.009){
       actionsHtml = '<div style="display:flex;gap:4px">'
         +'<button class="pc-btn" style="flex:1;background:#c2410c;color:#fff;font-size:.6rem;padding:5px" onclick="showQuemaParcial('+idx+','+d.total+')">🔥 Quemar pendiente</button>'
@@ -1454,9 +1460,13 @@ function buildPopup(d,idx){
         style="background:#78350f;border:1.5px solid #f59e0b;color:#fde68a;padding:3px 7px;border-radius:7px;font-size:.58rem;font-weight:700;cursor:pointer;white-space:nowrap;margin-top:3px;width:100%">⚠️ Ret 2% — No autorizado</button>`;
     actionsHtml = `
     <div style="display:flex;gap:4px;margin-bottom:3px">
-      <button class="pc-btn pc-btn-done"    onclick="toggleVisited(${idx})"    style="flex:1;padding:5px 2px;font-size:.65rem">✅ OK</button>
-      <button class="pc-btn pc-btn-xc"      onclick="togglePorCobrar(${idx})" style="flex:1;padding:5px 2px;font-size:.65rem">💲 XC</button>
-      <button class="pc-btn pc-btn-anulado" onclick="showAnuladoMenu(${idx})" style="flex:1;padding:5px 2px;font-size:.65rem">NC ❌</button>
+      <button class="pc-btn pc-btn-done"    onclick="showMetodoEntrega(${idx})" style="flex:1;padding:5px 2px;font-size:.65rem">✅ Entregar</button>
+      <button class="pc-btn pc-btn-xc"      onclick="togglePorCobrar(${idx})"   style="flex:1;padding:5px 2px;font-size:.65rem">💲 XC</button>
+      <button class="pc-btn pc-btn-anulado" onclick="showAnuladoMenu(${idx})"    style="flex:1;padding:5px 2px;font-size:.65rem">NC ❌</button>
+    </div>
+    <div id="metodo-row-${idx}" style="display:none;margin-bottom:3px">
+      <div style="font-size:.56rem;color:#64748b;font-weight:700;text-align:center;margin-bottom:2px">¿Cómo pagó?</div>
+      ${metodoBtnsHtml('entregarConMetodo', idx)}
     </div>
     <div id="anulado-menu-${idx}" style="display:none;margin-bottom:3px">
       <select class="motivo-select" onchange="marcarAnulado(${idx},this.value)">
@@ -1472,7 +1482,7 @@ function buildPopup(d,idx){
     <div style="display:flex;gap:3px;align-items:center;margin-bottom:3px">
       <button onclick="showDevParcial(${idx},${d.total})"
         style="background:#065f46;border:none;color:#6ee7b7;padding:3px 7px;border-radius:7px;font-size:.58rem;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">💰 Dev.</button>
-      <div style="flex:1;display:none;gap:2px;align-items:center" id="dev-row-${idx}">
+      <div style="flex:1;display:none;gap:2px;align-items:center;flex-wrap:wrap" id="dev-row-${idx}">
         <div style="flex:1;position:relative">
           <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);font-size:.58rem;color:#dc2626;pointer-events:none">NC $</span>
           <input id="dev-nc-${idx}" type="number" step="0.01" min="0" max="${d.total}" value="0"
@@ -1486,8 +1496,10 @@ function buildPopup(d,idx){
             value="${d.total.toFixed(2)}"
             style="width:100%;padding:3px 3px 3px 22px;font-size:.62rem;background:#f0fdf4;border:1.5px solid #16a34a;border-radius:6px;color:#15803d;font-weight:700;outline:none">
         </div>
-        <button onclick="confirmarDev(${idx})" id="dev-ok-${idx}"
-          style="background:#15803d;border:none;color:#fff;padding:3px 6px;border-radius:6px;font-size:.6rem;font-weight:700;cursor:pointer;white-space:nowrap;display:none">✓OK</button>
+        <div id="dev-ok-${idx}" style="display:none;flex-basis:100%">
+          <div style="font-size:.55rem;color:#64748b;font-weight:700;text-align:center;margin:2px 0">¿Cómo pagó lo cobrado?</div>
+          ${metodoBtnsHtml('confirmarDev', idx)}
+        </div>
       </div>
     </div>
     <div style="display:flex;gap:4px;align-items:center;margin-bottom:2px">
@@ -1627,6 +1639,7 @@ async function syncAvance(idx){
         chofer:d.chofer,
         codigoCliente:d.codigo,
         estado, monto, motivo,
+        metodoPago:(metodoPago.get(idx)||''),
         usuario:(sesion&&sesion.usuario)||d.chofer,
         rol:(sesion&&sesion.rol)||'reparto',
         bodega:activeBodega
@@ -1661,6 +1674,9 @@ async function pollAvanceRemoto(){
       else if(estado==='POR_COBRAR'){ porCobrar.add(idx); }
       else if(estado==='QUEMADO'){ quemados.add(idx); quemadoParcial.set(idx, monto||DATA[idx].total); }
       else if(estado==='ANULADO'){ anulados.set(idx, motivo); }
+      const met=String(row.MetodoPago||'').toUpperCase();
+      if(met && (estado==='ENTREGADO'||estado==='ENTREGADO_PARCIAL'||estado==='QUEMADO')) metodoPago.set(idx, met);
+      // Si el servidor no devuelve método (transición sin la columna aún), se conserva el local.
       const after=JSON.stringify(estadoActualDe(idx));
       if(before!==after) changed=true;
     });
@@ -1926,30 +1942,50 @@ function calcQuemaInline(idx, total){
   const q = Math.min(Math.max(parseFloat(qEl.value)||0, 0), total);
   ncEl.value = Math.max(0, total - q).toFixed(2);
 }
-function confirmarQuema(idx){
+function confirmarQuema(idx, metodo){
   const d = DATA[idx]; if(!d) return;
   const qEl = document.getElementById('quema-val-'+idx);
-  const q = Math.min(Math.max(parseFloat(qEl?qEl.value:d.total)||0, 0), d.total);
+  const q = Math.min(Math.max(parseFloat(qEl?qEl.value:0)||0, 0), d.total);
   quemadoParcial.set(idx, q);
   quemados.add(idx);
-  anulados.delete(idx); completed.delete(idx); porCobrar.delete(idx);
+  if(metodo) metodoPago.set(idx, metodo);
+  anulados.delete(idx); completed.delete(idx); porCobrar.delete(idx); devParcial.delete(idx);
   refreshMarkerIcon(idx); updateProgress(); updateStats(); updatePanel();
   saveLocalState(); syncAvance(idx);
   const m=allMarkers[idx];
   if(m){m.setPopupContent(buildPopup(DATA[idx],idx));m.openPopup();}
 }
 
-function confirmarDev(idx){
+// ── FORMAS DE PAGO ─────────────────────────────────────────
+// Genera 4 botones (efectivo/transferencia/cheque/crédito) que llaman a fn(idx,'METODO').
+function metodoBtnsHtml(fn, idx){
+  return `<div style="display:flex;gap:3px">`
+    + Object.keys(METODOS).map(m=>`<button onclick="${fn}(${idx},'${m}')" style="flex:1;background:${METODOS[m].color};border:none;color:#fff;padding:5px 2px;border-radius:6px;font-size:.55rem;font-weight:700;cursor:pointer;white-space:nowrap">${METODOS[m].lbl}</button>`).join('')
+    + `</div>`;
+}
+function showMetodoEntrega(idx){
+  const row=document.getElementById('metodo-row-'+idx);
+  if(!row) return;
+  row.style.display = row.style.display==='block' ? 'none' : 'block';
+}
+// Entrega completa con forma de pago (crédito = entregado, paga después → no es efectivo).
+function entregarConMetodo(idx, metodo){
+  metodoPago.set(idx, metodo);
+  completed.add(idx);
+  porCobrar.delete(idx); quemados.delete(idx); anulados.delete(idx); quemadoParcial.delete(idx); devParcial.delete(idx);
+  refreshMarkerIcon(idx); updateProgress(); updateStats(); updatePanel();
+  saveLocalState(); syncAvance(idx);
+  map.closePopup();
+}
+
+function confirmarDev(idx, metodo){
   const d=DATA[idx]; if(!d)return;
-  // New inline inputs (cobra = what client pays)
   const cobraEl = document.getElementById('dev-cobra-'+idx);
-  const ncEl    = document.getElementById('dev-nc-'+idx);
-  let pagado = d.total;
-  if(cobraEl){ pagado = parseFloat(cobraEl.value)||d.total; }
-  else { const inp=document.getElementById('dev-input-'+idx); pagado=parseFloat(inp?inp.value:d.total)||d.total; }
+  let pagado = cobraEl ? (parseFloat(cobraEl.value)||d.total) : d.total;
   devParcial.set(idx, pagado);
   completed.add(idx);
-  porCobrar.delete(idx); quemados.delete(idx); anulados.delete(idx);
+  if(metodo) metodoPago.set(idx, metodo);
+  porCobrar.delete(idx); quemados.delete(idx); anulados.delete(idx); quemadoParcial.delete(idx);
   refreshMarkerIcon(idx); updateProgress(); updateStats(); updatePanel();
   saveLocalState();
   syncAvance(idx);
@@ -2430,7 +2466,7 @@ function reoptimizarDesdeAqui(){
   DATA = [...done, ...reordered];
 
   // Reset state maps a los nuevos índices, usando la referencia guardada arriba
-  const newCompleted=new Set(), newXC=new Set(), newQuem=new Set(), newAnul=new Map(), newDev=new Map(), newNotas=new Map(), newRet=new Set(), newQuemP=new Map();
+  const newCompleted=new Set(), newXC=new Set(), newQuem=new Set(), newAnul=new Map(), newDev=new Map(), newNotas=new Map(), newRet=new Set(), newQuemP=new Map(), newMetodo=new Map();
   DATA.forEach((d,newI)=>{
     const oldI = oldIndexOf.get(d);
     if(completed.has(oldI)) newCompleted.add(newI);
@@ -2441,9 +2477,10 @@ function reoptimizarDesdeAqui(){
     if(notas.has(oldI)) newNotas.set(newI, notas.get(oldI));
     if(retencionSet.has(oldI)) newRet.add(newI);
     if(quemadoParcial.has(oldI)) newQuemP.set(newI, quemadoParcial.get(oldI));
+    if(metodoPago.has(oldI)) newMetodo.set(newI, metodoPago.get(oldI));
   });
   completed=newCompleted; porCobrar=newXC; quemados=newQuem;
-  anulados=newAnul; devParcial=newDev; notas=newNotas; retencionSet=newRet; quemadoParcial=newQuemP;
+  anulados=newAnul; devParcial=newDev; notas=newNotas; retencionSet=newRet; quemadoParcial=newQuemP; metodoPago=newMetodo;
 
   LABEL_OFFSETS = computeLabelOffsets(DATA);
   draw(activeVendedor);
@@ -2608,6 +2645,16 @@ function generarReporte(){
     if(dif>0.009){ ncVal+=dif; ncCount++; }
   });
   const entregadosCount = vis + quemCount; // los quemados también recaudaron → cuentan en Entregados
+  // Desglose de lo recaudado por forma de pago (efectivo/transferencia/cheque/crédito)
+  const metSum={EFECTIVO:0,TRANSFERENCIA:0,CHEQUE:0,CREDITO:0};
+  DATA.forEach((d,i)=>{
+    let amt=0;
+    if(completed.has(i)) amt = devParcial.has(i)?devParcial.get(i):d.total;
+    else if(quemados.has(i)) amt = Math.min(quemadoParcial.has(i)?quemadoParcial.get(i):d.total, d.total);
+    else return;
+    const m=metodoPago.get(i);
+    metSum[(m && metSum[m]!==undefined)?m:'EFECTIVO'] += amt;
+  });
   const anulVal=DATA.filter((_,i)=>anulados.has(i)).reduce((s,d)=>s+d.total,0);
   const now=new Date().toLocaleString('es-EC');
 
@@ -2624,12 +2671,17 @@ function generarReporte(){
     <div class="exp-section">
       <div class="exp-row"><span class="exp-label">📦 Total pedidos</span><span class="exp-val blue">${tot} — $${totalVal.toFixed(2)}</span></div>
       <div class="exp-row"><span class="exp-label">✅ Entregados</span><span class="exp-val green">${entregadosCount} — $${entVal.toFixed(2)}</span></div>
+      <div class="exp-row" style="padding-left:16px"><span class="exp-label" style="font-size:.64rem">💵 Efectivo</span><span class="exp-val green" style="font-size:.7rem">$${metSum.EFECTIVO.toFixed(2)}</span></div>
+      <div class="exp-row" style="padding-left:16px"><span class="exp-label" style="font-size:.64rem">🏦 Transferencia</span><span class="exp-val blue" style="font-size:.7rem">$${metSum.TRANSFERENCIA.toFixed(2)}</span></div>
+      <div class="exp-row" style="padding-left:16px"><span class="exp-label" style="font-size:.64rem">🧾 Cheque</span><span class="exp-val" style="font-size:.7rem;color:#a78bfa">$${metSum.CHEQUE.toFixed(2)}</span></div>
+      <div class="exp-row" style="padding-left:16px"><span class="exp-label" style="font-size:.64rem">📄 Crédito (paga después)</span><span class="exp-val" style="font-size:.7rem;color:#fbbf24">$${metSum.CREDITO.toFixed(2)}</span></div>
       <div class="exp-row"><span class="exp-label">🟠 Por cobrar</span><span class="exp-val orange">${xcCount} — $${xcVal.toFixed(2)}</span></div>
       <div class="exp-row"><span class="exp-label">💰 NC Parciales</span><span class="exp-val red">${ncCount} — $${ncVal.toFixed(2)}</span></div>
       <div class="exp-row"><span class="exp-label">🧾 Retención 2%</span><span class="exp-val" style="color:#c084fc">${retenCount} — $${retenVal.toFixed(2)}</span></div>
       <div class="exp-row"><span class="exp-label">🔥 Quemado (de NC · ya en Entregados)</span><span class="exp-val" style="color:#fb923c">${quemCount} — $${quemMonto.toFixed(2)}</span></div>
       <div class="exp-row"><span class="exp-label">❌ Anulados</span><span class="exp-val" style="color:#818cf8">${anulCount} — $${anulVal.toFixed(2)}</span></div>
       <div class="exp-row"><span class="exp-label">⏳ Pendientes</span><span class="exp-val">${pend}</span></div>
+      <div class="exp-row" style="border-top:2px solid #1e3a5f;margin-top:4px;padding-top:6px"><span class="exp-label" style="font-weight:800;color:#4ade80">💵 A DEPOSITAR (efectivo)</span><span class="exp-val green" style="font-size:.9rem">$${metSum.EFECTIVO.toFixed(2)}</span></div>
     </div>
     ${anulDetalle?`<div class="exp-section"><div style="font-size:.6rem;color:#64748b;font-weight:700;margin-bottom:4px">MOTIVOS DE ANULACIÓN</div>${anulDetalle}</div>`:''}`;
 
@@ -2661,6 +2713,15 @@ function getReporteTexto(){
     if(dif>0.009){ ncVal+=dif; ncCount++; }
   });
   const entregadosCount = vis + quemCount;
+  const metSum={EFECTIVO:0,TRANSFERENCIA:0,CHEQUE:0,CREDITO:0};
+  DATA.forEach((d,i)=>{
+    let amt=0;
+    if(completed.has(i)) amt = devParcial.has(i)?devParcial.get(i):d.total;
+    else if(quemados.has(i)) amt = Math.min(quemadoParcial.has(i)?quemadoParcial.get(i):d.total, d.total);
+    else return;
+    const m=metodoPago.get(i);
+    metSum[(m && metSum[m]!==undefined)?m:'EFECTIVO'] += amt;
+  });
   const anulVal=DATA.filter((_,i)=>anulados.has(i)).reduce((s,d)=>s+d.total,0);
   const now=new Date().toLocaleString('es-EC');
   let txt=`🚛 *REPORTE DE RUTA*\n`;
@@ -2668,12 +2729,17 @@ function getReporteTexto(){
   txt+=`🕐 ${now}\n\n`;
   txt+=`📦 Total: ${tot} pedidos — $${totalVal.toFixed(2)}\n`;
   txt+=`✅ Entregados: ${entregadosCount} — $${entVal.toFixed(2)} recaudado\n`;
+  txt+=`   💵 Efectivo: $${metSum.EFECTIVO.toFixed(2)}\n`;
+  txt+=`   🏦 Transferencia: $${metSum.TRANSFERENCIA.toFixed(2)}\n`;
+  txt+=`   🧾 Cheque: $${metSum.CHEQUE.toFixed(2)}\n`;
+  txt+=`   📄 Crédito: $${metSum.CREDITO.toFixed(2)}\n`;
   txt+=`🟠 Por cobrar: ${xcCount} — $${xcVal.toFixed(2)}\n`;
   if(ncVal>0) txt+=`💰 NC Parciales: ${ncCount} — $${ncVal.toFixed(2)}\n`;
   if(retenCount>0) txt+=`🧾 Retención 2%: ${retenCount} — $${retenVal.toFixed(2)}\n`;
   if(quemCount>0) txt+=`🔥 Quemado (de NC · ya en Entregados): ${quemCount} — $${quemMonto.toFixed(2)}\n`;
   txt+=`❌ Anulados: ${anulCount} — $${anulVal.toFixed(2)}\n`;
   txt+=`⏳ Pendientes: ${pend}\n`;
+  txt+=`\n💵 *A DEPOSITAR (efectivo): $${metSum.EFECTIVO.toFixed(2)}*\n`;
   if(anulados.size){
     txt+=`\n📋 MOTIVOS ANULACIÓN:\n`;
     anulados.forEach((motivo,i)=>{const d=DATA[i];if(d)txt+=`• ${d.razon.split(' ').slice(0,3).join(' ')}: ${motivo}\n`;});
@@ -2703,6 +2769,7 @@ function saveLocalState(){
       notas:[...notas.entries()],
       retencion:[...retencionSet],
       quemadoParcial:[...quemadoParcial.entries()],
+      metodoPago:[...metodoPago.entries()],
       savedAt:new Date().toISOString()
     };
     // Save current route state
@@ -2733,6 +2800,7 @@ function loadLocalState(){
       notas=new Map(s.notas||[]);
       retencionSet=new Set(s.retencion||[]);
       quemadoParcial=new Map((s.quemadoParcial||[]).map(([k,v])=>[k,Number(v)]));
+      metodoPago=new Map(s.metodoPago||[]);
       DATA.forEach((_,i)=>refreshMarkerIcon(i));
       updateProgress();updateStats();updatePanel();updateBottomBar();
       console.log('Estado restaurado desde caché local (por camión)');
