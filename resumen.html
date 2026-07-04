@@ -7,6 +7,8 @@
 <title>Mapas Diarios — Resumen</title>
 <link rel="manifest" href="manifest.json">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;min-height:100vh}
@@ -126,6 +128,31 @@ tr:hover td{background:#16213a}
 
 </div>
 
+<!-- EDITOR DE UBICACIÓN (admin/bodega/coordinador) -->
+<div id="geo-editor-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#131c2e;border:1px solid #1e3a5f;border-radius:14px;max-width:520px;width:100%;max-height:92vh;overflow-y:auto;padding:18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="font-size:.95rem;color:#f1f5f9;margin:0">📍 Corregir ubicación de cliente</h3>
+      <button onclick="cerrarGeoEditor()" style="background:none;border:none;color:#64748b;font-size:1.2rem;cursor:pointer">✕</button>
+    </div>
+    <div style="margin-bottom:10px">
+      <label style="font-size:.66rem;color:#94a3b8;font-weight:700">Código de cliente</label>
+      <input id="geo-ed-cod" placeholder="Ej: 3572047" style="width:100%;background:#0f172a;border:1.5px solid #334155;color:#f1f5f9;border-radius:8px;padding:8px 10px;font-size:.82rem;margin-top:3px">
+    </div>
+    <div style="display:flex;gap:16px;margin-bottom:10px;font-size:.74rem;color:#cbd5e1">
+      <label style="cursor:pointer"><input type="radio" name="geo-metodo" value="pin" checked onchange="geoEdModo()"> ✋ Arrastrar pin</label>
+      <label style="cursor:pointer"><input type="radio" name="geo-metodo" value="manual" onchange="geoEdModo()"> ⌨️ Ingresar coordenadas</label>
+    </div>
+    <div id="geo-ed-map" style="height:280px;border-radius:10px;overflow:hidden;border:1px solid #1e3a5f;margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <div style="flex:1"><label style="font-size:.62rem;color:#94a3b8">Latitud</label><input id="geo-ed-lat" type="number" step="0.000001" oninput="geoEdInput()" style="width:100%;background:#0f172a;border:1.5px solid #334155;color:#f1f5f9;border-radius:8px;padding:7px 9px;font-size:.8rem;margin-top:2px"></div>
+      <div style="flex:1"><label style="font-size:.62rem;color:#94a3b8">Longitud</label><input id="geo-ed-lng" type="number" step="0.000001" oninput="geoEdInput()" style="width:100%;background:#0f172a;border:1.5px solid #334155;color:#f1f5f9;border-radius:8px;padding:7px 9px;font-size:.8rem;margin-top:2px"></div>
+    </div>
+    <button onclick="guardarGeoEditor()" style="width:100%;background:#15803d;border:none;color:#fff;padding:11px;border-radius:10px;font-size:.85rem;font-weight:800;cursor:pointer">✅ Guardar ubicación</button>
+    <div id="geo-ed-msg" style="text-align:center;font-size:.72rem;margin-top:8px;min-height:14px"></div>
+  </div>
+</div>
+
 <script>
 if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
 const API_URL="https://script.google.com/macros/s/AKfycbwzQRnCJHFXni_9Qvs9kh_6BoikPDtb2sAMNChS3gSk9gAn5e31z5PFvKRGRzeoFqK5og/exec";
@@ -197,7 +224,8 @@ async function fetchJSON(qs){
   return await jsonp(qs, 25000);
 }
 
-let MAPA_ROWS=[], AVANCE_ROWS=[], CUADRE_ROWS=[];
+let MAPA_ROWS=[], AVANCE_ROWS=[], CUADRE_ROWS=[], GEO_ROWS=[];
+let geoEdMap=null, geoEdMarker=null;
 let FECHAS_DISPONIBLES=[];
 let rangoCargado={desde:'',hasta:''}; // qué rango de fechas está actualmente en memoria
 
@@ -261,6 +289,7 @@ async function cargarTodo(){
     const desde=(fechaInicial && fechaInicial<desdeDefault)?fechaInicial:desdeDefault;
     const hasta=(fechaInicial && fechaInicial>hastaDefault)?fechaInicial:hastaDefault;
     await cargarRango(desde||fechaInicial,hasta||fechaInicial);
+    await cargarGeo();
     document.getElementById('loading').style.display='none';
     document.getElementById('contenido').style.display='block';
     if(!esCartera) setRangoRapido(7);
@@ -470,6 +499,7 @@ async function render(){
   });
   html+=`</tbody></table>`;
   html+=renderTablaCuadres(fecha, resumenes.map(r=>r.chofer));
+  html+=renderGeoPanel();
   cont.innerHTML=html;
   document.getElementById('btn-ir-mapa').style.display=selCam.value?'inline-block':'none';
   if(selCam.value) document.getElementById('btn-ir-mapa').href=`mapa_live_F150.html?fecha=${encodeURIComponent(fecha)}&chofer=${encodeURIComponent(selCam.value)}`;
@@ -578,6 +608,99 @@ async function renderRango(){
 }
 
 cargarTodo();
+
+// ══════════════════════════════════════════════════════════
+// UBICACIONES CORREGIDAS (solo admin/bodega/coordinador)
+// ══════════════════════════════════════════════════════════
+async function cargarGeo(){
+  try{ const r=await fetchJSON('tipo=geo'); GEO_ROWS=Array.isArray(r)?r:[]; }catch(e){ GEO_ROWS=[]; }
+}
+function geoLatestPorCodigo(){
+  const m={};
+  [...GEO_ROWS].sort((a,b)=>String(a.Timestamp||'').localeCompare(String(b.Timestamp||''))).forEach(r=>{
+    const c=String(r.CodigoCliente||'').trim(); if(!c) return;
+    m[c]={codigo:c, lat:parseFloat(r.Latitud), lng:parseFloat(r.Longitud), usuario:r.Usuario||'', ts:String(r.Timestamp||'')};
+  });
+  return Object.values(m).sort((a,b)=>b.ts.localeCompare(a.ts));
+}
+function renderGeoPanel(){
+  const lista=geoLatestPorCodigo();
+  const filas = lista.length ? lista.map(g=>`<tr>
+    <td><b>${g.codigo}</b></td>
+    <td>${isNaN(g.lat)?'—':g.lat.toFixed(6)}, ${isNaN(g.lng)?'—':g.lng.toFixed(6)}</td>
+    <td>${g.usuario||'—'}</td>
+    <td style="font-size:.72rem;color:#94a3b8">${g.ts||'—'}</td>
+    <td style="white-space:nowrap">
+      <button onclick="abrirGeoEditor('${g.codigo}',${g.lat},${g.lng})" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:4px 9px;font-size:.62rem;font-weight:700;cursor:pointer;margin-right:4px">✏️ Corregir</button>
+      <button onclick="revertirGeo('${g.codigo}')" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:6px;padding:4px 9px;font-size:.62rem;font-weight:700;cursor:pointer">↩ Revertir</button>
+    </td></tr>`).join('') : '<tr><td colspan="5" style="text-align:center;color:#475569;padding:16px">Sin ubicaciones corregidas todavía.</td></tr>';
+  return `
+    <div class="section-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <span>📍 Ubicaciones corregidas de clientes</span>
+      <button onclick="abrirGeoEditor('',null,null)" style="background:#15803d;color:#fff;border:none;border-radius:8px;padding:6px 11px;font-size:.7rem;font-weight:700;cursor:pointer">➕ Nueva corrección</button>
+    </div>
+    <table><thead><tr><th>Código</th><th>Coordenadas (lat, lng)</th><th>Corregido por</th><th>Fecha</th><th>Acciones</th></tr></thead>
+    <tbody>${filas}</tbody></table>`;
+}
+function abrirGeoEditor(cod, lat, lng){
+  document.getElementById('geo-editor-overlay').style.display='flex';
+  const codInput=document.getElementById('geo-ed-cod');
+  codInput.value=cod||''; codInput.readOnly=!!cod;
+  document.getElementById('geo-ed-msg').textContent='';
+  const la=(lat!=null && !isNaN(lat))?Number(lat):-1.66414;
+  const lo=(lng!=null && !isNaN(lng))?Number(lng):-78.65467;
+  document.getElementById('geo-ed-lat').value=la.toFixed(6);
+  document.getElementById('geo-ed-lng').value=lo.toFixed(6);
+  const pinRadio=document.querySelector('input[name="geo-metodo"][value="pin"]'); if(pinRadio) pinRadio.checked=true;
+  setTimeout(()=>{
+    if(!geoEdMap){
+      geoEdMap=L.map('geo-ed-map').setView([la,lo],16);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(geoEdMap);
+      geoEdMarker=L.marker([la,lo],{draggable:true}).addTo(geoEdMap);
+      geoEdMarker.on('dragend',()=>{ const p=geoEdMarker.getLatLng(); document.getElementById('geo-ed-lat').value=p.lat.toFixed(6); document.getElementById('geo-ed-lng').value=p.lng.toFixed(6); });
+    } else {
+      geoEdMap.setView([la,lo],16); geoEdMarker.setLatLng([la,lo]);
+    }
+    geoEdMap.invalidateSize();
+    geoEdModo();
+  },150);
+}
+function geoEdModo(){
+  const pin=document.querySelector('input[name="geo-metodo"]:checked').value==='pin';
+  document.getElementById('geo-ed-lat').readOnly=pin;
+  document.getElementById('geo-ed-lng').readOnly=pin;
+  if(geoEdMarker && geoEdMarker.dragging){ pin?geoEdMarker.dragging.enable():geoEdMarker.dragging.disable(); }
+}
+function geoEdInput(){
+  const la=parseFloat(document.getElementById('geo-ed-lat').value), lo=parseFloat(document.getElementById('geo-ed-lng').value);
+  if(!isNaN(la)&&!isNaN(lo)&&geoEdMap&&geoEdMarker){ geoEdMarker.setLatLng([la,lo]); geoEdMap.panTo([la,lo]); }
+}
+function cerrarGeoEditor(){ document.getElementById('geo-editor-overlay').style.display='none'; }
+async function guardarGeoEditor(){
+  const cod=document.getElementById('geo-ed-cod').value.trim();
+  const la=parseFloat(document.getElementById('geo-ed-lat').value), lo=parseFloat(document.getElementById('geo-ed-lng').value);
+  const msg=document.getElementById('geo-ed-msg');
+  if(!cod){ msg.style.color='#f87171'; msg.textContent='Ingresa el código del cliente.'; return; }
+  if(isNaN(la)||isNaN(lo)){ msg.style.color='#f87171'; msg.textContent='Coordenadas inválidas.'; return; }
+  msg.style.color='#93c5fd'; msg.textContent='Guardando...';
+  const sesion=getSesion();
+  try{
+    await fetchConTimeoutR(API_URL,{ method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({ tipo:'geo', token:getToken(), codigoCliente:cod, lat:la, lng:lo, usuario:(sesion&&sesion.usuario)||'' }) }, 20000);
+  }catch(e){}
+  msg.style.color='#4ade80'; msg.textContent='✅ Guardado';
+  await cargarGeo();
+  setTimeout(()=>{ cerrarGeoEditor(); render(); }, 700);
+}
+async function revertirGeo(cod){
+  if(!confirm('¿Revertir la última corrección de ubicación del cliente '+cod+'?\n\nVolverá a la corrección anterior (o a la ubicación original de MAPA 1 si no queda ninguna).')) return;
+  try{
+    await fetchConTimeoutR(API_URL,{ method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({ tipo:'geo_revertir', token:getToken(), codigoCliente:cod }) }, 20000);
+  }catch(e){}
+  await cargarGeo();
+  render();
+}
 
 // ── EXPORTAR ─────────────────────────────────────────────
 function exportarExcel(){
