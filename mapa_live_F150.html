@@ -1668,6 +1668,7 @@ async function syncAvance(idx){
 // y aplica esos cambios localmente para que ambos vean lo mismo y no se dupliquen datos.
 let ultimoPollAvance=0;
 async function pollAvanceRemoto(){
+  if(cuadreEnviando) return; // no sincronizar mientras se envía un cuadre (evita cerrar sesión a mitad)
   if(!activeFecha||!activeChofer||!DATA.length) return;
   try{
     const rows=await jsonpMapa(`tipo=avance&fecha=${encodeURIComponent(activeFecha)}&chofer=${encodeURIComponent(activeChofer)}`,20000);
@@ -1708,6 +1709,7 @@ async function pollAvanceRemoto(){
 // CUADRE DE GUÍA — resumen de cierre + fotos de depósito
 // ══════════════════════════════════════════════════════════════
 let cuadreFotos=[]; // array de dataURL (base64) ya comprimidas, listas para enviar
+let cuadreEnviando=false; // mientras se envía el cuadre, se pausa el polling para no expulsar la sesión
 
 function calcMontoRecaudadoSistema(){
   let entVal=0;
@@ -1840,6 +1842,7 @@ async function enviarCuadre(){
   msg.style.color='#93c5fd';
   msg.textContent='Enviando...';
   const sesion=getSesion();
+  cuadreEnviando=true; // pausa el polling para que no cierre la sesión mientras suben las fotos
   try{
     const res=await fetchConTimeoutMapa(API_URL,{
       method:'POST',
@@ -1854,7 +1857,7 @@ async function enviarCuadre(){
         usuario:(sesion&&sesion.usuario)||activeChofer,
         rol:(sesion&&sesion.rol)||''
       })
-    },25000);
+    },60000); // más tiempo: subir varias fotos a Drive puede tardar
     const data=await res.json().catch(()=>({ok:true})); // si no se puede leer, asumimos éxito silencioso
     if(data && data.auth===false){ sesionExpirada(); return; }
     if(data && data.error) throw new Error(data.error);
@@ -1863,8 +1866,10 @@ async function enviarCuadre(){
     setTimeout(()=>{ cerrarCuadre(); btn.disabled=false; },1200);
   }catch(err){
     msg.style.color='#f87171';
-    msg.textContent='❌ No se pudo enviar. Verifica tu conexión e intenta de nuevo.';
+    msg.textContent='❌ No se pudo enviar: '+(err.message||'revisa tu conexión')+'. Tus fotos siguen aquí, intenta de nuevo.';
     btn.disabled=false;
+  }finally{
+    cuadreEnviando=false;
   }
 }
 
