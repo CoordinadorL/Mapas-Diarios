@@ -862,14 +862,27 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
 
     <div id="cuadre-estado-prev-wrap"></div>
 
-    <div class="cuadre-sistema">
-      <span style="font-size:.68rem;color:#93c5fd;font-weight:700">💰 Recaudado según sistema</span>
-      <span class="v" id="cuadre-monto-sistema">$0.00</span>
+    <div class="cuadre-sistema" style="display:block">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:.78rem;color:#4ade80;font-weight:800">💵 Efectivo a depositar</span>
+        <span class="v" id="cuadre-efectivo" style="color:#4ade80">$0.00</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:.62rem;color:#94a3b8">
+        <span>Recaudado total (todas las formas)</span>
+        <span id="cuadre-monto-sistema">$0.00</span>
+      </div>
     </div>
 
     <div class="cuadre-field">
-      <label>💵 Monto que vas a depositar</label>
-      <input type="number" step="0.01" min="0" class="cuadre-input" id="cuadre-monto-declarado" placeholder="0.00">
+      <label>🏦 Deposita en cualquiera de estas cuentas — OPAUSTRO</label>
+      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:9px 12px;font-size:.72rem;color:#e2e8f0;line-height:1.85">
+        <div style="display:flex;justify-content:space-between"><span>Banco del Austro</span><b style="letter-spacing:.5px">2300200802</b></div>
+        <div style="display:flex;justify-content:space-between"><span>Banco Guayaquil</span><b style="letter-spacing:.5px">47501822</b></div>
+        <div style="display:flex;justify-content:space-between"><span>Banco Pichincha</span><b style="letter-spacing:.5px">2100071381</b></div>
+        <div style="display:flex;justify-content:space-between"><span>Banco Produbanco</span><b style="letter-spacing:.5px">2734002919</b></div>
+        <div style="display:flex;justify-content:space-between"><span>Cooperativa JEP</span><b style="letter-spacing:.5px">406117342103</b></div>
+        <div style="display:flex;justify-content:space-between;border-top:1px solid #334155;margin-top:5px;padding-top:5px"><span>RUC de la empresa</span><b style="letter-spacing:.5px">0190401685001</b></div>
+      </div>
     </div>
 
     <div class="cuadre-field">
@@ -878,9 +891,9 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
     </div>
 
     <div class="cuadre-field">
-      <label>📷 Fotos del depósito / comprobante</label>
+      <label>📷 Fotos del depósito / comprobante <span id="cuadre-fotos-count" style="color:#4ade80;font-weight:800">(0)</span></label>
       <label class="cuadre-fotos-input" for="cuadre-fotos-input">
-        📷 Tomar foto o elegir de galería
+        📷 Tomar foto o elegir de galería (puedes agregar varias)
       </label>
       <input type="file" id="cuadre-fotos-input" accept="image/*" capture="environment" multiple style="display:none" onchange="agregarFotos(this.files)">
       <div class="cuadre-thumbs" id="cuadre-thumbs"></div>
@@ -1699,12 +1712,25 @@ let cuadreFotos=[]; // array de dataURL (base64) ya comprimidas, listas para env
 function calcMontoRecaudadoSistema(){
   let entVal=0;
   DATA.forEach((d,i)=>{
-    if(!completed.has(i))return;
-    if(devParcial.has(i)) entVal+=devParcial.get(i);
-    else entVal+=d.total;
+    if(completed.has(i)) entVal += devParcial.has(i)?devParcial.get(i):d.total;
+    else if(quemados.has(i)) entVal += Math.min(quemadoParcial.has(i)?quemadoParcial.get(i):d.total, d.total); // lo quemado también es recaudado
   });
   return entVal;
 }
+// Solo el EFECTIVO recaudado (lo que el transportista debe depositar en el banco).
+function calcEfectivoSistema(){
+  let ef=0;
+  DATA.forEach((d,i)=>{
+    let amt=0;
+    if(completed.has(i)) amt=devParcial.has(i)?devParcial.get(i):d.total;
+    else if(quemados.has(i)) amt=Math.min(quemadoParcial.has(i)?quemadoParcial.get(i):d.total, d.total);
+    else return;
+    if((metodoPago.get(i)||'EFECTIVO')==='EFECTIVO') ef+=amt; // sin método = efectivo por defecto
+  });
+  return ef;
+}
+const MAX_FOTOS_CUADRE=30;
+function actualizarContadorFotos(){ const c=document.getElementById('cuadre-fotos-count'); if(c) c.textContent='('+cuadreFotos.length+')'; }
 
 async function abrirCuadre(){
   if(!activeFecha||!activeChofer){
@@ -1714,11 +1740,12 @@ async function abrirCuadre(){
   document.getElementById('cuadre-overlay').classList.add('show');
   document.getElementById('cuadre-sub').textContent=`${activeChofer} · ${activeFecha}`;
   document.getElementById('cuadre-monto-sistema').textContent='$'+calcMontoRecaudadoSistema().toFixed(2);
-  document.getElementById('cuadre-monto-declarado').value='';
+  document.getElementById('cuadre-efectivo').textContent='$'+calcEfectivoSistema().toFixed(2);
   document.getElementById('cuadre-observaciones').value='';
   document.getElementById('cuadre-thumbs').innerHTML='';
   document.getElementById('cuadre-msg').textContent='\u00A0';
   cuadreFotos=[];
+  actualizarContadorFotos();
   document.getElementById('cuadre-estado-prev-wrap').innerHTML='<div style="text-align:center;padding:8px;color:#64748b;font-size:.7rem">Consultando si ya enviaste un cuadre hoy...</div>';
   try{
     const rows=await jsonpMapa(`tipo=cuadre&fecha=${encodeURIComponent(activeFecha)}&chofer=${encodeURIComponent(activeChofer)}`,20000);
@@ -1730,11 +1757,10 @@ async function abrirCuadre(){
       const nota=r['NotaCartera']?`<div style="margin-top:4px">Nota de Cartera: ${r['NotaCartera']}</div>`:'';
       document.getElementById('cuadre-estado-prev-wrap').innerHTML=`
         <div class="cuadre-estado-prev ${claseEstado}">
-          Ya enviaste un cuadre hoy — declaraste <b>$${Number(r['MontoDeclarado']||0).toFixed(2)}</b><br>
+          Ya enviaste un cuadre hoy — efectivo registrado <b>$${Number(r['MontoDeclarado']||0).toFixed(2)}</b><br>
           ${etiqueta}${nota}<br>
-          <span style="opacity:.8">Puedes agregar más fotos o corregir el monto; se actualizará el mismo registro.</span>
+          <span style="opacity:.8">Puedes agregar más fotos; se actualizará el mismo registro.</span>
         </div>`;
-      document.getElementById('cuadre-monto-declarado').value=r['MontoDeclarado']||'';
       document.getElementById('cuadre-observaciones').value=r['Observaciones']||'';
     } else {
       document.getElementById('cuadre-estado-prev-wrap').innerHTML='';
@@ -1773,6 +1799,7 @@ async function agregarFotos(fileList){
   msg.style.color='#93c5fd';
   msg.textContent='Comprimiendo fotos...';
   for(const file of fileList){
+    if(cuadreFotos.length>=MAX_FOTOS_CUADRE){ alert('Máximo '+MAX_FOTOS_CUADRE+' fotos por cuadre.'); break; }
     try{
       const dataUrl=await comprimirImagen(file);
       cuadreFotos.push(dataUrl);
@@ -1783,6 +1810,7 @@ async function agregarFotos(fileList){
       document.getElementById('cuadre-thumbs').appendChild(thumb);
     }catch(err){ console.warn('Error comprimiendo foto:',err); }
   }
+  actualizarContadorFotos();
   msg.textContent='\u00A0';
   document.getElementById('cuadre-fotos-input').value='';
 }
@@ -1797,16 +1825,15 @@ function quitarFoto(idx){
     thumb.innerHTML=`<img src="${dataUrl}"><button class="rm" onclick="quitarFoto(${i})">✕</button>`;
     wrap.appendChild(thumb);
   });
+  actualizarContadorFotos();
 }
 
 async function enviarCuadre(){
-  const montoDeclarado=parseFloat(document.getElementById('cuadre-monto-declarado').value)||0;
+  const montoDeclarado=calcEfectivoSistema(); // el efectivo a depositar lo calcula el sistema (ya no se digita)
   const observaciones=document.getElementById('cuadre-observaciones').value.trim();
   const msg=document.getElementById('cuadre-msg');
-  if(montoDeclarado<=0 && !cuadreFotos.length){
-    msg.style.color='#f87171';
-    msg.textContent='Ingresa el monto o agrega al menos una foto.';
-    return;
+  if(montoDeclarado>0 && !cuadreFotos.length){
+    if(!confirm('No agregaste fotos del depósito. ¿Enviar el cuadre de todos modos?')) return;
   }
   const btn=document.getElementById('cuadre-submit-btn');
   btn.disabled=true;
