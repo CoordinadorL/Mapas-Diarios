@@ -1134,11 +1134,14 @@ async function fetchGeo(){
   try{
     const rows=await jsonpMapa('tipo=geo',20000);
     const m={};
-    if(Array.isArray(rows)) rows.forEach(r=>{
-      const c=String(r.CodigoCliente||'').trim();
-      const la=parseFloat(r.Latitud), lo=parseFloat(r.Longitud);
-      if(c && !isNaN(la) && !isNaN(lo)) m[c]={lat:la,lng:lo};
-    });
+    if(Array.isArray(rows)){
+      // Ordenar por Timestamp ascendente → la última corrección por código gana (historial).
+      rows.sort((a,b)=>String(a.Timestamp||'').localeCompare(String(b.Timestamp||''))).forEach(r=>{
+        const c=String(r.CodigoCliente||'').trim();
+        const la=parseFloat(r.Latitud), lo=parseFloat(r.Longitud);
+        if(c && !isNaN(la) && !isNaN(lo)) m[c]={lat:la,lng:lo};
+      });
+    }
     return m;
   }catch(e){ return GEO_OVERRIDES||{}; }
 }
@@ -1177,8 +1180,9 @@ function geoArrastrar(idx){
 }
 function guardarGeoArrastre(){
   if(!geoEditMarker || geoEditIdx<0) return;
+  const idx=geoEditIdx, d=DATA[idx];
+  if(!confirm('¿Guardar esta nueva ubicación para:\n\n'+((d&&(d.razon||d.codigo))||'este cliente')+'?\n\n(La anterior queda en el historial; se puede revertir.)')) return;
   const ll=geoEditMarker.getLatLng();
-  const idx=geoEditIdx;
   cancelarGeoArrastre();
   guardarGeo(idx, ll.lat, ll.lng, null);
 }
