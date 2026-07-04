@@ -839,6 +839,13 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
 <!-- PANEL REPORTE (duplicado sin usar del "📄 Reporte" que sí funciona vía #export-panel) eliminado -->
 
 
+<!-- BARRA FLOTANTE: corregir ubicación arrastrando el pin -->
+<div id="geo-edit-bar" style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);z-index:1200;background:#0f172a;border:1.5px solid #7c3aed;border-radius:12px;padding:8px 12px;align-items:center;gap:10px;box-shadow:0 4px 18px rgba(0,0,0,.6)">
+  <span style="font-size:.7rem;color:#c4b5fd">📍 Ubicando: <b id="geo-edit-nombre" style="color:#fff"></b></span>
+  <button onclick="guardarGeoArrastre()" style="background:#15803d;color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:.72rem;font-weight:700;cursor:pointer">✅ Guardar aquí</button>
+  <button onclick="cancelarGeoArrastre()" style="background:#7f1d1d;color:#fca5a5;border:none;border-radius:8px;padding:6px 10px;font-size:.72rem;font-weight:700;cursor:pointer">✕</button>
+</div>
+
 <!-- MODAL INICIO DE JORNADA (solo transportista/reparto) -->
 <div class="cuadre-overlay" id="jornada-modal">
   <div class="cuadre-box" style="max-width:400px">
@@ -1048,6 +1055,8 @@ let quemadoParcial=new Map(); // índice → monto ya quemado (si es parcial, el
 let metodoPago=new Map();   // índice → forma de pago de lo recaudado: EFECTIVO | TRANSFERENCIA | CHEQUE | CREDITO
 let tileLayer=null;
 const METODOS={EFECTIVO:{lbl:'💵 Efectivo',color:'#16a34a'},TRANSFERENCIA:{lbl:'🏦 Transf.',color:'#2563eb'},CHEQUE:{lbl:'🧾 Cheque',color:'#7c3aed'},CREDITO:{lbl:'📄 Crédito',color:'#b45309'}};
+let GEO_OVERRIDES={}, GEO_LOADED=false; // correcciones de ubicación por código de cliente {codigo:{lat,lng}}
+let geoEditMarker=null, geoEditIdx=-1;   // estado del modo "arrastrar pin"
 
 // ── BODEGAS (puntos de partida de la ruta) ──────────────────
 const BODEGAS = {
@@ -1119,6 +1128,78 @@ async function fetchFechas(){
   // Solo JSONP directo (sin proxies de terceros, que verían token y datos).
   const r=await jsonpMapa('tipo=fechas',25000);
   return Array.isArray(r)?r:[];
+}
+// Correcciones de ubicación guardadas por los transportistas (hoja GEO).
+async function fetchGeo(){
+  try{
+    const rows=await jsonpMapa('tipo=geo',20000);
+    const m={};
+    if(Array.isArray(rows)) rows.forEach(r=>{
+      const c=String(r.CodigoCliente||'').trim();
+      const la=parseFloat(r.Latitud), lo=parseFloat(r.Longitud);
+      if(c && !isNaN(la) && !isNaN(lo)) m[c]={lat:la,lng:lo};
+    });
+    return m;
+  }catch(e){ return GEO_OVERRIDES||{}; }
+}
+// Superpone las correcciones de ubicación sobre las filas de MAPA 1 (por código).
+function aplicarGeoOverrides(rows){
+  if(!rows||!GEO_OVERRIDES) return;
+  rows.forEach(r=>{ const ov=GEO_OVERRIDES[r.codigo]; if(ov){ r.lat=ov.lat; r.lng=ov.lng; } });
+}
+// ── CORRECCIÓN DE UBICACIÓN (georreferencia en campo) ──────
+function mostrarGeoOpciones(idx){
+  const el=document.getElementById('geo-opciones-'+idx);
+  if(el) el.style.display = el.style.display==='flex' ? 'none' : 'flex';
+}
+function geoDesdeGPS(idx){
+  const d=DATA[idx]; if(!d) return;
+  if(!navigator.geolocation){ alert('Tu dispositivo no tiene GPS.'); return; }
+  if(!confirm('📡 Se tomará TU UBICACIÓN ACTUAL como la ubicación correcta de:\n\n'+(d.razon||d.codigo)+'\n\nAsegúrate de estar frente al local del cliente. ¿Continuar?')) return;
+  navigator.geolocation.getCurrentPosition(
+    pos=>{ guardarGeo(idx, pos.coords.latitude, pos.coords.longitude, Math.round(pos.coords.accuracy||0)); },
+    err=>{ alert('No se pudo obtener tu ubicación GPS: '+err.message); },
+    {enableHighAccuracy:true, timeout:15000, maximumAge:0}
+  );
+}
+function geoArrastrar(idx){
+  const d=DATA[idx]; if(!d) return;
+  cancelarGeoArrastre();
+  map.closePopup();
+  geoEditIdx=idx;
+  geoEditMarker=L.marker([d.lat,d.lng],{draggable:true, zIndexOffset:2000,
+    icon:L.divIcon({className:'',html:'<div style="background:#7c3aed;width:22px;height:22px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.6)"></div>',iconSize:[22,22],iconAnchor:[11,22]})
+  }).addTo(map);
+  geoEditMarker.bindTooltip('Arrástrame al punto correcto',{permanent:true,direction:'top',offset:[0,-22]}).openTooltip();
+  map.setView([d.lat,d.lng], Math.max(map.getZoom(),17));
+  const bar=document.getElementById('geo-edit-bar');
+  if(bar){ bar.style.display='flex'; document.getElementById('geo-edit-nombre').textContent=(d.razon||d.codigo); }
+}
+function guardarGeoArrastre(){
+  if(!geoEditMarker || geoEditIdx<0) return;
+  const ll=geoEditMarker.getLatLng();
+  const idx=geoEditIdx;
+  cancelarGeoArrastre();
+  guardarGeo(idx, ll.lat, ll.lng, null);
+}
+function cancelarGeoArrastre(){
+  if(geoEditMarker){ map.removeLayer(geoEditMarker); geoEditMarker=null; }
+  geoEditIdx=-1;
+  const bar=document.getElementById('geo-edit-bar'); if(bar) bar.style.display='none';
+}
+function guardarGeo(idx, lat, lng, accuracy){
+  const d=DATA[idx]; if(!d) return;
+  const sesion=getSesion();
+  try{
+    fetch(API_URL,{ method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'},
+      body:JSON.stringify({ tipo:'geo', token:(sesion&&sesion.token)||'', codigoCliente:d.codigo, lat, lng, chofer:activeChofer, fecha:activeFecha, usuario:(sesion&&sesion.usuario)||'' }) });
+  }catch(e){}
+  GEO_OVERRIDES[d.codigo]={lat,lng};
+  d.lat=lat; d.lng=lng;
+  aplicarGeoOverrides(ALL_ROWS); // que futuros redibujados conserven la corrección
+  if(allMarkers[idx]){ allMarkers[idx].setLatLng([lat,lng]); refreshMarkerIcon(idx); }
+  saveLocalState();
+  alert('✅ Ubicación de "'+(d.razon||d.codigo)+'" actualizada'+(accuracy?(' (precisión ~'+accuracy+' m)'):'')+'.\nSe usará en las próximas cargas del sistema.');
 }
 async function fetchData(fecha){
   document.getElementById('load-src').textContent='Consultando Google Apps Script...';
@@ -1197,6 +1278,7 @@ async function onFechaChange(){
   document.getElementById('error-msg').style.display='none';
   try{
     ALL_ROWS=await fetchData(activeFecha);
+    aplicarGeoOverrides(ALL_ROWS);
     buildChoferSelector();
     applyFiltersAndDraw();
     document.getElementById('overlay').classList.add('hidden');
@@ -1553,7 +1635,13 @@ ${distInfo}
   <button class="pc-btn pc-btn-waze" onclick="window.open('${wazeUrl}','_blank')">🚗 Waze</button>
 </div>
 <div style="padding:4px 8px 6px">${actionsHtml}</div>
-<div class="pc-coords">📍 ${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}</div>
+<div class="pc-coords">📍 ${d.lat.toFixed(5)}, ${d.lng.toFixed(5)}
+  <button onclick="mostrarGeoOpciones(${idx})" style="margin-left:6px;background:#334155;color:#e2e8f0;border:none;border-radius:6px;padding:2px 8px;font-size:.58rem;font-weight:700;cursor:pointer">📍 Corregir ubicación</button>
+  <div id="geo-opciones-${idx}" style="display:none;gap:5px;justify-content:center;margin-top:5px">
+    <button onclick="geoDesdeGPS(${idx})" style="background:#1d4ed8;color:#fff;border:none;border-radius:6px;padding:4px 9px;font-size:.6rem;font-weight:700;cursor:pointer">📡 Usar mi GPS</button>
+    <button onclick="geoArrastrar(${idx})" style="background:#7c3aed;color:#fff;border:none;border-radius:6px;padding:4px 9px;font-size:.6rem;font-weight:700;cursor:pointer">✋ Arrastrar pin</button>
+  </div>
+</div>
 </div>`;
 }
 
@@ -3060,6 +3148,8 @@ async function loadAndRender(){
       if(primeraCarga){ aplicarChoferBodegaDesdeURL(); primeraCarga=false; }
       if(jornadaAct) aplicarSeleccionJornada(); // refresco: mantener fija la selección de la jornada
     }
+    if(!GEO_LOADED){ try{ GEO_OVERRIDES=await fetchGeo(); GEO_LOADED=true; }catch(e){} }
+    aplicarGeoOverrides(ALL_ROWS);
     applyFiltersAndDraw();
     document.getElementById('ultima-act').textContent=`Act: ${new Date().toLocaleTimeString('es-EC',{hour:'2-digit',minute:'2-digit'})}`;
     document.getElementById('overlay').classList.add('hidden');
