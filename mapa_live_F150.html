@@ -1504,9 +1504,9 @@ function buildPopup(d,idx){
     : `<div class="pc-km">🏁 Último punto de la ruta</div>`;
   const liqBadge = d.liq ? `<div class="pc-liq">📋 Liq. ${d.liq}</div>` : '';
   const canalBadge = d.canalCat==='MAYORISTA'
-    ? `<div class="pc-liq" style="background:#7c3aed;margin-left:4px">🟣 MAYORISTA</div>`
+    ? `<div class="pc-liq" style="background:#7c3aed">🟣 MAYORISTA</div>`
     : d.canalCat==='COBERTURA'
-      ? `<div class="pc-liq" style="background:#334155;margin-left:4px">COBERTURA</div>`
+      ? `<div class="pc-liq" style="background:#334155">COBERTURA</div>`
       : '';
   const ventanaInfo = d.ventana
     ? `<div style="font-size:.68rem;color:#c4b5fd;background:#1e1b4b;border-left:3px solid #7c3aed;padding:3px 8px;border-radius:4px;margin-top:4px">🕐 Ventana horaria: ${d.ventana}</div>`
@@ -1666,10 +1666,9 @@ function buildPopup(d,idx){
     <div>
       <div class="pc-title">${isFirst?'★ INICIO — ':''}${d.vendedor} ${tierBadge}${retBadge}${estadoBadge}</div>
       <div class="pc-sub">${d.chofer}</div>
-      <div style="display:flex;flex-wrap:wrap">${liqBadge}${canalBadge}</div>
     </div>
   </div>
-  <div class="pc-badge" style="background:${color}">${d.vendedor}</div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0">${liqBadge}${canalBadge}</div>
 </div>
 <div class="pc-body">
   <div class="pc-row"><span class="pc-key">Fecha Liq</span><span class="pc-val">${d.fecha}</span></div>
