@@ -1112,6 +1112,9 @@ function gf(row,...cs){for(const c of cs){if(row[c]!==undefined&&row[c]!=='')ret
 function pn(v){if(typeof v==='number')return v;return parseFloat(String(v).replace(/[^0-9.\-]/g,''))||0;}
 function ff(v){if(!v)return'';if(v instanceof Date){const y=v.getFullYear(),m=String(v.getMonth()+1).padStart(2,'0'),d=String(v.getDate()).padStart(2,'0');return`${y}-${m}-${d}`;}const s=String(v).trim();const m1=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);if(m1)return`${m1[3]}-${m1[2].padStart(2,'0')}-${m1[1].padStart(2,'0')}`;return s.slice(0,10);}
 function getTier(t){return t>=TIER_HIGH?'high':t>=TIER_MEDIUM?'medium':'normal';}
+// El resaltado rojo/amarillo por monto (drop alto/medio) es SOLO para clientes COBERTURA.
+// Los MAYORISTA siempre se identifican en morado, sin importar el monto (ver makeIcon).
+function getTierEfectivo(d){ return d.canalCat==='COBERTURA' ? getTier(d.total) : 'normal'; }
 
 // ── FETCH ─────────────────────────────────────────────────
 async function fetchConTimeoutMapa(url, opts, ms){
@@ -1440,7 +1443,7 @@ function makeIcon(vendorColor,num,isFirst,d,offsetY=0){
   const isQuemIcon=!visited&&!xc&&!isNC&&quemados.has(realIdx);
   const quemVal=quemadoParcial.has(realIdx)?quemadoParcial.get(realIdx):(isQuemIcon?d.total:0);
   const pendQuemaIcon=isQuemIcon?Math.max(0,d.total-quemVal):0;
-  const tier=showNums?getTier(d.total):'normal';
+  const tier=showNums?getTierEfectivo(d):'normal';
   let dotColor=vendorColor,ring='',pulse='',extraSize=0,tierIcon='';
   let labelBg='transparent',labelColor='',labelBorder='transparent';
 
@@ -1493,7 +1496,7 @@ function quemaRowHtml(idx, total, defaultQuemado){
 }
 function buildPopup(d,idx){
   const color = colorMap[d.vendedor] || '#888';
-  const tier = getTier(d.total);
+  const tier = getTierEfectivo(d);
   const isFirst = idx === 0;
   const dn = idx < DATA.length-1 ? haversine(d.lat,d.lng,DATA[idx+1].lat,DATA[idx+1].lng) : null;
   const distInfo = dn!=null
