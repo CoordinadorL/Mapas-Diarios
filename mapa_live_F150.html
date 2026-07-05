@@ -941,6 +941,8 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
   <div class="bb-item">🟠 <span class="bb-val" id="bb-xc">0</span></div>
   <div class="bb-item">🔥 <span class="bb-val" id="bb-quem">0</span></div>
   <div class="bb-item">⏳ <span class="bb-val" id="bb-pend">0</span></div>
+  <div class="bb-sep" id="sync-sep" style="display:none"></div>
+  <div class="bb-item" id="sync-indicator" style="display:none;color:#fbbf24" title="Cambios guardados en el celular, esperando conexión para enviarse al servidor">🔄 <span class="bb-val" id="sync-count" style="color:#fbbf24">0</span> sin enviar</div>
   <div style="margin-left:auto;display:flex;gap:4px;align-items:center">
     <button onclick="abrirExportar()" style="background:#1d4ed8;border:none;color:#fff;padding:3px 10px;border-radius:8px;font-size:.65rem;font-weight:700;cursor:pointer">📄 Reporte</button>
     <button onclick="abrirHistorial()" style="background:#334155;border:none;color:#e2e8f0;padding:3px 10px;border-radius:8px;font-size:.65rem;font-weight:700;cursor:pointer">🕐 Hist.</button>
@@ -1071,6 +1073,45 @@ const METODOS={EFECTIVO:{lbl:'💵 Efectivo',color:'#16a34a'},TRANSFERENCIA:{lbl
 let GEO_OVERRIDES={}, GEO_LOADED=false; // correcciones de ubicación por código de cliente {codigo:{lat,lng}}
 let geoEditMarker=null, geoEditIdx=-1;   // estado del modo "arrastrar pin"
 let CANAL_MAP={}, CANAL_LOADED=false;   // canal crudo (mayúsculas) -> 'MAYORISTA' | 'COBERTURA', desde hoja CANALES
+
+// ══════════════════════════════════════════════════════════════
+// COLA DE REINTENTO OFFLINE — si un avance o una corrección de
+// ubicación no se pudo enviar (sin señal), queda guardado aquí y se
+// reintenta solo (al recuperar conexión, y cada 20s). Nunca se pierde
+// silenciosamente: el usuario ve un contador de "sin enviar" mientras
+// haya algo pendiente.
+// ══════════════════════════════════════════════════════════════
+let SYNC_QUEUE = (function(){ try{ return JSON.parse(localStorage.getItem('syncQueuePendiente')||'[]'); }catch(e){ return []; } })();
+function guardarSyncQueue(){
+  try{ localStorage.setItem('syncQueuePendiente', JSON.stringify(SYNC_QUEUE)); }catch(e){}
+  actualizarIndicadorSync();
+}
+function actualizarIndicadorSync(){
+  const n=SYNC_QUEUE.length;
+  const item=document.getElementById('sync-indicator'), sep=document.getElementById('sync-sep'), cnt=document.getElementById('sync-count');
+  if(!item) return;
+  item.style.display = n>0 ? 'flex' : 'none';
+  if(sep) sep.style.display = n>0 ? 'block' : 'none';
+  if(cnt) cnt.textContent = n;
+}
+// Encola (o reemplaza, si ya había un intento pendiente del mismo cliente) un envío fallido.
+function encolarSync(clave, payload){
+  SYNC_QUEUE = SYNC_QUEUE.filter(it=>it.clave!==clave);
+  SYNC_QUEUE.push({clave, payload, ts:Date.now()});
+  guardarSyncQueue();
+}
+// Intenta reenviar todo lo pendiente. Se detiene en el primer fallo (probable falta de señal):
+// no tiene caso insistir con el resto en ese mismo ciclo, se reintentará en el próximo.
+async function vaciarSyncQueue(){
+  if(!SYNC_QUEUE.length) return;
+  for(const item of [...SYNC_QUEUE]){
+    try{
+      await fetchConTimeoutMapa(API_URL,{ method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(item.payload) }, 12000);
+      SYNC_QUEUE = SYNC_QUEUE.filter(it=>it.clave!==item.clave);
+      guardarSyncQueue();
+    }catch(err){ break; }
+  }
+}
 
 // ── BODEGAS (puntos de partida de la ruta) ──────────────────
 const BODEGAS = {
@@ -1224,16 +1265,19 @@ function cancelarGeoArrastre(){
 function guardarGeo(idx, lat, lng, accuracy){
   const d=DATA[idx]; if(!d) return;
   const sesion=getSesion();
-  try{
-    fetch(API_URL,{ method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'},
-      body:JSON.stringify({ tipo:'geo', token:(sesion&&sesion.token)||'', codigoCliente:d.codigo, lat, lng, chofer:activeChofer, fecha:activeFecha, usuario:(sesion&&sesion.usuario)||'' }) });
-  }catch(e){}
+  const payload={ tipo:'geo', token:(sesion&&sesion.token)||'', codigoCliente:d.codigo, lat, lng, chofer:activeChofer, fecha:activeFecha, usuario:(sesion&&sesion.usuario)||'' };
+  const clave='geo|'+d.codigo;
+  // Nota: antes esto era fire-and-forget sin .catch() en la promesa (un fallo de red quedaba como
+  // "unhandled rejection", sin reintento). Ahora si falla queda en la cola de reintento offline.
+  fetchConTimeoutMapa(API_URL,{ method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(payload) }, 12000)
+    .then(()=>{ if(SYNC_QUEUE.some(it=>it.clave===clave)){ SYNC_QUEUE=SYNC_QUEUE.filter(it=>it.clave!==clave); guardarSyncQueue(); } })
+    .catch(err=>{ console.warn('Sin conexión: la ubicación se guardó localmente y se reintentará enviar automáticamente.',err); encolarSync(clave, payload); });
   GEO_OVERRIDES[d.codigo]={lat,lng};
   d.lat=lat; d.lng=lng;
   aplicarGeoOverrides(ALL_ROWS); // que futuros redibujados conserven la corrección
   if(allMarkers[idx]){ allMarkers[idx].setLatLng([lat,lng]); refreshMarkerIcon(idx); }
   saveLocalState();
-  alert('✅ Ubicación de "'+(d.razon||d.codigo)+'" actualizada'+(accuracy?(' (precisión ~'+accuracy+' m)'):'')+'.\nSe usará en las próximas cargas del sistema.');
+  alert('✅ Ubicación de "'+(d.razon||d.codigo)+'" actualizada'+(accuracy?(' (precisión ~'+accuracy+' m)'):'')+'.\nSe usará en las próximas cargas del sistema.'+(navigator.onLine===false?'\n\n📡 Sin conexión: se enviará solo cuando vuelva la señal.':''));
 }
 async function fetchData(fecha){
   document.getElementById('load-src').textContent='Consultando Google Apps Script...';
@@ -1782,26 +1826,31 @@ async function syncAvance(idx){
   if(!d) return;
   const {estado,monto,motivo}=estadoActualDe(idx);
   const sesion=getSesion();
+  const payload={
+    tipo:'avance',
+    token:(sesion&&sesion.token)||'',
+    fecha:d.fecha,
+    chofer:d.chofer,
+    codigoCliente:d.codigo,
+    estado, monto, motivo,
+    metodoPago:(metodoPago.get(idx)||''),
+    usuario:(sesion&&sesion.usuario)||d.chofer,
+    rol:(sesion&&sesion.rol)||'reparto',
+    bodega:activeBodega
+  };
+  const clave='avance|'+d.fecha+'|'+d.chofer+'|'+d.codigo;
   try{
-    await fetch(API_URL,{
+    await fetchConTimeoutMapa(API_URL,{
       method:'POST',
       mode:'no-cors', // Apps Script no siempre responde con headers CORS en POST; no necesitamos leer la respuesta
       headers:{'Content-Type':'text/plain;charset=utf-8'}, // evita preflight OPTIONS que Apps Script no maneja
-      body:JSON.stringify({
-        tipo:'avance',
-        token:(sesion&&sesion.token)||'',
-        fecha:d.fecha,
-        chofer:d.chofer,
-        codigoCliente:d.codigo,
-        estado, monto, motivo,
-        metodoPago:(metodoPago.get(idx)||''),
-        usuario:(sesion&&sesion.usuario)||d.chofer,
-        rol:(sesion&&sesion.rol)||'reparto',
-        bodega:activeBodega
-      })
-    });
+      body:JSON.stringify(payload)
+    }, 12000);
+    // Si había un intento viejo pendiente de este mismo cliente, ya no hace falta.
+    if(SYNC_QUEUE.some(it=>it.clave===clave)){ SYNC_QUEUE=SYNC_QUEUE.filter(it=>it.clave!==clave); guardarSyncQueue(); }
   }catch(err){
-    console.warn('No se pudo sincronizar avance con el Sheet:',err);
+    console.warn('Sin conexión: el avance se guardó localmente y se reintentará enviar automáticamente.',err);
+    encolarSync(clave, payload);
   }
 }
 
@@ -1820,6 +1869,9 @@ async function pollAvanceRemoto(){
       const codigo=String(row.CodigoCliente||'').trim();
       const idx=DATA.findIndex(d=>d.codigo===codigo);
       if(idx<0) return;
+      // Si este cliente tiene un cambio local aún sin enviar (cola offline), no lo pisamos
+      // con el dato viejo del servidor -- se sincronizará cuando la cola se vacíe.
+      if(SYNC_QUEUE.some(it=>it.clave==='avance|'+activeFecha+'|'+activeChofer+'|'+codigo)) return;
       const estado=String(row.Estado||'').toUpperCase();
       const monto=parseFloat(row.Monto)||0;
       const motivo=row.Motivo||'';
@@ -3267,6 +3319,12 @@ function toggleLegend(){
 setInterval(()=>{ loadAndRender(); }, 5 * 60 * 1000);
 // Sincronización de avance entre dispositivos (chofer + ayudante) cada 12s
 setInterval(()=>{ pollAvanceRemoto(); }, 12 * 1000);
+// Cola de reintento offline: si algo no se pudo enviar por falta de señal, se reintenta solo
+// al recuperar conexión y, por si el navegador no avisa bien, cada 20s de todos modos.
+window.addEventListener('online', ()=>{ vaciarSyncQueue(); });
+setInterval(()=>{ vaciarSyncQueue(); }, 20 * 1000);
+actualizarIndicadorSync(); // refleja de inmediato si quedó algo pendiente de una sesión anterior
+vaciarSyncQueue();
 
 // Carga inicial
 loadAndRender();
