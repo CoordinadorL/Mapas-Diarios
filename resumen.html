@@ -12,11 +12,11 @@
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;min-height:100vh}
-.topbar{background:linear-gradient(90deg,#1e293b,#0f172a);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #3b82f6;flex-wrap:wrap;gap:8px}
+.topbar{background:linear-gradient(90deg,#1e293b,#0f172a);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #3b82f6;flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:100}
 .topbar h1{font-size:.95rem;font-weight:800;color:#f1f5f9}
 .topbar p{font-size:.62rem;color:#64748b;margin-top:1px}
 .badge{display:flex;align-items:center;gap:6px;background:#1e293b;border:1px solid #475569;border-radius:20px;padding:4px 10px;font-size:.65rem;color:#cbd5e1;cursor:pointer}
-.wrap{max-width:1180px;margin:0 auto;padding:16px}
+.wrap{max-width:1500px;margin:0 auto;padding:16px}
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:end;background:#131c2e;border:1px solid #1e3a5f;border-radius:12px;padding:14px;margin-bottom:16px}
 .fg{display:flex;flex-direction:column;gap:4px}
 .fg label{font-size:.62rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
@@ -29,8 +29,8 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;min-h
 .card.orange .v{color:#f97316}
 .card.red .v{color:#ef4444}
 .section-title{font-size:.72rem;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:20px 0 8px}
-table{width:100%;border-collapse:collapse;background:#131c2e;border-radius:12px;overflow:hidden}
-th{background:#1e293b;color:#94a3b8;font-size:.62rem;text-transform:uppercase;letter-spacing:.4px;padding:9px 10px;text-align:left}
+table{width:100%;border-collapse:collapse;background:#131c2e;border-radius:12px}
+th{background:#1e293b;color:#94a3b8;font-size:.62rem;text-transform:uppercase;letter-spacing:.4px;padding:9px 10px;text-align:left;position:sticky;top:47px;z-index:10}
 td{padding:9px 10px;font-size:.75rem;border-top:1px solid #1e3a5f;color:#e2e8f0}
 tr:hover td{background:#16213a}
 .pill{display:inline-block;padding:1px 8px;border-radius:10px;font-size:.6rem;font-weight:700}
@@ -80,8 +80,12 @@ tr:hover td{background:#16213a}
 
   <div class="filters" id="filters">
     <div class="fg">
-      <label>📅 Fecha</label>
-      <select class="fselect" id="sel-fecha" onchange="render()"><option>Cargando...</option></select>
+      <label>📅 Fecha (lista)</label>
+      <select class="fselect" id="sel-fecha" onchange="syncFechaCal();render()"><option>Cargando...</option></select>
+    </div>
+    <div class="fg">
+      <label>📅 Elegir día</label>
+      <input type="date" class="fselect" id="fecha-cal" onchange="onFechaCal()">
     </div>
     <div class="fg" id="fg-camion">
       <label>🚛 Camión</label>
@@ -126,6 +130,17 @@ tr:hover td{background:#16213a}
   <div class="section-title" id="titulo-detalle-dia" style="display:none">📌 Detalle del día seleccionado</div>
   <div id="contenido" style="display:none"></div>
 
+</div>
+
+<!-- DETALLE DE CAMIÓN (desglose completo) -->
+<div id="detalle-modal-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3000;align-items:center;justify-content:center;padding:16px">
+  <div style="background:#131c2e;border:1px solid #1e3a5f;border-radius:14px;max-width:460px;width:100%;max-height:92vh;overflow-y:auto;padding:18px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h3 style="font-size:.95rem;color:#f1f5f9;margin:0">📋 Detalle del camión</h3>
+      <button onclick="cerrarDetalleCamion()" style="background:none;border:none;color:#64748b;font-size:1.2rem;cursor:pointer">✕</button>
+    </div>
+    <div id="detalle-modal-body"></div>
+  </div>
 </div>
 
 <!-- EDITOR DE UBICACIÓN (admin/bodega/coordinador) -->
@@ -344,7 +359,7 @@ function resumenCamion(fecha,chofer){
     const prev=porCodigo.get(r.codigo);
     if(!prev||r.ts>prev.ts) porCodigo.set(r.codigo,r);
   });
-  let entregados=0,recaudado=0,ncVal=0,ncN=0,porCobrarN=0,porCobrarVal=0,quemadosN=0,quemadoVal=0,anuladosN=0;
+  let entregados=0,recaudado=0,ncVal=0,ncN=0,porCobrarN=0,porCobrarVal=0,quemadosN=0,quemadoVal=0,anuladosN=0,anulVal=0;
   const met={EFECTIVO:0,TRANSFERENCIA:0,CHEQUE:0,CREDITO:0};
   porCodigo.forEach(r=>{
     const pedido=pedidos.find(p=>p.codigo===r.codigo);
@@ -360,14 +375,14 @@ function resumenCamion(fecha,chofer){
       const nc=Math.max(0,total-r.monto); if(nc>0.009){ ncVal+=nc; ncN++; }
     }
     else if(r.estado==='POR_COBRAR'){ porCobrarN++; porCobrarVal+=total; }
-    else if(r.estado==='ANULADO'){ anuladosN++; }
+    else if(r.estado==='ANULADO'){ anuladosN++; anulVal+=total; }
   });
   const pendientes=Math.max(0,totalPedidos-entregados-porCobrarN-anuladosN);
   const pct=totalPedidos?Math.round((entregados+anuladosN+porCobrarN)/totalPedidos*100):0; // % de ruta "resuelta"
   return {chofer,fecha,bodega:bodegaDe(fecha,chofer),totalPedidos,totalMonto,totalPeso,
     entregados,recaudado,
     efectivo:met.EFECTIVO,transferencia:met.TRANSFERENCIA,cheque:met.CHEQUE,credito:met.CREDITO,aDepositar:met.EFECTIVO,
-    ncVal,ncN,porCobrarN,porCobrarVal,quemadosN,quemadoVal,anuladosN,pendientes,pct};
+    ncVal,ncN,porCobrarN,porCobrarVal,quemadosN,quemadoVal,anuladosN,anulVal,pendientes,pct};
 }
 
 function pillEstadoCuadre(estado){
@@ -475,29 +490,42 @@ async function render(){
   </div>
 
   <div class="section-title">Resumen por camión — ${fecha}</div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:.62rem;color:#94a3b8;margin:-2px 0 8px">
+    <span><span style="display:inline-block;width:11px;height:11px;background:#22c55e;border-radius:2px;vertical-align:middle"></span> Entregado (recaudado)</span>
+    <span><span style="display:inline-block;width:11px;height:11px;background:#f97316;border-radius:2px;vertical-align:middle"></span> Quemado</span>
+    <span><span style="display:inline-block;width:11px;height:11px;background:#ef4444;border-radius:2px;vertical-align:middle"></span> Anulado / no cobrado</span>
+    <span><span style="display:inline-block;width:11px;height:11px;background:#475569;border-radius:2px;vertical-align:middle"></span> Pendiente / por cobrar</span>
+  </div>
   <table>
     <thead><tr>
-      <th>Camión</th><th>Bodega</th><th>Avance</th><th>Clientes</th><th>Entregados</th>
-      <th>Por cobrar</th><th>NC</th><th>Quemado</th><th>Anulados</th><th>$ Total</th><th>$ Recaudado</th><th>Formas de pago</th><th>💵 Depositar</th><th></th>
+      <th>Camión</th><th>Bodega</th><th>Avance (pedidos)</th><th>Avance ($)</th><th>Clientes</th><th>Entregados</th>
+      <th>Por cobrar</th><th>NC</th><th>Quemado</th><th>Anulados</th><th>$ Total</th><th>$ Recaudado</th><th>Formas de pago</th><th>💵 Depositar</th><th>Acciones</th>
     </tr></thead>
     <tbody>`;
   resumenes.sort((a,b)=>a.chofer.localeCompare(b.chofer)).forEach(r=>{
     const bNombre=r.bodega==='riobamba'?'Riobamba':r.bodega==='ambato'?'Ambato':'—';
+    const gC=r.entregados-r.quemadosN, oC=r.quemadosN, rjC=r.anuladosN;             // avance en pedidos
+    const gV=r.recaudado-r.quemadoVal, oV=r.quemadoVal, rjV=(r.anulVal||0)+r.ncVal;  // avance en $
+    const pctD=r.totalMonto>0?Math.round((gV+oV+rjV)/r.totalMonto*100):0;
     html+=`<tr>
       <td><b>${r.chofer}</b></td>
       <td>${bNombre}</td>
-      <td><span class="bar-wrap"><span class="bar-fill" style="width:${r.pct}%"></span></span>${r.pct}%</td>
+      <td>${barra4(gC,oC,rjC,r.totalPedidos)} <span style="font-size:.7rem;color:#94a3b8">${r.pct}%</span></td>
+      <td>${barra4(gV,oV,rjV,r.totalMonto)} <span style="font-size:.7rem;color:#94a3b8">${pctD}%</span></td>
       <td>${r.totalPedidos}</td>
       <td><span class="pill green">${r.entregados}</span></td>
       <td>${r.porCobrarN} <span style="color:#64748b">($${r.porCobrarVal.toFixed(0)})</span></td>
       <td style="color:${r.ncVal>0.009?'#f87171':'#64748b'}">$${r.ncVal.toFixed(0)}</td>
       <td>${r.quemadosN>0?`${r.quemadosN} <span style="color:#fb923c">($${r.quemadoVal.toFixed(0)})</span>`:'—'}</td>
-      <td>${r.anuladosN}</td>
+      <td>${r.anuladosN}${(r.anulVal||0)>0.009?` <span style="color:#818cf8">($${(r.anulVal||0).toFixed(0)})</span>`:''}</td>
       <td>$${r.totalMonto.toFixed(0)}</td>
       <td style="color:#4ade80;font-weight:700">$${r.recaudado.toFixed(0)}</td>
       <td style="font-size:.62rem;color:#94a3b8;white-space:nowrap">💵$${r.efectivo.toFixed(0)} · 🏦$${r.transferencia.toFixed(0)} · 🧾$${r.cheque.toFixed(0)} · 📄$${r.credito.toFixed(0)}</td>
       <td style="color:#4ade80;font-weight:800">$${r.aDepositar.toFixed(0)}</td>
-      <td><a class="btn-map" href="mapa_live_F150.html?fecha=${encodeURIComponent(r.fecha)}&chofer=${encodeURIComponent(r.chofer)}&bodega=${encodeURIComponent(r.bodega||'')}">🗺️ Ver</a></td>
+      <td style="white-space:nowrap">
+        <a class="btn-map" href="mapa_live_F150.html?fecha=${encodeURIComponent(r.fecha)}&chofer=${encodeURIComponent(r.chofer)}&bodega=${encodeURIComponent(r.bodega||'')}">🗺️ Ver</a>
+        <button class="btn-map" style="background:#334155;margin-left:4px" onclick="abrirDetalleCamion('${r.chofer}','${r.fecha}')">🔍 Detalle</button>
+      </td>
     </tr>`;
   });
   html+=`</tbody></table>`;
@@ -719,6 +747,56 @@ async function revertirGeo(cod){
   await cargarGeo();
   render();
 }
+
+// Barra apilada de 4 colores: verde (v), naranja (n), rojo (r), gris (resto).
+function barra4(v,n,r,total){
+  const t=total>0?total:1;
+  const pv=Math.max(0,v)/t*100, pn=Math.max(0,n)/t*100, pr=Math.max(0,r)/t*100;
+  const pg=Math.max(0,100-pv-pn-pr);
+  return `<span style="display:inline-flex;width:110px;height:9px;border-radius:5px;overflow:hidden;background:#334155;vertical-align:middle;margin-right:6px">`
+    +`<span style="width:${pv}%;background:#22c55e"></span>`
+    +`<span style="width:${pn}%;background:#f97316"></span>`
+    +`<span style="width:${pr}%;background:#ef4444"></span>`
+    +`<span style="width:${pg}%;background:#475569"></span></span>`;
+}
+// Selector de fecha por calendario
+function syncFechaCal(){ const s=document.getElementById('sel-fecha'), c=document.getElementById('fecha-cal'); if(s&&c) c.value=s.value; }
+async function onFechaCal(){
+  const d=document.getElementById('fecha-cal').value; if(!d) return;
+  try{ await asegurarRango(d,d); }catch(e){}
+  const sel=document.getElementById('sel-fecha');
+  if(![...sel.options].some(o=>o.value===d)){ const o=document.createElement('option'); o.value=d; o.textContent=d; sel.appendChild(o); }
+  sel.value=d;
+  render();
+}
+// Detalle completo de un camión (modal)
+function detalleCamionHtml(r){
+  const bN=r.bodega==='riobamba'?'Riobamba':r.bodega==='ambato'?'Ambato':'—';
+  return `
+  <div class="detail-row"><span class="k">🚛 Camión</span><span class="v">${r.chofer}</span></div>
+  <div class="detail-row"><span class="k">📅 Fecha</span><span class="v">${r.fecha}</span></div>
+  <div class="detail-row"><span class="k">🏭 Bodega</span><span class="v">${bN}</span></div>
+  <div class="detail-row"><span class="k">📦 Clientes</span><span class="v">${r.totalPedidos}</span></div>
+  <div class="detail-row"><span class="k">✅ Entregados</span><span class="v" style="color:#4ade80">${r.entregados} — $${r.recaudado.toFixed(2)}</span></div>
+  <div class="detail-row" style="padding-left:14px"><span class="k">💵 Efectivo</span><span class="v" style="color:#4ade80">$${r.efectivo.toFixed(2)}</span></div>
+  <div class="detail-row" style="padding-left:14px"><span class="k">🏦 Transferencia</span><span class="v">$${r.transferencia.toFixed(2)}</span></div>
+  <div class="detail-row" style="padding-left:14px"><span class="k">🧾 Cheque</span><span class="v">$${r.cheque.toFixed(2)}</span></div>
+  <div class="detail-row" style="padding-left:14px"><span class="k">📄 Crédito (paga después)</span><span class="v" style="color:#fbbf24">$${r.credito.toFixed(2)}</span></div>
+  <div class="detail-row"><span class="k">🟠 Por cobrar</span><span class="v" style="color:#fb923c">${r.porCobrarN} — $${r.porCobrarVal.toFixed(2)}</span></div>
+  <div class="detail-row"><span class="k">🔥 Quemado (de NC)</span><span class="v" style="color:#fb923c">${r.quemadosN} — $${r.quemadoVal.toFixed(2)}</span></div>
+  <div class="detail-row"><span class="k">💰 NC (no cobrado)</span><span class="v" style="color:#f87171">${r.ncN} — $${r.ncVal.toFixed(2)}</span></div>
+  <div class="detail-row"><span class="k">❌ Anulados</span><span class="v" style="color:#818cf8">${r.anuladosN} — $${(r.anulVal||0).toFixed(2)}</span></div>
+  <div class="detail-row"><span class="k">⏳ Pendientes</span><span class="v">${r.pendientes}</span></div>
+  <div class="detail-row"><span class="k">💰 Total ruta</span><span class="v">$${r.totalMonto.toFixed(2)}</span></div>
+  <div class="detail-row" style="border-top:2px solid #1e3a5f"><span class="k" style="font-weight:800;color:#4ade80">💵 A DEPOSITAR (efectivo)</span><span class="v" style="color:#4ade80;font-size:1rem">$${r.aDepositar.toFixed(2)}</span></div>
+  <div class="detail-row"><span class="k">📈 Avance</span><span class="v">${r.pct}%</span></div>`;
+}
+function abrirDetalleCamion(chofer, fecha){
+  const r=resumenCamion(fecha, chofer);
+  document.getElementById('detalle-modal-body').innerHTML=detalleCamionHtml(r);
+  document.getElementById('detalle-modal-overlay').style.display='flex';
+}
+function cerrarDetalleCamion(){ document.getElementById('detalle-modal-overlay').style.display='none'; }
 
 // ── EXPORTAR ─────────────────────────────────────────────
 function exportarExcel(){
