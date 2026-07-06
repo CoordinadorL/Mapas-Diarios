@@ -29,11 +29,13 @@
   let recalculando = false;
   let ultimaSugerencia = null;         // { ordenIdx:[...], distanciaKm, duracionMin }
   let ultimaClaveRuta = '';
+  let intentosRapidos = 0;             // reintentos cada 5s hasta el primer resultado del día/camión
 
   // 10 min: con ~20 camiones activos, esto da ~960 llamadas/día por endpoint de
   // OpenRouteService (48% del límite gratuito de 2000/día) -- deja margen para
   // los clics manuales de "Recalcular ahora" y reintentos si algo falla.
   const RECALC_MIN_INTERVAL_MS = 10 * 60 * 1000; // no más de 1 vez cada 10 min, salvo forzado
+  const MAX_INTENTOS_RAPIDOS = 6; // ~30s de reintentos cada 5s antes de pasar al ciclo normal de 10 min
   const STORAGE_PREFIX = 'rutaDinamica_ts_';
 
   function claveStorage() {
@@ -190,34 +192,32 @@
   // ── Panel flotante propio: UN solo indicador de "siguiente parada" ──
   // Antes convivían dos: el chip viejo "➡️ Siguiente" (#nav-cluster, en línea
   // recta) y este panel nuevo (por calle real) -- se pisaban visualmente. Se
-  // ocultó el viejo (ver ocultarNavClusterViejo) y este quedó como el único,
-  // en el mismo lugar donde estaba el viejo: colapsado por defecto (una fila
-  // con el próximo cliente, igual que antes), y al tocarlo se despliega el
-  // tiempo estimado + aviso de espera + el botón de recalcular.
+  // ocultó el viejo (ver ocultarNavClusterViejo) y este quedó como el único.
+  // Todo queda siempre visible (nombre del próximo cliente, tiempo estimado,
+  // aviso de espera y el botón de recalcular) -- nada se esconde tras un clic.
+  // Tocar la fila superior (el nombre) hace lo mismo que hacía el chip viejo:
+  // centra el mapa en ese cliente y abre su popup.
   function crearPanelUI() {
     if (document.getElementById('ruta-dinamica-panel')) return;
     const div = document.createElement('div');
     div.id = 'ruta-dinamica-panel';
     div.style.cssText = 'position:fixed;left:10px;bottom:120px;z-index:1000;display:none;max-width:230px';
     div.innerHTML =
-      '<button id="rd-header" style="background:linear-gradient(135deg,#1d4ed8,#0ea5e9);border:none;color:#fff;' +
-      'height:32px;padding:0 12px;border-radius:16px;font-size:.63rem;font-weight:700;cursor:pointer;' +
-      'box-shadow:0 2px 8px rgba(14,165,233,.4);display:flex;align-items:center;gap:5px;' +
-      'max-width:210px;overflow:hidden;white-space:nowrap;width:100%;text-align:left">' +
+      '<button id="rd-header" title="Ir a este cliente en el mapa" style="background:linear-gradient(135deg,#1d4ed8,#0ea5e9);' +
+      'border:none;color:#fff;height:32px;padding:0 12px;border-radius:16px 16px 0 0;font-size:.63rem;font-weight:700;' +
+      'cursor:pointer;box-shadow:0 2px 8px rgba(14,165,233,.4);display:flex;align-items:center;gap:5px;' +
+      'width:100%;overflow:hidden;white-space:nowrap;text-align:left">' +
       '➡️ <span id="rd-siguiente-corto" style="overflow:hidden;text-overflow:ellipsis">—</span></button>' +
-      '<div id="rd-detalle" style="display:none;margin-top:6px;background:rgba(15,23,42,.92);color:#e2e8f0;' +
-      'border-radius:10px;padding:8px 12px;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,.4)">' +
+      '<div style="background:rgba(15,23,42,.92);color:#e2e8f0;' +
+      'border-radius:0 0 10px 10px;padding:8px 12px;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,.4)">' +
       '<div id="rd-siguiente" style="margin-bottom:2px">—</div>' +
       '<div id="rd-espera" style="color:#fbbf24;margin-bottom:6px"></div>' +
       '<button id="rd-recalcular-btn" style="background:#334155;color:#e2e8f0;border:none;border-radius:6px;' +
       'padding:4px 8px;font-size:11px;cursor:pointer">🔄 Recalcular ahora</button>' +
       '</div>';
     document.body.appendChild(div);
-    document.getElementById('rd-header').addEventListener('click', () => {
-      const det = document.getElementById('rd-detalle');
-      det.style.display = det.style.display === 'none' ? 'block' : 'none';
-    });
-    document.getElementById('rd-recalcular-btn').addEventListener('click', (e) => { e.stopPropagation(); recalcular(true); });
+    document.getElementById('rd-header').addEventListener('click', irAlSiguienteSugerido);
+    document.getElementById('rd-recalcular-btn').addEventListener('click', () => recalcular(true));
   }
 
   // El chip/pill viejo (#nav-cluster: "➡️ Siguiente" en línea recta + "🔄 Re-optimizar")
@@ -227,14 +227,30 @@
     if (nav) nav.style.display = 'none';
   }
 
+  function idxSiguienteSugerido() {
+    const tier1 = idxPendientesTier1(), tier2Listos = idxPorCobrarListos();
+    return (ultimaSugerencia && ultimaSugerencia.ordenIdx.length) ? ultimaSugerencia.ordenIdx[0]
+      : (tier1[0] != null ? tier1[0] : (tier2Listos[0] != null ? tier2Listos[0] : null));
+  }
+
+  // Igual que la vieja irAlSiguiente() del mapa, pero usando el orden por calle
+  // real en vez del orden fijo de DATA -- centra el mapa en el próximo cliente
+  // sugerido y abre su popup.
+  function irAlSiguienteSugerido() {
+    const idx = idxSiguienteSugerido();
+    if (idx == null || !DATA[idx]) return;
+    const d = DATA[idx];
+    map.setView([d.lat, d.lng], 17);
+    setTimeout(() => { if (allMarkers[idx]) allMarkers[idx].openPopup(); }, 250);
+  }
+
   function actualizarPanel() {
     const panel = document.getElementById('ruta-dinamica-panel');
     if (!panel) return;
     const tier1 = idxPendientesTier1(), tier2Listos = idxPorCobrarListos(), tier2Esperando = idxPorCobrarEsperando();
     if (!tier1.length && !tier2Listos.length && !tier2Esperando.length) { panel.style.display = 'none'; return; }
     panel.style.display = 'block';
-    const siguienteIdx = (ultimaSugerencia && ultimaSugerencia.ordenIdx.length) ? ultimaSugerencia.ordenIdx[0]
-      : (tier1[0] != null ? tier1[0] : tier2Listos[0]);
+    const siguienteIdx = idxSiguienteSugerido();
     const nombreSig = (siguienteIdx != null && DATA[siguienteIdx]) ? DATA[siguienteIdx].razon : '—';
     const nombreCorto = siguienteIdx != null ? ('#' + (siguienteIdx + 1) + ' ' + nombreSig.split(' ').slice(0, 3).join(' ')) : '—';
     const tiempoTxt = (ultimaSugerencia && ultimaSugerencia.duracionMin) ? (' (' + Math.round(ultimaSugerencia.duracionMin) + ' min)') : '';
@@ -404,6 +420,12 @@
         if (typeof buildPanel === 'function') buildPanel();
         if (typeof updateStats === 'function') updateStats();
         if (typeof updateProgress === 'function') updateProgress();
+        // DATA cambió de orden -- cualquier sugerencia previa de recalcular() quedó con
+        // índices apuntando a las posiciones VIEJAS. Se descarta y se vuelve a calcular
+        // ya sobre el orden nuevo, para que "siguiente parada" no muestre el cliente
+        // equivocado mientras llega el próximo ciclo normal (hasta 10 min después).
+        ultimaSugerencia = null;
+        recalcular(true);
       }
     } catch (e) {
       console.warn('ruta-dinamica: fallo calculando el plan fijo del día.', e);
@@ -426,6 +448,16 @@
     // en vez de depender solo del disparo por cambio de clave.
     setInterval(() => recalcular(false), 60 * 1000); // respeta RECALC_MIN_INTERVAL_MS salvo forzado
     setInterval(() => intentarCalcularPlanFijo(), 15 * 1000); // barato: sale de inmediato si ya hay plan
+    // Mientras no haya un primer resultado para el camión/día activo (ultimaSugerencia
+    // sigue null -- por ejemplo, se eligió el camión antes que la bodega, o ORS tardó
+    // en responder), reintenta cada 5s en vez de esperar el ciclo normal de 10 min.
+    // Se detiene solo (MAX_INTENTOS_RAPIDOS) para no insistir sin fin si algo falla.
+    setInterval(() => {
+      if (!ultimaSugerencia && intentosRapidos < MAX_INTENTOS_RAPIDOS) {
+        intentosRapidos++;
+        recalcular(true);
+      }
+    }, 5000);
 
     // Detecta cambio de fecha/chofer activo (nueva ruta cargada) sin enganchar loadAndRender().
     setInterval(() => {
@@ -435,6 +467,7 @@
         cargarTimestamps();
         limpiarRutaSugerida();
         ultimaSugerencia = null;
+        intentosRapidos = 0; // nuevo camión/día: reactiva los reintentos rápidos
         recalcular(true);
         intentarCalcularPlanFijo();
       } else {
