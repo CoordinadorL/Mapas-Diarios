@@ -2,7 +2,11 @@
 // Service Worker — Mapas Diarios PWA
 // Permite instalación en pantalla de inicio y caché básico
 // ═══════════════════════════════════════════════════════════
-const CACHE_NAME = 'mapas-diarios-v24';
+const CACHE_NAME = 'mapas-diarios-v25';
+// Caché separada para las imágenes del mapa (calles) -- ruta-dinamica.js la
+// llena por adelantado con la zona de la ruta del día. Aparte de CACHE_NAME
+// para que actualizar la app (subir CACHE_NAME) no borre el mapa ya descargado.
+const TILES_CACHE_NAME = 'mapas-diarios-tiles-v1';
 
 // Recursos a cachear para uso offline básico
 const CACHE_ASSETS = [
@@ -28,12 +32,13 @@ self.addEventListener('install', event => {
   self.skipWaiting();
 });
 
-// Activar: limpiar cachés viejos
+// Activar: limpiar cachés viejos (conserva la de tiles -- no es "de la app",
+// es la descarga de mapas offline que ruta-dinamica.js va llenando)
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
       Promise.all(
-        keys.filter(k => k !== CACHE_NAME).map(k => {
+        keys.filter(k => k !== CACHE_NAME && k !== TILES_CACHE_NAME).map(k => {
           console.log('[SW] Eliminando caché viejo:', k);
           return caches.delete(k);
         })
@@ -47,20 +52,36 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // Google Sheets API y Maps → siempre network (datos en tiempo real)
+  // Google Sheets API y ORS → siempre network (datos en tiempo real, nunca servir algo viejo)
   if (
     url.hostname.includes('script.google.com') ||
     url.hostname.includes('allorigins.win') ||
-    url.hostname.includes('tile.openstreetmap.org') ||
-    url.hostname.includes('basemaps.cartocdn.com') ||
-    url.hostname.includes('maps.googleapis.com') ||
-    url.hostname.includes('waze.com') ||
     url.hostname.includes('openrouteservice.org')
   ) {
     event.respondWith(fetch(event.request).catch(() => {
       // Si falla la red, no hacer nada (el mapa manejará el error)
       return new Response('', { status: 503 });
     }));
+    return;
+  }
+
+  // Imágenes del mapa (calles) → red primero (siempre lo más fresco posible),
+  // pero si no hay señal se sirve lo que ruta-dinamica.js precargó para la
+  // zona de la ruta del día -- así el mapa no se queda en blanco.
+  if (url.hostname.includes('tile.openstreetmap.org') || url.hostname.includes('basemaps.cartocdn.com')) {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        if (response && response.status === 200) {
+          const cloned = response.clone();
+          caches.open(TILES_CACHE_NAME).then(cache => cache.put(event.request, cloned));
+        }
+        return response;
+      }).catch(() =>
+        caches.open(TILES_CACHE_NAME).then(cache => cache.match(event.request)).then(cached =>
+          cached || new Response('', { status: 503 })
+        )
+      )
+    );
     return;
   }
 

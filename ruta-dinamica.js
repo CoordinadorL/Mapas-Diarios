@@ -434,6 +434,104 @@
     }
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // PRECARGA DE MAPA OFFLINE — descarga por adelantado las imágenes de calles
+  // de toda la zona de la ruta del día (una sola vez por camión+fecha), para
+  // que si se pierde señal en un sector nuevo el mapa no se quede en blanco.
+  // Se guarda en el Cache Storage del Service Worker (sw.js sirve estas
+  // imágenes con "red primero, cae a esta caché si no hay señal").
+  // ═══════════════════════════════════════════════════════════
+  const TILES_CACHE_NAME = 'mapas-diarios-tiles-v1';
+  const TILE_SUBDOMINIOS = ['a', 'b', 'c'];
+  const TILE_ZOOMS = [13, 14, 15]; // rango típico de navegación por calle
+  const MAX_TILES_TOTAL = 300;     // tope de imágenes por camión/día -- no gastar datos de más
+
+  function lonATileX(lon, z) { return Math.floor((lon + 180) / 360 * Math.pow(2, z)); }
+  function latATileY(lat, z) {
+    const rad = lat * Math.PI / 180;
+    return Math.floor((1 - Math.log(Math.tan(rad) + 1 / Math.cos(rad)) / Math.PI) / 2 * Math.pow(2, z));
+  }
+  function urlDeTile(z, x, y) {
+    const s = TILE_SUBDOMINIOS[Math.abs(x + y) % TILE_SUBDOMINIOS.length];
+    const oscuro = typeof darkMode !== 'undefined' && darkMode;
+    return oscuro
+      ? `https://${s}.basemaps.cartocdn.com/dark_all/${z}/${x}/${y}.png`
+      : `https://${s}.tile.openstreetmap.org/${z}/${x}/${y}.png`;
+  }
+  function claveTilesPrecargados() {
+    return 'rutaDinamica_tilesOk_' + (activeFecha || '') + '_' + (activeChofer || '').replace(/\s/g, '_');
+  }
+
+  let precargandoTiles = false;
+  async function precargarMapaOffline() {
+    if (precargandoTiles) return;
+    if (!('caches' in window)) return; // sin soporte de Cache Storage, no insistir
+    if (!DATA.length || !activeFecha || !activeChofer) return;
+    if (localStorage.getItem(claveTilesPrecargados())) return; // ya se hizo hoy para este camión
+
+    const bod = (typeof BODEGAS !== 'undefined' && BODEGAS[activeBodega]) ? BODEGAS[activeBodega] : null;
+    const puntos = DATA.map(d => ({ lat: d.lat, lng: d.lng })).concat(bod ? [bod] : []);
+    if (!puntos.length) return;
+
+    let latMin = Infinity, latMax = -Infinity, lngMin = Infinity, lngMax = -Infinity;
+    puntos.forEach(p => {
+      if (p.lat < latMin) latMin = p.lat;
+      if (p.lat > latMax) latMax = p.lat;
+      if (p.lng < lngMin) lngMin = p.lng;
+      if (p.lng > lngMax) lngMax = p.lng;
+    });
+    // Margen alrededor de la zona (10%) para no dejar el borde exacto sin cobertura.
+    const padLat = (latMax - latMin) * 0.1 || 0.01;
+    const padLng = (lngMax - lngMin) * 0.1 || 0.01;
+    latMin -= padLat; latMax += padLat; lngMin -= padLng; lngMax += padLng;
+
+    // Arranca por el zoom más amplio (más útil como respaldo general) y solo suma
+    // zooms más finos mientras no se pase del tope de imágenes del día.
+    const tilesPorZoom = [];
+    let total = 0;
+    for (const z of TILE_ZOOMS) {
+      const xMin = lonATileX(lngMin, z), xMax = lonATileX(lngMax, z);
+      const yMin = latATileY(latMax, z), yMax = latATileY(latMin, z); // Y crece hacia el sur
+      const cuenta = (xMax - xMin + 1) * (yMax - yMin + 1);
+      if (total + cuenta > MAX_TILES_TOTAL) break;
+      total += cuenta;
+      tilesPorZoom.push({ z, xMin, xMax, yMin, yMax });
+    }
+    if (!tilesPorZoom.length) return;
+
+    precargandoTiles = true;
+    try {
+      const cache = await caches.open(TILES_CACHE_NAME);
+      const urls = [];
+      tilesPorZoom.forEach(({ z, xMin, xMax, yMin, yMax }) => {
+        for (let x = xMin; x <= xMax; x++) {
+          for (let y = yMin; y <= yMax; y++) urls.push(urlDeTile(z, x, y));
+        }
+      });
+
+      // Descarga con concurrencia limitada -- no disparar todo de una vez.
+      const CONCURRENCIA = 6;
+      let i = 0;
+      async function siguiente() {
+        while (i < urls.length) {
+          const url = urls[i++];
+          try {
+            if (await cache.match(url)) continue; // ya estaba de un día anterior en la misma zona
+            const resp = await fetch(url);
+            if (resp && resp.status === 200) await cache.put(url, resp);
+          } catch (e) { /* sin señal en este momento -- se sigue con el resto */ }
+        }
+      }
+      await Promise.all(Array.from({ length: CONCURRENCIA }, siguiente));
+      localStorage.setItem(claveTilesPrecargados(), '1');
+      console.log('ruta-dinamica: mapa offline precargado (' + urls.length + ' imágenes de la zona).');
+    } catch (e) {
+      console.warn('ruta-dinamica: no se pudo precargar el mapa offline.', e);
+    } finally {
+      precargandoTiles = false;
+    }
+  }
+
   function iniciar() {
     crearPanelUI();
     ocultarNavClusterViejo();
@@ -441,13 +539,13 @@
     envolverNearestNeighborFrom();
     envolverStatsDinamicas();
     cargarTimestamps();
-    cargarConfig().then(() => { recalcular(true); intentarCalcularPlanFijo(); });
+    cargarConfig().then(() => { recalcular(true); intentarCalcularPlanFijo(); precargarMapaOffline(); });
     // La clave de abajo (fecha|chofer) puede cambiar ANTES de que se elija la bodega
     // (DATA sigue vacío en ese instante), así que intentarCalcularPlanFijo() necesita
     // este reintento periódico propio -- igual que recalcular() ya tiene el suyo --
     // en vez de depender solo del disparo por cambio de clave.
     setInterval(() => recalcular(false), 60 * 1000); // respeta RECALC_MIN_INTERVAL_MS salvo forzado
-    setInterval(() => intentarCalcularPlanFijo(), 15 * 1000); // barato: sale de inmediato si ya hay plan
+    setInterval(() => { intentarCalcularPlanFijo(); precargarMapaOffline(); }, 15 * 1000); // baratos: salen de inmediato si ya está hecho
     // Mientras no haya un primer resultado para el camión/día activo (ultimaSugerencia
     // sigue null -- por ejemplo, se eligió el camión antes que la bodega, o ORS tardó
     // en responder), reintenta cada 5s en vez de esperar el ciclo normal de 10 min.
@@ -470,6 +568,7 @@
         intentosRapidos = 0; // nuevo camión/día: reactiva los reintentos rápidos
         recalcular(true);
         intentarCalcularPlanFijo();
+        precargarMapaOffline();
       } else {
         aplicarStatsFijas(); // por si updateStats() corrió antes de que el plan estuviera listo
       }
