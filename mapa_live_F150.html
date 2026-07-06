@@ -536,8 +536,12 @@ html, body { overflow: hidden; touch-action: manipulation; }
   .pc-head { padding: 6px 9px 5px !important; }
   .pc-body { padding: 4px 9px !important; }
 
-  /* Panel de clientes — full screen en móvil */
-  #side-panel { width: 100vw !important; }
+  /* Panel de clientes — full screen en móvil. El cierre (right:-340px) se
+     calculó para el ancho de escritorio (320px); en pantalla completa
+     (100vw, ~375px+ en celular) ese mismo desplazamiento no alcanza a
+     sacarlo de la vista y queda una franja visible -- se corrige aquí. */
+  #side-panel { width: 100vw !important; right: -100vw; }
+  #side-panel.open { right: 0 !important; }
 
   /* Export panel centrado */
   #export-panel { width: 90vw !important; left: 50% !important; transform: translate(-50%, -50%) !important; }
