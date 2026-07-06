@@ -915,48 +915,11 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
 </div>
 
 <script src="mapa-utils.js"></script>
+<script src="mapa-auth-sync.js"></script>
 <script>
-// ── SESIÓN / LOGIN ────────────────────────────────────────────
-// Roles permitidos para ver y trabajar el mapa. "cartera" NO entra aquí
-// (solo ve el resumen de rutas) — se redirige a resumen.html.
-const ROLES_PERMITIDOS_MAPA = ['admin','bodega','coordinador','transportista','reparto'];
-function getSesion(){
-  try{ return JSON.parse(localStorage.getItem('sesionActiva')||'null'); }catch(e){ return null; }
-}
-// Token de sesión firmado por el servidor; se adjunta a cada petición.
-function getToken(){ const s=getSesion(); return (s&&s.token)||''; }
-let _redirigiendoLogin=false;
-function sesionExpirada(){
-  if(_redirigiendoLogin) return;
-  _redirigiendoLogin=true;
-  try{ localStorage.removeItem('sesionActiva'); }catch(e){}
-  alert('Tu sesión expiró o no es válida. Ingresa de nuevo.');
-  window.location.href='login.html';
-}
-(function chequearSesion(){
-  const s=getSesion();
-  if(!s || !s.rol){ window.location.href='login.html'; return; }
-  if(!ROLES_PERMITIDOS_MAPA.includes(s.rol)){ window.location.href='resumen.html'; return; }
-  document.addEventListener('DOMContentLoaded',()=>{
-    const un=document.getElementById('user-name'), ur=document.getElementById('user-rol');
-    if(un)un.textContent=s.usuario||'—';
-    if(ur)ur.textContent=(s.rol||'—').toUpperCase();
-    if(['admin','bodega','coordinador'].includes(s.rol)){
-      const br=document.getElementById('btn-resumen');
-      if(br)br.style.display='flex';
-    }
-    if(['transportista','reparto','admin','bodega','coordinador'].includes(s.rol)){
-      const bc=document.getElementById('btn-cuadre');
-      if(bc)bc.style.display='flex';
-    }
-  });
-})();
-function logout(){
-  if(!confirm('¿Cerrar sesión?'))return;
-  localStorage.removeItem('sesionActiva');
-  localStorage.removeItem('jornadaActiva'); // no heredar el mapa fijo a otro usuario del mismo equipo
-  window.location.href='login.html';
-}
+// Sesión/login (getSesion, getToken, sesionExpirada, logout, chequeo de rol
+// al cargar) y la cola de reintento offline (SYNC_QUEUE) ahora viven en
+// mapa-auth-sync.js, cargado antes que este script.
 
 const API_URL="https://script.google.com/macros/s/AKfycbwzQRnCJHFXni_9Qvs9kh_6BoikPDtb2sAMNChS3gSk9gAn5e31z5PFvKRGRzeoFqK5og/exec";
 const PALETTE=['#4ade80','#60a5fa','#c084fc','#34d399','#f472b6','#a78bfa','#38bdf8','#2dd4bf','#818cf8','#fb923c'];
@@ -985,44 +948,7 @@ let GEO_OVERRIDES={}, GEO_LOADED=false; // correcciones de ubicación por códig
 let geoEditMarker=null, geoEditIdx=-1;   // estado del modo "arrastrar pin"
 let CANAL_MAP={}, CANAL_LOADED=false;   // canal crudo (mayúsculas) -> 'MAYORISTA' | 'COBERTURA', desde hoja CANALES
 
-// ══════════════════════════════════════════════════════════════
-// COLA DE REINTENTO OFFLINE — si un avance o una corrección de
-// ubicación no se pudo enviar (sin señal), queda guardado aquí y se
-// reintenta solo (al recuperar conexión, y cada 20s). Nunca se pierde
-// silenciosamente: el usuario ve un contador de "sin enviar" mientras
-// haya algo pendiente.
-// ══════════════════════════════════════════════════════════════
-let SYNC_QUEUE = (function(){ try{ return JSON.parse(localStorage.getItem('syncQueuePendiente')||'[]'); }catch(e){ return []; } })();
-function guardarSyncQueue(){
-  try{ localStorage.setItem('syncQueuePendiente', JSON.stringify(SYNC_QUEUE)); }catch(e){}
-  actualizarIndicadorSync();
-}
-function actualizarIndicadorSync(){
-  const n=SYNC_QUEUE.length;
-  const item=document.getElementById('sync-indicator'), sep=document.getElementById('sync-sep'), cnt=document.getElementById('sync-count');
-  if(!item) return;
-  item.style.display = n>0 ? 'flex' : 'none';
-  if(sep) sep.style.display = n>0 ? 'block' : 'none';
-  if(cnt) cnt.textContent = n;
-}
-// Encola (o reemplaza, si ya había un intento pendiente del mismo cliente) un envío fallido.
-function encolarSync(clave, payload){
-  SYNC_QUEUE = SYNC_QUEUE.filter(it=>it.clave!==clave);
-  SYNC_QUEUE.push({clave, payload, ts:Date.now()});
-  guardarSyncQueue();
-}
-// Intenta reenviar todo lo pendiente. Se detiene en el primer fallo (probable falta de señal):
-// no tiene caso insistir con el resto en ese mismo ciclo, se reintentará en el próximo.
-async function vaciarSyncQueue(){
-  if(!SYNC_QUEUE.length) return;
-  for(const item of [...SYNC_QUEUE]){
-    try{
-      await fetchConTimeoutMapa(API_URL,{ method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(item.payload) }, 12000);
-      SYNC_QUEUE = SYNC_QUEUE.filter(it=>it.clave!==item.clave);
-      guardarSyncQueue();
-    }catch(err){ break; }
-  }
-}
+// SYNC_QUEUE (cola de reintento offline) ahora vive en mapa-auth-sync.js.
 
 // ── BODEGAS (puntos de partida de la ruta) ──────────────────
 const BODEGAS = {

@@ -2,7 +2,7 @@
 // Service Worker — Mapas Diarios PWA
 // Permite instalación en pantalla de inicio y caché básico
 // ═══════════════════════════════════════════════════════════
-const CACHE_NAME = 'mapas-diarios-v26';
+const CACHE_NAME = 'mapas-diarios-v27';
 // Caché separada para las imágenes del mapa (calles) -- ruta-dinamica.js la
 // llena por adelantado con la zona de la ruta del día. Aparte de CACHE_NAME
 // para que actualizar la app (subir CACHE_NAME) no borre el mapa ya descargado.
@@ -14,6 +14,7 @@ const CACHE_ASSETS = [
   './resumen.html',
   './mapa_live_F150.html',
   './mapa-utils.js',
+  './mapa-auth-sync.js',
   './ruta-dinamica.js',
   './manifest.json',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
