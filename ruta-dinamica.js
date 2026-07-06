@@ -244,12 +244,163 @@
     });
   }
 
+  // ═══════════════════════════════════════════════════════════
+  // PLAN FIJO DEL DÍA — orden de visita + km/tiempo TOTALES, calculados
+  // por calle real UNA SOLA VEZ (al inicio del día, con todos los clientes
+  // aún pendientes) y congelados: no cambian aunque se vayan entregando o
+  // cobrando pedidos durante la jornada. Sirve para saber cuánto hay que
+  // recorrer en total, sin que la cifra "baje" a medida que se avanza.
+  //
+  // Se integra con el mapa existente por dos vías, ambas SIN editar
+  // mapa_live_F150.html -- se envuelven (wrap) las funciones ya definidas
+  // ahí, algo seguro porque son declaraciones `function` normales en el
+  // scope global, no `const`/módulos:
+  //   1) nearestNeighborFrom(): si ya existe un plan fijo que coincide
+  //      EXACTAMENTE con las coordenadas de hoy, se usa ese orden en vez
+  //      del cálculo greedy en línea recta -- así los números de los pines,
+  //      el panel lateral y el primer cliente coinciden con la ruta verde.
+  //   2) updateStats() / updateTiempoEstimado(): después de que la app
+  //      calcule sus valores normales (dinámicos), se sobreescribe el
+  //      "DISTANCIA" del encabezado y el "Tiempo est" con los valores FIJOS
+  //      del plan, si ya existe uno.
+  // ═══════════════════════════════════════════════════════════
+  const PLAN_PREFIX = 'rutaDinamica_planFijo_';
+  function clavePlan() {
+    return PLAN_PREFIX + (activeFecha || '') + '_' + (activeChofer || '').replace(/\s/g, '_');
+  }
+  function leerPlanFijo() {
+    try { const raw = localStorage.getItem(clavePlan()); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+  }
+  function guardarPlanFijo(plan) {
+    try { localStorage.setItem(clavePlan(), JSON.stringify(plan)); } catch (e) {}
+  }
+  function formatDuracion(min) {
+    const m = Math.round(min || 0), h = Math.floor(m / 60), r = m % 60;
+    return h > 0 ? (h + 'h' + r + 'm') : (r + 'm');
+  }
+
+  // Busca, dentro de `pts` ([{lat,lng},...] en el orden que arma applyFiltersAndDraw),
+  // el índice de cada punto del plan cacheado -- si TODOS calzan exacto (mismo número
+  // de clientes, mismas coordenadas), devuelve el orden ya resuelto; si algo no
+  // coincide (cliente nuevo, corrección de ubicación, guía distinta), devuelve null
+  // y el mapa sigue con su comportamiento normal (línea recta) para ese caso.
+  function ordenFijoParaPuntos(pts, plan) {
+    if (!plan || !Array.isArray(plan.orden) || plan.orden.length !== pts.length) return null;
+    const usados = new Array(pts.length).fill(false);
+    const ordenIdx = [];
+    for (const p of plan.orden) {
+      let encontrado = -1;
+      for (let i = 0; i < pts.length; i++) {
+        if (!usados[i] && Math.abs(pts[i].lat - p.lat) < 1e-7 && Math.abs(pts[i].lng - p.lng) < 1e-7) { encontrado = i; break; }
+      }
+      if (encontrado === -1) return null;
+      usados[encontrado] = true;
+      ordenIdx.push(encontrado);
+    }
+    return ordenIdx;
+  }
+
+  // Envuelve nearestNeighborFrom (definida en mapa_live_F150.html, línea ~1134) para
+  // usar el plan fijo del día si ya existe y coincide con los puntos de hoy.
+  function envolverNearestNeighborFrom() {
+    if (typeof nearestNeighborFrom !== 'function' || nearestNeighborFrom.__rutaDinamicaWrapped) return;
+    const original = nearestNeighborFrom;
+    nearestNeighborFrom = function (pts, startLat, startLng) {
+      const plan = leerPlanFijo();
+      const fijo = plan ? ordenFijoParaPuntos(pts, plan) : null;
+      return fijo || original(pts, startLat, startLng);
+    };
+    nearestNeighborFrom.__rutaDinamicaWrapped = true;
+  }
+
+  // Sobreescribe "DISTANCIA" (s-km) y "Tiempo est" (prog-tiempo/bb-tiempo) con los
+  // valores FIJOS del plan del día, si ya existe uno para la fecha+chofer activos.
+  function aplicarStatsFijas() {
+    const plan = leerPlanFijo();
+    if (!plan || !plan.distanciaKm) return;
+    const elKm = document.getElementById('s-km');
+    if (elKm) elKm.textContent = plan.distanciaKm.toFixed(1) + ' km';
+    const txt = formatDuracion(plan.duracionMin);
+    ['prog-tiempo', 'bb-tiempo'].forEach(id => { const el = document.getElementById(id); if (el) el.textContent = txt; });
+  }
+  function envolverStatsDinamicas() {
+    if (typeof updateStats === 'function' && !updateStats.__rutaDinamicaWrapped) {
+      const original = updateStats;
+      updateStats = function () { original(); aplicarStatsFijas(); };
+      updateStats.__rutaDinamicaWrapped = true;
+    }
+    if (typeof updateTiempoEstimado === 'function' && !updateTiempoEstimado.__rutaDinamicaWrapped) {
+      const original = updateTiempoEstimado;
+      updateTiempoEstimado = function (lat, lng) { original(lat, lng); aplicarStatsFijas(); };
+      updateTiempoEstimado.__rutaDinamicaWrapped = true;
+    }
+  }
+
+  let calculandoPlanFijo = false;
+  // Calcula el plan fijo del día (orden + km + tiempo totales por calle real) UNA
+  // SOLA VEZ por camión+fecha, y solo si la jornada sigue "intacta" (nadie marcó
+  // todavía ningún avance) -- así nunca se reordena DATA con estados ya guardados
+  // por índice, que se desincronizarían. Si el día ya tiene avances (por ejemplo,
+  // porque este módulo se activó a mitad de jornada), se omite para ese día y el
+  // mapa sigue con su comportamiento de siempre; el plan fijo arranca limpio al
+  // día siguiente.
+  async function intentarCalcularPlanFijo() {
+    if (calculandoPlanFijo) return;
+    if (!DATA.length || !activeFecha || !activeChofer) return;
+    const puntosActuales = DATA.map(d => ({ lat: d.lat, lng: d.lng }));
+    if (ordenFijoParaPuntos(puntosActuales, leerPlanFijo())) return; // ya hay uno válido
+    if (completed.size || porCobrar.size || quemados.size || anulados.size) return; // ya no es "inicio de día"
+    const bod = (typeof BODEGAS !== 'undefined' && BODEGAS[activeBodega]) ? BODEGAS[activeBodega] : null;
+    if (!bod) return;
+    if (DATA.length > 49) { console.warn('ruta-dinamica: demasiados clientes (>49) para calcular el plan fijo del día en una sola matriz.'); return; }
+
+    calculandoPlanFijo = true;
+    try {
+      const puntos = [[bod.lat, bod.lng]].concat(puntosActuales.map(p => [p.lat, p.lng]));
+      const matriz = await pedirMatriz(puntos);
+      if (!matriz || !matriz.ok) { console.warn('ruta-dinamica: no se pudo calcular el plan fijo (matriz): ' + (matriz && matriz.error)); return; }
+
+      const indicesTodos = puntosActuales.map((_, i) => i);
+      const ordenFinal = ordenarPorMatriz(indicesTodos, matriz.duraciones, 1);
+      const puntosFinal = [[bod.lat, bod.lng]].concat(ordenFinal.map(i => [puntosActuales[i].lat, puntosActuales[i].lng]));
+      const trazado = await pedirTrazado(puntosFinal);
+      if (!trazado || !trazado.ok) { console.warn('ruta-dinamica: no se pudo calcular el plan fijo (trazado): ' + (trazado && trazado.error)); return; }
+
+      // Antes de aplicar, confirma que la jornada SIGUE intacta (pudo haberse marcado
+      // algo mientras esperábamos la respuesta de ORS) -- si no, solo se guarda el plan
+      // para el próximo reinicio del día, pero no se reordena DATA a mitad de jornada.
+      guardarPlanFijo({
+        orden: ordenFinal.map(i => ({ lat: puntosActuales[i].lat, lng: puntosActuales[i].lng })),
+        distanciaKm: trazado.distanciaKm,
+        duracionMin: trazado.duracionMin,
+      });
+      if (!completed.size && !porCobrar.size && !quemados.size && !anulados.size) {
+        DATA = ordenFinal.map(i => DATA[i]);
+        if (typeof draw === 'function') draw(activeVendedor);
+        if (typeof buildPanel === 'function') buildPanel();
+        if (typeof updateStats === 'function') updateStats();
+        if (typeof updateProgress === 'function') updateProgress();
+      }
+    } catch (e) {
+      console.warn('ruta-dinamica: fallo calculando el plan fijo del día.', e);
+    } finally {
+      calculandoPlanFijo = false;
+    }
+  }
+
   function iniciar() {
     crearPanelUI();
     engancharPopups();
+    envolverNearestNeighborFrom();
+    envolverStatsDinamicas();
     cargarTimestamps();
-    cargarConfig().then(() => recalcular(true));
+    cargarConfig().then(() => { recalcular(true); intentarCalcularPlanFijo(); });
+    // La clave de abajo (fecha|chofer) puede cambiar ANTES de que se elija la bodega
+    // (DATA sigue vacío en ese instante), así que intentarCalcularPlanFijo() necesita
+    // este reintento periódico propio -- igual que recalcular() ya tiene el suyo --
+    // en vez de depender solo del disparo por cambio de clave.
     setInterval(() => recalcular(false), 60 * 1000); // respeta RECALC_MIN_INTERVAL_MS salvo forzado
+    setInterval(() => intentarCalcularPlanFijo(), 15 * 1000); // barato: sale de inmediato si ya hay plan
 
     // Detecta cambio de fecha/chofer activo (nueva ruta cargada) sin enganchar loadAndRender().
     setInterval(() => {
@@ -260,6 +411,9 @@
         limpiarRutaSugerida();
         ultimaSugerencia = null;
         recalcular(true);
+        intentarCalcularPlanFijo();
+      } else {
+        aplicarStatsFijas(); // por si updateStats() corrió antes de que el plan estuviera listo
       }
     }, 4000);
   }
