@@ -2,13 +2,14 @@
 // Service Worker — Mapas Diarios PWA
 // Permite instalación en pantalla de inicio y caché básico
 // ═══════════════════════════════════════════════════════════
-const CACHE_NAME = 'mapas-diarios-v23';
+const CACHE_NAME = 'mapas-diarios-v24';
 
 // Recursos a cachear para uso offline básico
 const CACHE_ASSETS = [
   './login.html',
   './resumen.html',
   './mapa_live_F150.html',
+  './ruta-dinamica.js',
   './manifest.json',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
@@ -53,7 +54,8 @@ self.addEventListener('fetch', event => {
     url.hostname.includes('tile.openstreetmap.org') ||
     url.hostname.includes('basemaps.cartocdn.com') ||
     url.hostname.includes('maps.googleapis.com') ||
-    url.hostname.includes('waze.com')
+    url.hostname.includes('waze.com') ||
+    url.hostname.includes('openrouteservice.org')
   ) {
     event.respondWith(fetch(event.request).catch(() => {
       // Si falla la red, no hacer nada (el mapa manejará el error)
