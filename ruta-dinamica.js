@@ -187,22 +187,44 @@
     }
   }
 
-  // ── Panel flotante propio (no toca el panel lateral existente) ──
+  // ── Panel flotante propio: UN solo indicador de "siguiente parada" ──
+  // Antes convivían dos: el chip viejo "➡️ Siguiente" (#nav-cluster, en línea
+  // recta) y este panel nuevo (por calle real) -- se pisaban visualmente. Se
+  // ocultó el viejo (ver ocultarNavClusterViejo) y este quedó como el único,
+  // en el mismo lugar donde estaba el viejo: colapsado por defecto (una fila
+  // con el próximo cliente, igual que antes), y al tocarlo se despliega el
+  // tiempo estimado + aviso de espera + el botón de recalcular.
   function crearPanelUI() {
     if (document.getElementById('ruta-dinamica-panel')) return;
     const div = document.createElement('div');
     div.id = 'ruta-dinamica-panel';
-    div.style.cssText = 'position:fixed;left:10px;bottom:78px;z-index:900;background:rgba(15,23,42,.92);' +
-      'color:#e2e8f0;border-radius:10px;padding:8px 12px;font-size:12px;max-width:230px;' +
-      'box-shadow:0 2px 10px rgba(0,0,0,.4);display:none';
+    div.style.cssText = 'position:fixed;left:10px;bottom:120px;z-index:1000;display:none;max-width:230px';
     div.innerHTML =
-      '<div style="font-weight:700;margin-bottom:4px;color:#4ade80">🧭 Ruta sugerida</div>' +
+      '<button id="rd-header" style="background:linear-gradient(135deg,#1d4ed8,#0ea5e9);border:none;color:#fff;' +
+      'height:32px;padding:0 12px;border-radius:16px;font-size:.63rem;font-weight:700;cursor:pointer;' +
+      'box-shadow:0 2px 8px rgba(14,165,233,.4);display:flex;align-items:center;gap:5px;' +
+      'max-width:210px;overflow:hidden;white-space:nowrap;width:100%;text-align:left">' +
+      '➡️ <span id="rd-siguiente-corto" style="overflow:hidden;text-overflow:ellipsis">—</span></button>' +
+      '<div id="rd-detalle" style="display:none;margin-top:6px;background:rgba(15,23,42,.92);color:#e2e8f0;' +
+      'border-radius:10px;padding:8px 12px;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,.4)">' +
       '<div id="rd-siguiente" style="margin-bottom:2px">—</div>' +
       '<div id="rd-espera" style="color:#fbbf24;margin-bottom:6px"></div>' +
       '<button id="rd-recalcular-btn" style="background:#334155;color:#e2e8f0;border:none;border-radius:6px;' +
-      'padding:4px 8px;font-size:11px;cursor:pointer">🔄 Recalcular ahora</button>';
+      'padding:4px 8px;font-size:11px;cursor:pointer">🔄 Recalcular ahora</button>' +
+      '</div>';
     document.body.appendChild(div);
-    document.getElementById('rd-recalcular-btn').addEventListener('click', () => recalcular(true));
+    document.getElementById('rd-header').addEventListener('click', () => {
+      const det = document.getElementById('rd-detalle');
+      det.style.display = det.style.display === 'none' ? 'block' : 'none';
+    });
+    document.getElementById('rd-recalcular-btn').addEventListener('click', (e) => { e.stopPropagation(); recalcular(true); });
+  }
+
+  // El chip/pill viejo (#nav-cluster: "➡️ Siguiente" en línea recta + "🔄 Re-optimizar")
+  // queda reemplazado por el de arriba -- se oculta para no duplicar el indicador.
+  function ocultarNavClusterViejo() {
+    const nav = document.getElementById('nav-cluster');
+    if (nav) nav.style.display = 'none';
   }
 
   function actualizarPanel() {
@@ -214,7 +236,9 @@
     const siguienteIdx = (ultimaSugerencia && ultimaSugerencia.ordenIdx.length) ? ultimaSugerencia.ordenIdx[0]
       : (tier1[0] != null ? tier1[0] : tier2Listos[0]);
     const nombreSig = (siguienteIdx != null && DATA[siguienteIdx]) ? DATA[siguienteIdx].razon : '—';
+    const nombreCorto = siguienteIdx != null ? ('#' + (siguienteIdx + 1) + ' ' + nombreSig.split(' ').slice(0, 3).join(' ')) : '—';
     const tiempoTxt = (ultimaSugerencia && ultimaSugerencia.duracionMin) ? (' (' + Math.round(ultimaSugerencia.duracionMin) + ' min)') : '';
+    document.getElementById('rd-siguiente-corto').textContent = nombreCorto;
     document.getElementById('rd-siguiente').textContent = 'Siguiente: ' + nombreSig + tiempoTxt;
     document.getElementById('rd-espera').textContent = tier2Esperando.length > 0 ? ('⏳ ' + tier2Esperando.length + ' por cobrar en espera') : '';
   }
@@ -390,6 +414,7 @@
 
   function iniciar() {
     crearPanelUI();
+    ocultarNavClusterViejo();
     engancharPopups();
     envolverNearestNeighborFrom();
     envolverStatsDinamicas();
