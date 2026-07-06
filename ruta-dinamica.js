@@ -30,7 +30,10 @@
   let ultimaSugerencia = null;         // { ordenIdx:[...], distanciaKm, duracionMin }
   let ultimaClaveRuta = '';
 
-  const RECALC_MIN_INTERVAL_MS = 5 * 60 * 1000; // no más de 1 vez cada 5 min, salvo forzado
+  // 10 min: con ~20 camiones activos, esto da ~960 llamadas/día por endpoint de
+  // OpenRouteService (48% del límite gratuito de 2000/día) -- deja margen para
+  // los clics manuales de "Recalcular ahora" y reintentos si algo falla.
+  const RECALC_MIN_INTERVAL_MS = 10 * 60 * 1000; // no más de 1 vez cada 10 min, salvo forzado
   const STORAGE_PREFIX = 'rutaDinamica_ts_';
 
   function claveStorage() {
