@@ -48,12 +48,24 @@ function applyFiltersAndDraw(){
   const pts=filtered.map(r=>({lat:r.lat,lng:r.lng}));
   const bodega=BODEGAS[activeBodega];
   DATA=nearestNeighborFrom(pts,bodega.lat,bodega.lng).map(i=>filtered[i]);
+  // loadLocalState() ANTES de construir nada: restaura completed/porCobrar/etc
+  // desde el caché de este camión+fecha (recién se limpiaron arriba). Antes
+  // iba al final, después de buildPanel() -- pero buildPanel() ya dispara su
+  // propio guardado (updatePanel -> saveLocalState) con los Sets todavía
+  // vacíos, así que sobreescribía el avance guardado con nada ANTES de que
+  // loadLocalState() alcanzara a leerlo: recargar la misma ruta (mismo
+  // camión+fecha) borraba el progreso local en vez de restaurarlo, salvo que
+  // el poll al servidor (cada 12s, necesita señal) lo corrigiera después.
+  // refreshMarkerIcon/updatePanel dentro de loadLocalState() son no-op seguros
+  // aquí (todavía no existen marcadores ni filas del panel), así que no hay
+  // problema en llamarla antes de construir la UI -- al revés, así construye
+  // todo ya con el estado correcto desde el primer dibujo.
+  loadLocalState();
   buildColorMap(DATA);buildVendedorBtns(DATA);buildLegend(DATA);
   updateStats();updateProgress();updateBanner();buildPanel();
   resetVendedorBtns();
   draw('ALL');
   updateBottomBar();
-  loadLocalState();
   const liqLabel=hasLiq&&activeLiqs.size?` | Liq: ${[...activeLiqs].sort().join(', ')}`:'';
   document.getElementById('sub-info').textContent=`${activeFecha} | ${activeChofer} | 🏭 ${bodega.nombre}${liqLabel}`;
   actualizarUIJornada();
