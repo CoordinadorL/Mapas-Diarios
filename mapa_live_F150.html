@@ -494,6 +494,12 @@ html, body { overflow: hidden; touch-action: manipulation; }
   .stats { gap: 8px; }
   .live-badge { font-size: .55rem; padding: 2px 6px; }
 
+  /* Filtros/jornada/liquidación/controles — colapsados por defecto, se
+     despliegan al tocar "☰ Detalles" (arriba a la derecha del título). */
+  #btn-header-toggle { display: inline-flex !important; }
+  #header-extra { display: none; }
+  #header-extra.open { display: block; }
+
   /* Filtros compactos */
   .filters-bar { padding: 4px 8px; gap: 5px; overflow-x: auto; flex-wrap: nowrap; }
   .filters-bar label { font-size: .6rem; }
@@ -631,9 +637,14 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
     <a class="live-badge" id="btn-resumen" href="resumen.html" style="display:none;background:#1e3a5f;border-color:#3b82f6;color:#93c5fd;text-decoration:none" title="Volver al resumen">📊 Resumen</a>
     <button class="live-badge" id="btn-cierre-liq" onclick="cerrarLiquidacion()" style="display:none;background:#7c2d12;border-color:#f97316;color:#fed7aa;cursor:pointer;font-weight:700" title="Cerrar liquidación y liberar la selección de mapa">🔒 Cierre de liquidación</button>
     <div class="live-badge" id="user-badge" style="background:#1e293b;border-color:#475569;color:#cbd5e1;cursor:pointer" onclick="logout()" title="Cerrar sesión">👤 <span id="user-name">—</span> · <span id="user-rol">—</span> ⏻</div>
+    <button class="live-badge" id="btn-header-toggle" onclick="toggleHeaderMobile()" style="display:none;background:#1e293b;border-color:#3b82f6;color:#93c5fd;cursor:pointer" title="Mostrar/ocultar filtros y controles">☰ <span id="header-toggle-label">Detalles</span></button>
   </div>
 </div>
 
+<!-- FILTROS + CONTROLES — en móvil quedan colapsados bajo el botón "Detalles"
+     de arriba (ver #btn-header-toggle) para dejar más espacio libre al mapa;
+     en escritorio quedan siempre visibles, sin cambios. -->
+<div id="header-extra">
 <!-- FILTROS -->
 <div class="filters-bar">
   <div class="fg">
@@ -697,6 +708,7 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
     <input type="text" id="search-input" placeholder="Buscar cliente..." oninput="onSearch(this.value)">
   </div>
 </div>
+</div><!-- /header-extra -->
 
 <!-- PROGRESO -->
 <div class="prog-wrap">

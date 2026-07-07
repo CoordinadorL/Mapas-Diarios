@@ -299,3 +299,14 @@ function closePanel(){
   document.getElementById('fab-panel').style.display='flex';
   setTimeout(()=>map.invalidateSize(),310);
 }
+
+// Móvil: muestra/oculta filtros+jornada+liquidación+controles (#header-extra),
+// colapsados por defecto para dejar más espacio al mapa (ver #btn-header-toggle).
+function toggleHeaderMobile(){
+  const extra=document.getElementById('header-extra');
+  const label=document.getElementById('header-toggle-label');
+  if(!extra) return;
+  const abierto=extra.classList.toggle('open');
+  if(label) label.textContent=abierto?'Ocultar':'Detalles';
+  setTimeout(()=>map.invalidateSize(),310);
+}
