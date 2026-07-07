@@ -547,7 +547,15 @@
     // este reintento periódico propio -- igual que recalcular() ya tiene el suyo --
     // en vez de depender solo del disparo por cambio de clave.
     setInterval(() => recalcular(false), 60 * 1000); // respeta RECALC_MIN_INTERVAL_MS salvo forzado
-    setInterval(() => { intentarCalcularPlanFijo(); precargarMapaOffline(); }, 15 * 1000); // baratos: salen de inmediato si ya está hecho
+    // aplicarStatsFijas() de respaldo: si updateStats() corrió UNA sola vez antes
+    // de que el plan fijo (por calle real) estuviera listo -- por ejemplo, nada
+    // más volvió a cambiar el estado de ningún cliente en toda la jornada -- el
+    // "DISTANCIA" del encabezado se quedaba pegado en la cifra en línea recta
+    // para siempre, aunque "Tiempo est" sí se autocorregía (se refresca solo,
+    // vía updateBottomBar). Este ciclo asegura que ambos queden consistentes
+    // entre sí (mismo km real) dentro de 15s, sin depender de que algo más
+    // dispare updateStats() de nuevo.
+    setInterval(() => { intentarCalcularPlanFijo(); precargarMapaOffline(); aplicarStatsFijas(); }, 15 * 1000); // baratos: salen de inmediato si ya está hecho
     // Mientras no haya un primer resultado para el camión/día activo (ultimaSugerencia
     // sigue null -- por ejemplo, se eligió el camión antes que la bodega, o ORS tardó
     // en responder), reintenta cada 5s en vez de esperar el ciclo normal de 10 min.
