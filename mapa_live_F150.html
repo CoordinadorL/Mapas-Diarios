@@ -511,22 +511,28 @@ html, body { overflow: hidden; touch-action: manipulation; }
   .prog-label { font-size: .55rem; }
   .prog-pct { font-size: .55rem; }
 
-  /* FAB botones derechos — más pequeños y más juntos en móvil */
+  /* FAB botones — antes apilados a la derecha tapando el mapa; en pantalla
+     angosta pasan a una fila horizontal pegada abajo (dos a cada lado) para
+     dejar libre el borde derecho del mapa. */
   #fab-panel, #fab-wa, #fab-legend, #fab-mayoristas {
     width: 40px !important;
     height: 40px !important;
+    bottom: calc(6px + var(--sab)) !important;
+    top: auto !important;
   }
-  #fab-mayoristas { bottom: 220px !important; right: 10px !important; }
-  #fab-panel { bottom: 168px !important; right: 10px !important; }
-  #fab-wa { bottom: 116px !important; right: 10px !important; }
-  #fab-legend { bottom: 64px !important; right: 10px !important; }
+  #fab-mayoristas { left: 8px !important; right: auto !important; }
+  #fab-panel { left: 58px !important; right: auto !important; }
+  #fab-wa { right: 58px !important; left: auto !important; }
+  #fab-legend { right: 8px !important; left: auto !important; }
 
-  /* NAV cluster — más compacto */
-  #nav-cluster { bottom: 64px !important; left: 6px !important; }
+  /* NAV cluster / panel de ruta dinámica — suben para no toparse con la
+     fila de FABs que ahora ocupa el borde inferior. */
+  #nav-cluster { bottom: 104px !important; left: 6px !important; }
   #btn-siguiente-c { height: 28px !important; font-size: .58rem !important; max-width: 140px !important; }
+  #ruta-dinamica-panel { bottom: 104px !important; }
 
-  /* Bottom bar — más compacto */
-  #bottom-bar { font-size: .55rem; padding: 3px 8px; gap: 6px; bottom: 10px; }
+  /* Bottom bar — sube arriba de la fila de FABs, ya no pegada al borde */
+  #bottom-bar { font-size: .55rem; padding: 3px 8px; gap: 6px; bottom: calc(52px + var(--sab)); }
   .bb-sep { height: 10px; }
 
   /* Popup — full width en móvil */
@@ -549,14 +555,11 @@ html, body { overflow: hidden; touch-action: manipulation; }
   /* Historial panel full */
   #hist-panel { width: 85vw !important; }
 
-  /* Legend panel más arriba */
-  #legend-panel { bottom: 108px !important; right: 56px !important; }
+  /* Legend panel — se abre pegado al fab-legend, ahora en la fila inferior */
+  #legend-panel { bottom: calc(52px + var(--sab)) !important; right: 8px !important; }
 
   /* Zoom controls — reposicionar */
   .leaflet-top.leaflet-left { top: 6px !important; left: 6px !important; }
-
-  /* Bottom bar ocupa safe area */
-  #bottom-bar { padding-bottom: calc(6px + var(--sab)); }
 }
 
 /* Tablets (641-1024px) */
