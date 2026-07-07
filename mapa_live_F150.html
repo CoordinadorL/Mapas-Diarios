@@ -10,6 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="Mapas Diarios">
 <meta name="application-name" content="Mapas Diarios">
 <meta name="description" content="Rutas de entrega en vivo — Riobamba, Ecuador">
+<link rel="icon" href="icon-192.png">
 <link rel="manifest" href="manifest.json">
 <!-- iOS icons -->
 <link rel="apple-touch-icon" href="https://coordinadorl.github.io/Mapas-Diarios/icon-192.png">
@@ -443,6 +444,8 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;heigh
 #export-panel.show{display:block}
 #export-overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1999;display:none}
 #export-overlay.show{display:block}
+.exp-logo{background:#fff;border-radius:10px;padding:6px 12px;display:inline-block;margin-bottom:10px}
+.exp-logo img{height:20px;display:block}
 .exp-title{font-size:.85rem;font-weight:700;color:#f1f5f9;margin-bottom:12px;display:flex;justify-content:space-between}
 .exp-section{background:#1e293b;border-radius:10px;padding:10px 12px;margin-bottom:8px}
 .exp-row{display:flex;justify-content:space-between;font-size:.72rem;padding:3px 0;border-bottom:1px solid #0f172a}
@@ -908,6 +911,7 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
 <!-- PANEL EXPORTAR -->
 <div id="export-overlay" onclick="cerrarExportar()"></div>
 <div id="export-panel">
+  <div class="exp-logo"><img src="logo-wordmark.png" alt="OPAUSTRO"></div>
   <div class="exp-title">📄 Reporte de Avance <button onclick="cerrarExportar()" style="background:none;border:none;color:#64748b;font-size:1rem;cursor:pointer">✕</button></div>
   <div id="exp-content"></div>
   <div class="exp-btns">
