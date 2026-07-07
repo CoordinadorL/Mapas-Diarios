@@ -124,6 +124,10 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;heigh
 
 /* ── PANEL LATERAL ── */
 /* ── FLOATING PANEL ── */
+/* En escritorio el contenedor "desaparece" y cada botón se posiciona solo
+   (position:fixed), igual que antes de agruparlos. En móvil se vuelve una
+   fila (ver @media max-width:640px). */
+#action-bar{display:contents}
 /* Botón flotante Lista */
 #fab-panel{
   position:fixed;bottom:182px;right:14px;z-index:1100;
@@ -141,17 +145,24 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;heigh
   width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;
 }
 
-/* Drawer flotante */
+/* Drawer flotante — usa transform (relativo al propio ancho del panel) en
+   vez de un offset "right" en píxeles fijos. Con "right" había que calcular
+   a mano el desplazamiento de cierre para cada ancho (320px escritorio,
+   100vw móvil), y cualquier ancho intermedio -- redimensionar la ventana en
+   vivo, DevTools, un breakpoint distinto -- dejaba una franja visible o un
+   salto raro. translateX(100%)/(0) siempre cierra/abre bien sin importar
+   el ancho real del panel en ese momento. */
 #side-panel{
-  position:fixed;top:0;right:-340px;
+  position:fixed;top:0;right:0;
   width:320px;height:100vh;
   background:#0f172a;border-left:2px solid #1e3a5f;
   display:flex;flex-direction:column;
   z-index:1050;
-  transition:right .3s cubic-bezier(.4,0,.2,1);
+  transform:translateX(100%);
+  transition:transform .3s cubic-bezier(.4,0,.2,1);
   box-shadow:-6px 0 24px rgba(0,0,0,.6);
 }
-#side-panel.open{right:0}
+#side-panel.open{transform:translateX(0)}
 
 /* Overlay oscuro detrás del panel */
 #panel-overlay{
@@ -517,28 +528,45 @@ html, body { overflow: hidden; touch-action: manipulation; }
   .prog-label { font-size: .55rem; }
   .prog-pct { font-size: .55rem; }
 
-  /* FAB botones — antes apilados a la derecha tapando el mapa; en pantalla
-     angosta pasan a una fila horizontal pegada abajo (dos a cada lado) para
-     dejar libre el borde derecho del mapa. */
-  #fab-panel, #fab-wa, #fab-legend, #fab-mayoristas {
-    width: 40px !important;
-    height: 40px !important;
-    bottom: calc(6px + var(--sab)) !important;
-    top: auto !important;
+  /* Barra de acción — antes 4 botones apilados a la derecha + la barra de
+     info de abajo competían por espacio con el mapa. En pantalla angosta se
+     unifican en una sola fila con solo lo esencial en ruta (mayoristas,
+     lista, whatsapp, reporte, recalcular). Todo lo demás (GPS, tiempo,
+     contadores, leyenda, Hist.) se movió a "☰ Detalles". */
+  #action-bar {
+    display: flex !important;
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(6px + var(--sab)); z-index: 1100;
+    gap: 8px; align-items: center;
+    background: rgba(15,23,42,.95); border: 1px solid #1e3a5f; border-radius: 24px;
+    padding: 6px 10px; box-shadow: 0 4px 16px rgba(0,0,0,.5);
   }
-  #fab-mayoristas { left: 8px !important; right: auto !important; }
-  #fab-panel { left: 58px !important; right: auto !important; }
-  #fab-wa { right: 58px !important; left: auto !important; }
-  #fab-legend { right: 8px !important; left: auto !important; }
+  #fab-mayoristas, #fab-panel, #fab-wa, #ab-reporte, #ab-recalcular {
+    position: static !important;
+    width: 38px !important; height: 38px !important;
+    font-size: 1rem !important; border-radius: 50% !important;
+  }
+  #ab-reporte, #ab-recalcular {
+    display: flex !important; align-items: center; justify-content: center;
+    background: #1e293b; border: 1px solid #334155; color: #e2e8f0; cursor: pointer;
+  }
+  #fab-legend { display: none !important; }
 
-  /* NAV cluster / panel de ruta dinámica — suben para no toparse con la
-     fila de FABs que ahora ocupa el borde inferior. */
+  /* Panel de ruta dinámica (píldora "siguiente cliente") — antes tenía un
+     cuerpo debajo con el nombre completo y el botón "Recalcular ahora"
+     (ahora en #action-bar); se redujo a la píldora sola, centrada justo
+     encima de la barra de acción. */
   #nav-cluster { bottom: 104px !important; left: 6px !important; }
   #btn-siguiente-c { height: 28px !important; font-size: .58rem !important; max-width: 140px !important; }
-  #ruta-dinamica-panel { bottom: 104px !important; }
+  #ruta-dinamica-panel {
+    left: 50% !important; right: auto !important; transform: translateX(-50%);
+    bottom: calc(70px + var(--sab)) !important; width: min(300px, 90vw) !important; max-width: none !important;
+  }
 
-  /* Bottom bar — sube arriba de la fila de FABs, ya no pegada al borde */
-  #bottom-bar { font-size: .55rem; padding: 3px 8px; gap: 6px; bottom: calc(52px + var(--sab)); }
+  /* Bottom bar — ahora vive dentro de "☰ Detalles" (#header-extra), pegada
+     arriba de la barra de acción y de la píldora de siguiente cliente
+     cuando se despliega. */
+  #bottom-bar { font-size: .55rem; padding: 3px 8px; gap: 6px; bottom: calc(116px + var(--sab)); }
   .bb-sep { height: 10px; }
 
   /* Popup — full width en móvil */
@@ -548,12 +576,10 @@ html, body { overflow: hidden; touch-action: manipulation; }
   .pc-head { padding: 6px 9px 5px !important; }
   .pc-body { padding: 4px 9px !important; }
 
-  /* Panel de clientes — full screen en móvil. El cierre (right:-340px) se
-     calculó para el ancho de escritorio (320px); en pantalla completa
-     (100vw, ~375px+ en celular) ese mismo desplazamiento no alcanza a
-     sacarlo de la vista y queda una franja visible -- se corrige aquí. */
-  #side-panel { width: 100vw !important; right: -100vw; }
-  #side-panel.open { right: 0 !important; }
+  /* Panel de clientes — full screen en móvil. translateX(100%)/(0) en la
+     regla base ya cierra/abre bien a cualquier ancho, así que aquí solo
+     hace falta ensanchar el panel. */
+  #side-panel { width: 100vw !important; }
 
   /* Export panel centrado */
   #export-panel { width: 90vw !important; left: 50% !important; transform: translate(-50%, -50%) !important; }
@@ -562,7 +588,9 @@ html, body { overflow: hidden; touch-action: manipulation; }
   #hist-panel { width: 85vw !important; }
 
   /* Legend panel — se abre pegado al fab-legend, ahora en la fila inferior */
-  #legend-panel { bottom: calc(52px + var(--sab)) !important; right: 8px !important; }
+  /* Leyenda — ahora se abre desde "☰ Detalles" (arriba), no desde un FAB
+     pegado al mapa, así que se centra en vez de anclarse a una esquina. */
+  #legend-panel { top: 50% !important; left: 50% !important; right: auto !important; bottom: auto !important; transform: translate(-50%,-50%); }
 
   /* Zoom controls — reposicionar */
   .leaflet-top.leaflet-left { top: 6px !important; left: 6px !important; }
@@ -707,6 +735,27 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
     <span style="color:#475569;font-size:.7rem">🔍</span>
     <input type="text" id="search-input" placeholder="Buscar cliente..." oninput="onSearch(this.value)">
   </div>
+  <div class="sep"></div>
+  <button class="icon-btn dark-btn" onclick="toggleLegend()" title="Leyenda">🗺 Leyenda</button>
+</div>
+
+<!-- BARRA INFERIOR INFO -->
+<div id="bottom-bar">
+  <div id="bb-gps" onclick="activarGPS()" style="cursor:pointer" title="Toca para activar GPS"><div class="gps-dot" id="gps-dot"></div><span id="gps-txt" style="color:#64748b;font-size:.6rem">Activar GPS</span></div>
+  <div class="bb-sep"></div>
+  <div class="bb-item">⏱️ Tiempo est: <span class="bb-val" id="bb-tiempo">—</span></div>
+  <div class="bb-sep"></div>
+  <div class="bb-item">✅ <span class="bb-val" id="bb-ent">0</span></div>
+  <div class="bb-item">🟠 <span class="bb-val" id="bb-xc">0</span></div>
+  <div class="bb-item">🔥 <span class="bb-val" id="bb-quem">0</span></div>
+  <div class="bb-item">⏳ <span class="bb-val" id="bb-pend">0</span></div>
+  <div class="bb-sep" id="sync-sep" style="display:none"></div>
+  <div class="bb-item" id="sync-indicator" style="display:none;color:#fbbf24" title="Cambios guardados en el celular, esperando conexión para enviarse al servidor">🔄 <span class="bb-val" id="sync-count" style="color:#fbbf24">0</span> sin enviar</div>
+  <div style="margin-left:auto;display:flex;gap:4px;align-items:center">
+    <button onclick="abrirExportar()" style="background:#1d4ed8;border:none;color:#fff;padding:3px 10px;border-radius:8px;font-size:.65rem;font-weight:700;cursor:pointer">📄 Reporte</button>
+    <button onclick="abrirHistorial()" style="background:#334155;border:none;color:#e2e8f0;padding:3px 10px;border-radius:8px;font-size:.65rem;font-weight:700;cursor:pointer">🕐 Hist.</button>
+    <button id="btn-install-pwa" onclick="instalarApp()" style="display:none;background:#7c3aed;border:none;color:#fff;padding:3px 10px;border-radius:8px;font-size:.65rem;font-weight:700;cursor:pointer">📲 Instalar</button>
+  </div>
 </div>
 </div><!-- /header-extra -->
 
@@ -755,16 +804,7 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
   <div class="panel-footer" id="panel-footer">— clientes</div>
 </div>
 
-<!-- FAB botón flotante Lista -->
-<button id="fab-panel" onclick="openPanel()" title="Lista de clientes">
-  📋
-  <span class="fab-badge" id="fab-badge">0</span>
-</button>
-
-<!-- BOTÓN SIGUIENTE CLIENTE -->
-
-
-<!-- FAB REOPTIMIZAR -->
+<!-- fab-panel se movió a #action-bar, junto a los demás botones esenciales -->
 
 <!-- PANEL REPORTE (duplicado sin usar del "📄 Reporte" que sí funciona vía #export-panel) eliminado -->
 
@@ -860,24 +900,10 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
     display:flex;align-items:center;gap:4px;box-shadow:0 1px 4px rgba(0,0,0,.3)">🔄 Re-optimizar</button>
 </div>
 
-<!-- BARRA INFERIOR INFO -->
-<div id="bottom-bar">
-  <div id="bb-gps" onclick="activarGPS()" style="cursor:pointer" title="Toca para activar GPS"><div class="gps-dot" id="gps-dot"></div><span id="gps-txt" style="color:#64748b;font-size:.6rem">Activar GPS</span></div>
-  <div class="bb-sep"></div>
-  <div class="bb-item">⏱️ Tiempo est: <span class="bb-val" id="bb-tiempo">—</span></div>
-  <div class="bb-sep"></div>
-  <div class="bb-item">✅ <span class="bb-val" id="bb-ent">0</span></div>
-  <div class="bb-item">🟠 <span class="bb-val" id="bb-xc">0</span></div>
-  <div class="bb-item">🔥 <span class="bb-val" id="bb-quem">0</span></div>
-  <div class="bb-item">⏳ <span class="bb-val" id="bb-pend">0</span></div>
-  <div class="bb-sep" id="sync-sep" style="display:none"></div>
-  <div class="bb-item" id="sync-indicator" style="display:none;color:#fbbf24" title="Cambios guardados en el celular, esperando conexión para enviarse al servidor">🔄 <span class="bb-val" id="sync-count" style="color:#fbbf24">0</span> sin enviar</div>
-  <div style="margin-left:auto;display:flex;gap:4px;align-items:center">
-    <button onclick="abrirExportar()" style="background:#1d4ed8;border:none;color:#fff;padding:3px 10px;border-radius:8px;font-size:.65rem;font-weight:700;cursor:pointer">📄 Reporte</button>
-    <button onclick="abrirHistorial()" style="background:#334155;border:none;color:#e2e8f0;padding:3px 10px;border-radius:8px;font-size:.65rem;font-weight:700;cursor:pointer">🕐 Hist.</button>
-    <button id="btn-install-pwa" onclick="instalarApp()" style="display:none;background:#7c3aed;border:none;color:#fff;padding:3px 10px;border-radius:8px;font-size:.65rem;font-weight:700;cursor:pointer">📲 Instalar</button>
-  </div>
-</div>
+<!-- #bottom-bar se movió dentro de #header-extra: en móvil ahora solo se ve
+     al desplegar "☰ Detalles" (GPS, tiempo, contadores e Hist. dejaron de
+     competir por espacio con el mapa). En escritorio no cambia nada, sigue
+     fijo abajo (position:fixed, independiente de dónde viva en el DOM). -->
 
 <!-- PANEL EXPORTAR -->
 <div id="export-overlay" onclick="cerrarExportar()"></div>
@@ -916,11 +942,23 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
   <div class="li"><div class="ld" style="background:#111827;border:1px solid #374151"></div>⬛ NC Anulado</div>
   <div class="li"><div class="ld" style="background:#6b7280;opacity:.5"></div><span style="opacity:.6">✓ Entregado/Quemado</span></div>
 </div>
+<!-- BARRA DE ACCIÓN — en escritorio, #action-bar es "display:contents" así que
+     estos botones se comportan exactamente igual que antes (cada uno
+     position:fixed, independiente). En móvil, la fila 520-... más abajo los
+     convierte en una sola barra horizontal con solo lo esencial. -->
+<div id="action-bar">
+<button id="fab-mayoristas" onclick="abrirMayoristas()" title="Clientes mayoristas" style="position:fixed;bottom:248px;right:14px;z-index:1100;width:46px;height:46px;border-radius:50%;background:#7c3aed;border:2px solid #a78bfa;color:#fff;font-size:1.1rem;cursor:pointer;box-shadow:0 3px 12px rgba(124,58,237,.5);display:flex;align-items:center;justify-content:center">🟣</button>
+<button id="fab-panel" onclick="openPanel()" title="Lista de clientes">
+  📋
+  <span class="fab-badge" id="fab-badge">0</span>
+</button>
 <button id="fab-wa" onclick="abrirExportarWA()" title="Compartir por WhatsApp" style="position:fixed;bottom:116px;right:14px;z-index:1100;width:46px;height:46px;border-radius:50%;background:#25d366;border:none;color:#fff;cursor:pointer;box-shadow:0 3px 12px rgba(37,211,102,.4);display:flex;align-items:center;justify-content:center">
   <svg viewBox="0 0 32 32" width="24" height="24" fill="white"><path d="M16.001 3C9.106 3 3.5 8.605 3.5 15.5c0 2.42.68 4.683 1.86 6.61L3 29l7.06-2.32a12.43 12.43 0 0 0 5.94 1.51h.001c6.895 0 12.5-5.605 12.5-12.5S22.896 3 16.001 3zm0 22.7c-1.86 0-3.65-.5-5.21-1.44l-.374-.222-3.886 1.276 1.293-3.79-.243-.39A10.19 10.19 0 0 1 5.8 15.5c0-5.625 4.576-10.2 10.2-10.2s10.2 4.575 10.2 10.2-4.575 10.2-10.2 10.2zm5.61-7.65c-.307-.154-1.816-.896-2.098-.998-.282-.103-.487-.154-.692.154-.205.308-.794.998-.973 1.203-.18.205-.359.231-.666.077-.307-.154-1.297-.478-2.470-1.524-.913-.814-1.529-1.82-1.708-2.128-.18-.308-.019-.474.135-.627.139-.139.308-.36.462-.54.154-.18.205-.308.308-.513.103-.205.051-.385-.026-.539-.077-.154-.692-1.667-.948-2.283-.25-.6-.504-.518-.692-.527l-.59-.011c-.205 0-.539.077-.821.385-.282.308-1.077 1.052-1.077 2.565s1.103 2.975 1.256 3.18c.154.205 2.171 3.314 5.26 4.648.735.317 1.309.507 1.756.649.738.234 1.41.201 1.941.122.592-.089 1.816-.743 2.072-1.461.256-.718.256-1.334.18-1.461-.077-.128-.282-.205-.59-.36z"/></svg>
 </button>
+<button id="ab-reporte" onclick="abrirExportar()" title="Reporte de avance" style="display:none">📄</button>
+<button id="ab-recalcular" onclick="recalcular(true)" title="Recalcular ruta" style="display:none">🔄</button>
+</div>
 <button id="fab-legend" onclick="toggleLegend()" title="Leyenda" style="position:fixed;bottom:54px;right:14px;z-index:1100;width:40px;height:40px;border-radius:50%;background:#0f172a;border:1px solid #334155;color:#94a3b8;font-size:1rem;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center">🗺</button>
-<button id="fab-mayoristas" onclick="abrirMayoristas()" title="Clientes mayoristas" style="position:fixed;bottom:248px;right:14px;z-index:1100;width:46px;height:46px;border-radius:50%;background:#7c3aed;border:2px solid #a78bfa;color:#fff;font-size:1.1rem;cursor:pointer;box-shadow:0 3px 12px rgba(124,58,237,.5);display:flex;align-items:center;justify-content:center">🟣</button>
 
 <!-- PANEL: Clientes mayoristas (solo lectura, incluye Ventana horaria si el Sheet la trae) -->
 <div id="mayoristas-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1990" onclick="cerrarMayoristas()"></div>
@@ -941,6 +979,7 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
 <script src="mapa-cuadre-fotos.js"></script>
 <script src="mapa-jornada-gps-reportes.js"></script>
 <script src="mapa-popups-estado.js"></script>
+<script src="mapa-barra-accion.js"></script>
 <script>
 // Sesión/login (getSesion, getToken, sesionExpirada, logout, chequeo de rol
 // al cargar) y la cola de reintento offline (SYNC_QUEUE) ahora viven en
@@ -1173,38 +1212,8 @@ function onBodegaChange(){
 // updateProgress, updateBanner, openPanel y closePanel ahora viven en
 // mapa-panel-stats.js.
 
-// ── PANEL DE CLIENTES MAYORISTAS (solo lectura) ─────────────
-function abrirMayoristas(){
-  const lista=DATA.map((d,i)=>({d,i})).filter(x=>x.d.canalCat==='MAYORISTA');
-  document.getElementById('mayoristas-count').textContent = lista.length
-    ? `${lista.length} cliente(s) mayorista(s) en esta ruta`
-    : 'Ningún cliente mayorista en esta ruta';
-  const cont=document.getElementById('mayoristas-list');
-  cont.innerHTML = lista.length ? lista.map(({d,i})=>`
-    <div onclick="irAMayorista(${i})" style="background:#1e293b;border-left:3px solid #9333ea;border-radius:8px;padding:8px 10px;margin-bottom:6px;cursor:pointer">
-      <div style="font-size:.62rem;color:#a78bfa;font-weight:800">#${i+1} · ${d.codigo}</div>
-      <div style="font-size:.72rem;color:#e2e8f0;font-weight:700;margin-top:1px">${d.razon}</div>
-      <div style="font-size:.62rem;color:#94a3b8;margin-top:2px">${d.dir}</div>
-      ${d.ventana?`<div style="font-size:.64rem;color:#c4b5fd;background:#1e1b4b;border-radius:4px;padding:2px 6px;margin-top:4px;display:inline-block">🕐 ${d.ventana}</div>`:''}
-    </div>`).join('') : '<div style="text-align:center;color:#475569;font-size:.72rem;padding:24px">Sin clientes mayoristas en la ruta activa.</div>';
-  document.getElementById('mayoristas-overlay').style.display='block';
-  document.getElementById('mayoristas-panel').style.display='flex';
-  setTimeout(()=>document.getElementById('mayoristas-panel').style.right='0',10);
-}
-function cerrarMayoristas(){
-  document.getElementById('mayoristas-panel').style.right='-340px';
-  document.getElementById('mayoristas-overlay').style.display='none';
-  setTimeout(()=>{ document.getElementById('mayoristas-panel').style.display='none'; },300);
-}
-function irAMayorista(idx){
-  cerrarMayoristas();
-  const m=allMarkers[idx];
-  if(m){ map.setView(m.getLatLng(),Math.max(map.getZoom(),16)); m.openPopup(); }
-}
-
-
-
-
+// abrirMayoristas, cerrarMayoristas e irAMayorista ahora viven en
+// mapa-barra-accion.js.
 
 
 function recargar(){

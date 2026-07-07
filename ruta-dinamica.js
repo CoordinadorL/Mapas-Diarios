@@ -193,10 +193,12 @@
   // Antes convivían dos: el chip viejo "➡️ Siguiente" (#nav-cluster, en línea
   // recta) y este panel nuevo (por calle real) -- se pisaban visualmente. Se
   // ocultó el viejo (ver ocultarNavClusterViejo) y este quedó como el único.
-  // Todo queda siempre visible (nombre del próximo cliente, tiempo estimado,
-  // aviso de espera y el botón de recalcular) -- nada se esconde tras un clic.
-  // Tocar la fila superior (el nombre) hace lo mismo que hacía el chip viejo:
-  // centra el mapa en ese cliente y abre su popup.
+  // Se redujo a una sola píldora (antes tenía un cuerpo debajo con el nombre
+  // completo, tiempo estimado y el botón "Recalcular ahora") -- el botón se
+  // movió a #action-bar, y el resto ocupaba mucho espacio sobre el mapa.
+  // El aviso de "por cobrar en espera" queda como badge dentro de la misma
+  // píldora, no se perdió. Tocar la píldora centra el mapa en ese cliente y
+  // abre su popup (igual que hacía el chip viejo).
   function crearPanelUI() {
     if (document.getElementById('ruta-dinamica-panel')) return;
     const div = document.createElement('div');
@@ -204,20 +206,14 @@
     div.style.cssText = 'position:fixed;left:10px;bottom:120px;z-index:1000;display:none;max-width:230px';
     div.innerHTML =
       '<button id="rd-header" title="Ir a este cliente en el mapa" style="background:linear-gradient(135deg,#1d4ed8,#0ea5e9);' +
-      'border:none;color:#fff;height:32px;padding:0 12px;border-radius:16px 16px 0 0;font-size:.63rem;font-weight:700;' +
+      'border:none;color:#fff;height:32px;padding:0 12px;border-radius:16px;font-size:.63rem;font-weight:700;' +
       'cursor:pointer;box-shadow:0 2px 8px rgba(14,165,233,.4);display:flex;align-items:center;gap:5px;' +
       'width:100%;overflow:hidden;white-space:nowrap;text-align:left">' +
-      '➡️ <span id="rd-siguiente-corto" style="overflow:hidden;text-overflow:ellipsis">—</span></button>' +
-      '<div style="background:rgba(15,23,42,.92);color:#e2e8f0;' +
-      'border-radius:0 0 10px 10px;padding:8px 12px;font-size:12px;box-shadow:0 2px 10px rgba(0,0,0,.4)">' +
-      '<div id="rd-siguiente" style="margin-bottom:2px">—</div>' +
-      '<div id="rd-espera" style="color:#fbbf24;margin-bottom:6px"></div>' +
-      '<button id="rd-recalcular-btn" style="background:#334155;color:#e2e8f0;border:none;border-radius:6px;' +
-      'padding:4px 8px;font-size:11px;cursor:pointer">🔄 Recalcular ahora</button>' +
-      '</div>';
+      '➡️ <span id="rd-siguiente-corto" style="overflow:hidden;text-overflow:ellipsis">—</span>' +
+      '<span id="rd-espera-badge" style="display:none;margin-left:auto;flex-shrink:0;background:#78350f;color:#fde68a;' +
+      'border-radius:8px;padding:1px 6px;font-size:.58rem;font-weight:700">⏳</span></button>';
     document.body.appendChild(div);
     document.getElementById('rd-header').addEventListener('click', irAlSiguienteSugerido);
-    document.getElementById('rd-recalcular-btn').addEventListener('click', () => recalcular(true));
   }
 
   // El chip/pill viejo (#nav-cluster: "➡️ Siguiente" en línea recta + "🔄 Re-optimizar")
@@ -253,10 +249,12 @@
     const siguienteIdx = idxSiguienteSugerido();
     const nombreSig = (siguienteIdx != null && DATA[siguienteIdx]) ? DATA[siguienteIdx].razon : '—';
     const nombreCorto = siguienteIdx != null ? ('#' + (siguienteIdx + 1) + ' ' + nombreSig.split(' ').slice(0, 3).join(' ')) : '—';
-    const tiempoTxt = (ultimaSugerencia && ultimaSugerencia.duracionMin) ? (' (' + Math.round(ultimaSugerencia.duracionMin) + ' min)') : '';
     document.getElementById('rd-siguiente-corto').textContent = nombreCorto;
-    document.getElementById('rd-siguiente').textContent = 'Siguiente: ' + nombreSig + tiempoTxt;
-    document.getElementById('rd-espera').textContent = tier2Esperando.length > 0 ? ('⏳ ' + tier2Esperando.length + ' por cobrar en espera') : '';
+    const badge = document.getElementById('rd-espera-badge');
+    if (badge) {
+      if (tier2Esperando.length > 0) { badge.style.display = 'inline-block'; badge.textContent = '⏳' + tier2Esperando.length; }
+      else badge.style.display = 'none';
+    }
   }
 
   // Badge de espera dentro del popup existente, inyectado al abrirse -- no toca buildPopup().
@@ -577,4 +575,8 @@
 
   if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', iniciar); }
   else { iniciar(); }
+
+  // Expuesto para el botón "🔄" de #action-bar (fuera de este módulo,
+  // en mapa_live_F150.html) -- todo lo demás sigue privado a este cierre.
+  window.recalcular = recalcular;
 })();
