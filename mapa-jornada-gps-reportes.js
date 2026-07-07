@@ -158,21 +158,28 @@ function updateGPSDot(active, txt){
 // ══════════════════════════════════════════════════════════════
 // 5. TIEMPO ESTIMADO DE RUTA
 // ══════════════════════════════════════════════════════════════
+// Tiempo TOTAL de toda la ruta (bodega → los 37 clientes en orden) -- no el
+// tiempo restante desde donde va el camión. No debe "bajar" según se van
+// entregando/cobrando pedidos ni según se mueve el GPS: se calcula siempre
+// sobre TODA la ruta, para que sea la misma cifra toda la jornada (se afina
+// sola cuando ruta-dinamica.js calcula el plan fijo por calle real -- ver
+// aplicarStatsFijas en ruta-dinamica.js, que sobreescribe esto con el dato
+// real de OpenRouteService en cuanto está listo).
 function updateTiempoEstimado(fromLat, fromLng){
-  const pendientes = DATA.filter((_,i)=>!completed.has(i)&&!porCobrar.has(i)&&!quemados.has(i)&&!anulados.has(i));
-  // Update next client name
+  // Próximo cliente pendiente: esto sí es informativo del avance, se deja dinámico.
   const nextIdx = DATA.findIndex((_,i)=>!completed.has(i)&&!porCobrar.has(i)&&!quemados.has(i)&&!anulados.has(i));
   const nextEl = document.getElementById('prog-proximo');
   if(nextEl){
     nextEl.textContent = nextIdx>=0 ? DATA[nextIdx].razon.split(' ').slice(0,2).join(' ') : '—';
   }
-  if(!pendientes.length){
-    const el=document.getElementById('prog-tiempo'); if(el)el.textContent='✅';
+  if(!DATA.length){
+    const el=document.getElementById('prog-tiempo'); if(el)el.textContent='—';
     return;
   }
-  let totalKm=0, curLat=fromLat||DATA[0].lat, curLng=fromLng||DATA[0].lng;
-  pendientes.forEach(d=>{ totalKm+=haversine(curLat,curLng,d.lat,d.lng); curLat=d.lat; curLng=d.lng; });
-  const driveMin=Math.round(totalKm/30*60), stopMin=pendientes.length*3, totalMin=driveMin+stopMin;
+  const bod = (typeof BODEGAS!=='undefined' && typeof activeBodega!=='undefined' && BODEGAS[activeBodega]) ? BODEGAS[activeBodega] : null;
+  let totalKm=0, curLat=bod?bod.lat:DATA[0].lat, curLng=bod?bod.lng:DATA[0].lng;
+  DATA.forEach(d=>{ totalKm+=haversine(curLat,curLng,d.lat,d.lng); curLat=d.lat; curLng=d.lng; });
+  const driveMin=Math.round(totalKm/30*60), stopMin=DATA.length*3, totalMin=driveMin+stopMin;
   const h=Math.floor(totalMin/60), m=totalMin%60;
   const txt = h>0?`${h}h${m}m`:`${m}m`;
   ['prog-tiempo','bb-tiempo'].forEach(id=>{ const el=document.getElementById(id); if(el)el.textContent=txt; });
