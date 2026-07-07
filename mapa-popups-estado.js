@@ -356,7 +356,7 @@ function togglePorCobrar(idx){
 // ── NUEVOS ESTADOS ───────────────────────────────────────
 
 
-function quemarDesdeNC(idx, reopenPopup=true){ const d=DATA[idx]; anulados.delete(idx); quemados.add(idx); completed.delete(idx); porCobrar.delete(idx); if(d) quemadoParcial.set(idx, d.total); refreshMarkerIcon(idx); updateProgress();updateStats();updatePanel();saveLocalState(); syncAvance(idx); if(reopenPopup){ const m=allMarkers[idx]; if(m){m.setPopupContent(buildPopup(DATA[idx],idx));m.openPopup();} } }
+function quemarDesdeNC(idx, reopenPopup=true, metodo=null){ const d=DATA[idx]; anulados.delete(idx); quemados.add(idx); completed.delete(idx); porCobrar.delete(idx); if(d) quemadoParcial.set(idx, d.total); if(metodo) metodoPago.set(idx, metodo); refreshMarkerIcon(idx); updateProgress();updateStats();updatePanel();saveLocalState(); syncAvance(idx); if(reopenPopup){ const m=allMarkers[idx]; if(m){m.setPopupContent(buildPopup(DATA[idx],idx));m.openPopup();} } }
 function entregarDesdeNC(idx, reopenPopup=true){ anulados.delete(idx); completed.add(idx); porCobrar.delete(idx); quemados.delete(idx); quemadoParcial.delete(idx); refreshMarkerIcon(idx); updateProgress();updateStats();updatePanel();saveLocalState(); syncAvance(idx); if(reopenPopup){ const m=allMarkers[idx]; if(m){m.setPopupContent(buildPopup(DATA[idx],idx));m.openPopup();} } }
 function resetEstado(idx){
   completed.delete(idx); porCobrar.delete(idx);

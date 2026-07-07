@@ -538,16 +538,16 @@ html, body { overflow: hidden; touch-action: manipulation; }
      contadores, leyenda, Hist.) se movió a "☰ Detalles". */
   #action-bar {
     display: flex !important;
-    position: fixed; left: 50%; transform: translateX(-50%);
+    position: fixed; left: auto; right: 6px; transform: none;
     bottom: calc(6px + var(--sab)); z-index: 1100;
-    gap: 8px; align-items: center;
-    background: rgba(15,23,42,.95); border: 1px solid #1e3a5f; border-radius: 24px;
-    padding: 6px 10px; box-shadow: 0 4px 16px rgba(0,0,0,.5);
+    gap: 6px; align-items: center;
+    background: rgba(15,23,42,.95); border: 1px solid #1e3a5f; border-radius: 20px;
+    padding: 5px 8px; box-shadow: 0 4px 16px rgba(0,0,0,.5);
   }
   #fab-mayoristas, #fab-panel, #fab-wa, #ab-reporte, #ab-recalcular {
     position: static !important;
-    width: 38px !important; height: 38px !important;
-    font-size: 1rem !important; border-radius: 50% !important;
+    width: 34px !important; height: 34px !important;
+    font-size: .9rem !important; border-radius: 50% !important;
   }
   #ab-reporte, #ab-recalcular {
     display: flex !important; align-items: center; justify-content: center;
@@ -557,19 +557,21 @@ html, body { overflow: hidden; touch-action: manipulation; }
 
   /* Panel de ruta dinámica (píldora "siguiente cliente") — antes tenía un
      cuerpo debajo con el nombre completo y el botón "Recalcular ahora"
-     (ahora en #action-bar); se redujo a la píldora sola, centrada justo
-     encima de la barra de acción. */
+     (ahora en #action-bar) y ocupaba su propia fila completa arriba de la
+     barra de acción. Ahora comparte la MISMA fila: la barra de acción se
+     movió a la derecha y la píldora ocupa el espacio libre a la izquierda
+     -- una fila menos sobre el mapa. El nombre se ajusta a 2 líneas si no
+     entra completo (ver crearPanelUI en ruta-dinamica.js).*/
   #nav-cluster { bottom: 104px !important; left: 6px !important; }
   #btn-siguiente-c { height: 28px !important; font-size: .58rem !important; max-width: 140px !important; }
   #ruta-dinamica-panel {
-    left: 50% !important; right: auto !important; transform: translateX(-50%);
-    bottom: calc(70px + var(--sab)) !important; width: min(300px, 90vw) !important; max-width: none !important;
+    left: 6px !important; right: 226px !important; transform: none;
+    bottom: calc(6px + var(--sab)) !important; width: auto !important; max-width: none !important;
   }
 
   /* Bottom bar — ahora vive dentro de "☰ Detalles" (#header-extra), pegada
-     arriba de la barra de acción y de la píldora de siguiente cliente
-     cuando se despliega. */
-  #bottom-bar { font-size: .55rem; padding: 3px 8px; gap: 6px; bottom: calc(116px + var(--sab)); }
+     arriba de la fila de acción/siguiente-cliente cuando se despliega. */
+  #bottom-bar { font-size: .55rem; padding: 3px 8px; gap: 6px; bottom: calc(52px + var(--sab)); }
   .bb-sep { height: 10px; }
 
   /* Popup — full width en móvil */

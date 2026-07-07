@@ -78,12 +78,21 @@ function buildPanel(){
           <option>Pedido incompleto</option><option>Error de facturación</option>
           <option>Producto en mal estado</option><option>Sin motivo</option>
         </select>
+      </div>
+      <div id="metodo-menu-p-${i}" style="display:none;padding:4px 0 0" onclick="event.stopPropagation()">
+        <select class="motivo-select" style="width:100%;font-size:.62rem;padding:3px 5px;border-radius:6px" onchange="confirmarMetodoPanel(${i},this.value)">
+          <option value="">— ¿Cómo pagó? —</option>
+          ${Object.keys(METODOS).map(m=>`<option value="${m}">${METODOS[m].lbl}</option>`).join('')}
+        </select>
       </div>`;
 
-    // Click en .p-info → solo navega y abre popup, panel permanece abierto
+    // Click en .p-info → navega y abre popup. En móvil el panel es a pantalla
+    // completa y tapa el mapa, así que además se cierra para que se vea el
+    // resultado (antes quedaba abierto y parecía que "no pasaba nada").
     div.querySelector('.p-info').addEventListener('click',(e)=>{
       e.stopPropagation();
       const m=allMarkers[i];
+      if(window.matchMedia('(max-width:640px)').matches) closePanel();
       if(m){
         if(useCluster&&clusterGroup){
           clusterGroup.zoomToShowLayer(m,()=>{ setTimeout(()=>m.openPopup(),200); });
@@ -94,15 +103,11 @@ function buildPanel(){
       }
     });
 
-    // Botón ✅ Entregar — marca como cobrado, pinta gris en mapa y lista
+    // Botón ✅ Entregar — antes marcaba EFECTIVO de una vez; ahora despliega
+    // el mismo selector de forma de pago que el popup del mapa.
     div.querySelector('[data-action="deliver"]').addEventListener('click',(e)=>{
       e.stopPropagation();
-      completed.add(i);
-      porCobrar.delete(i); anulados.delete(i); quemados.delete(i);
-      refreshMarkerIcon(i);
-      updateProgress();updateStats();updatePanel();
-      saveLocalState();
-      syncAvance(i);
+      toggleMetodoMenuPanel(i,'deliver');
     });
 
     // Botón ↩ Desmarcar — quita marca, restaura color en mapa y lista
@@ -125,11 +130,12 @@ function buildPanel(){
       syncAvance(i);
     });
 
-    // Botón 🔥 Quemar — solo debe estar visible/habilitado si el pedido ya fue Anulado
+    // Botón 🔥 Quemar — solo si el pedido ya fue Anulado. Antes quemaba todo
+    // como EFECTIVO de una vez; ahora también pregunta la forma de pago.
     div.querySelector('[data-action="quemado"]').addEventListener('click',(e)=>{
       e.stopPropagation();
       if(!anulados.has(i)) return; // seguridad extra: no quemar si no fue anulado antes
-      quemarDesdeNC(i, false);
+      toggleMetodoMenuPanel(i,'quemado');
     });
 
     // Botón ❌ Anulado — despliega selector de motivo (igual que en el popup del mapa)
@@ -147,6 +153,25 @@ function toggleAnuladoMenuPanel(i, forceHide){
   const m=document.getElementById('anulado-menu-p-'+i);
   if(!m) return;
   m.style.display = forceHide ? 'none' : (m.style.display==='none' ? 'block' : 'none');
+}
+
+// Selector de forma de pago para los botones rápidos ✅/🔥 de la lista de
+// clientes (igual idea que el de anulación: un <select> inline por fila).
+// "accion" queda guardado en el propio elemento para que confirmarMetodoPanel
+// sepa si debe entregar o quemar una vez elegido el método.
+function toggleMetodoMenuPanel(i, accion){
+  const m=document.getElementById('metodo-menu-p-'+i);
+  if(!m) return;
+  m.dataset.accion = accion;
+  m.style.display = m.style.display==='none' ? 'block' : 'none';
+}
+function confirmarMetodoPanel(i, metodo){
+  if(!metodo) return;
+  const m=document.getElementById('metodo-menu-p-'+i);
+  const accion = m ? m.dataset.accion : 'deliver';
+  if(accion==='quemado') quemarDesdeNC(i, false, metodo);
+  else entregarConMetodo(i, metodo);
+  if(m){ m.style.display='none'; const sel=m.querySelector('select'); if(sel) sel.value=''; }
 }
 
 // Redibuja el ícono de un marcador según su estado actual (visited o no)
@@ -198,6 +223,7 @@ function updatePanel(){
     if(btnQ)btnQ.style.display=isA?'flex':'none';                           // solo habilitado si ya fue Anulado
     if(btnA)btnA.style.display=anyState?'none':'flex';                      // solo normal
     if(!isA){ const menu=document.getElementById('anulado-menu-p-'+i); if(menu) menu.style.display='none'; }
+    if(vis||isQ){ const mm=document.getElementById('metodo-menu-p-'+i); if(mm) mm.style.display='none'; }
   });
   const tot=DATA.length,vis=completed.size;
   // FAB badge

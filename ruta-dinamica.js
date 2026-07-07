@@ -203,14 +203,18 @@
     if (document.getElementById('ruta-dinamica-panel')) return;
     const div = document.createElement('div');
     div.id = 'ruta-dinamica-panel';
-    div.style.cssText = 'position:fixed;left:10px;bottom:120px;z-index:1000;display:none;max-width:230px';
+    // Escritorio: pegado a la esquina inferior izquierda (antes bottom:120px
+    // quedaba "flotando" a media pantalla). En móvil, #ruta-dinamica-panel en
+    // el CSS de mapa_live_F150.html pisa esta posición para compartir fila
+    // con #action-bar.
+    div.style.cssText = 'position:fixed;left:14px;bottom:14px;z-index:1000;display:none;max-width:230px';
     div.innerHTML =
       '<button id="rd-header" title="Ir a este cliente en el mapa" style="background:linear-gradient(135deg,#1d4ed8,#0ea5e9);' +
-      'border:none;color:#fff;height:32px;padding:0 12px;border-radius:16px;font-size:.63rem;font-weight:700;' +
-      'cursor:pointer;box-shadow:0 2px 8px rgba(14,165,233,.4);display:flex;align-items:center;gap:5px;' +
-      'width:100%;overflow:hidden;white-space:nowrap;text-align:left">' +
-      '➡️ <span id="rd-siguiente-corto" style="overflow:hidden;text-overflow:ellipsis">—</span>' +
-      '<span id="rd-espera-badge" style="display:none;margin-left:auto;flex-shrink:0;background:#78350f;color:#fde68a;' +
+      'border:none;color:#fff;min-height:32px;padding:6px 10px;border-radius:16px;font-size:.63rem;font-weight:700;' +
+      'line-height:1.25;cursor:pointer;box-shadow:0 2px 8px rgba(14,165,233,.4);display:flex;align-items:flex-start;gap:5px;' +
+      'width:100%;text-align:left">' +
+      '➡️ <span id="rd-siguiente-corto" style="flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">—</span>' +
+      '<span id="rd-espera-badge" style="display:none;flex-shrink:0;background:#78350f;color:#fde68a;' +
       'border-radius:8px;padding:1px 6px;font-size:.58rem;font-weight:700">⏳</span></button>';
     document.body.appendChild(div);
     document.getElementById('rd-header').addEventListener('click', irAlSiguienteSugerido);
