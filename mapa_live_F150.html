@@ -16,14 +16,41 @@
 <link rel="apple-touch-icon" href="https://coordinadorl.github.io/Mapas-Diarios/icon-192.png">
 <title>Mapas Diarios — Rutas en Vivo</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
 // ── PWA SERVICE WORKER ──────────────────────────────────────
+// OJO: este bloque estaba antes metido dentro del <script src="...leaflet...">
+// de arriba (sin cerrar), así que el navegador lo ignoraba por completo en
+// esta página -- nunca se ejecutaba aquí. Como el chofer se queda todo el
+// turno en mapa_live_F150.html (justo la página donde más importa detectar
+// una versión nueva), nada avisaba de actualizaciones mientras tanto; solo
+// se registraba (y comprobaba) desde login.html. Se corrige cerrando el
+// script de arriba y agregando el aviso de "nueva versión" aquí también.
 if('serviceWorker' in navigator){
   window.addEventListener('load', ()=>{
     navigator.serviceWorker.register('sw.js')
-      .then(reg => console.log('SW registered:', reg.scope))
+      .then(reg => {
+        console.log('SW registered:', reg.scope);
+        // El chofer puede dejar la pestaña abierta todo el turno sin cerrar
+        // la app -- sin esto, nunca se entera de que hay una versión nueva.
+        setInterval(()=>reg.update().catch(()=>{}), 5*60*1000);
+      })
       .catch(err => console.log('SW error:', err));
   });
+  let controllerYaExistia = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(!controllerYaExistia){ controllerYaExistia = true; return; } // primera instalación, no es una actualización
+    avisarNuevaVersion();
+  });
+}
+function avisarNuevaVersion(){
+  if(document.getElementById('nueva-version-toast')) return;
+  const div = document.createElement('div');
+  div.id = 'nueva-version-toast';
+  div.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99999;background:#1d4ed8;color:#fff;padding:9px 16px;border-radius:24px;font-size:.75rem;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;gap:8px;white-space:nowrap';
+  div.textContent = '🔄 Nueva versión disponible — toca para actualizar';
+  div.onclick = ()=> window.location.reload();
+  document.body.appendChild(div);
 }
 
 // ── PWA INSTALL PROMPT ──────────────────────────────────────
@@ -48,7 +75,6 @@ function instalarApp(){
     deferredPrompt = null;
   });
 }
-
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/leaflet.markercluster.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.markercluster/1.5.3/MarkerCluster.css"/>

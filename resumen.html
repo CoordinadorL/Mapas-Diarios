@@ -180,7 +180,27 @@ tr:hover td{background:#16213a}
 </div>
 
 <script>
-if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').then(reg=>{
+      setInterval(()=>reg.update().catch(()=>{}), 5*60*1000);
+    }).catch(()=>{});
+  });
+  let controllerYaExistia = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(!controllerYaExistia){ controllerYaExistia = true; return; }
+    avisarNuevaVersion();
+  });
+}
+function avisarNuevaVersion(){
+  if(document.getElementById('nueva-version-toast')) return;
+  const div = document.createElement('div');
+  div.id = 'nueva-version-toast';
+  div.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99999;background:#1d4ed8;color:#fff;padding:9px 16px;border-radius:24px;font-size:.75rem;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;gap:8px;white-space:nowrap';
+  div.textContent = '🔄 Nueva versión disponible — toca para actualizar';
+  div.onclick = ()=> window.location.reload();
+  document.body.appendChild(div);
+}
 const API_URL="https://script.google.com/macros/s/AKfycbwzQRnCJHFXni_9Qvs9kh_6BoikPDtb2sAMNChS3gSk9gAn5e31z5PFvKRGRzeoFqK5og/exec";
 
 // ── SESIÓN ────────────────────────────────────────────────

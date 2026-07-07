@@ -70,7 +70,18 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;heigh
 </div>
 
 <script>
-if('serviceWorker' in navigator){ window.addEventListener('load',()=>{ navigator.serviceWorker.register('sw.js').catch(()=>{}); }); }
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').then(reg=>{
+      setInterval(()=>reg.update().catch(()=>{}), 5*60*1000);
+    }).catch(()=>{});
+  });
+  let controllerYaExistia = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(!controllerYaExistia){ controllerYaExistia = true; return; }
+    window.location.reload(); // login.html no tiene formularios a medio llenar, recargar directo es seguro
+  });
+}
 const API_URL="https://script.google.com/macros/s/AKfycbwzQRnCJHFXni_9Qvs9kh_6BoikPDtb2sAMNChS3gSk9gAn5e31z5PFvKRGRzeoFqK5og/exec";
 let pin='';
 let verificando=false;
