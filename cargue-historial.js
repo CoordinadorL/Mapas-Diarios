@@ -92,14 +92,26 @@ async function initCargueHistorial(){
   const guardado = cargarFiltrosCargueGuardados();
   if (guardado && Array.isArray(guardado.lineas)) CARGUE_LINEAS_ACTIVAS = new Set(guardado.lineas);
 
-  const lineasRows = await fetchCargueLineas();
-  cargueLineasMap = construirLineasMap(lineasRows);
+  initFechaRango();
+  // Catálogo de líneas y pedidos del rango EN PARALELO (antes era en serie y
+  // sumaba varios segundos de espera extra en cada carga de la página).
+  await Promise.all([cargarCatalogoLineas(), actualizarCargueClientes()]);
+}
+
+// Carga (o recarga) el catálogo de líneas y pinta el dropdown. Si la llamada
+// falla (timeout, sin señal), NO tumba el resto de la página: deja el
+// dropdown vacío y se vuelve a intentar solo en el próximo "Actualizar" --
+// antes un fallo acá dejaba "Elegí una línea" muerto hasta recargar todo.
+async function cargarCatalogoLineas(){
+  try {
+    const lineasRows = await fetchCargueLineas();
+    cargueLineasMap = construirLineasMap(lineasRows);
+  } catch (e) {
+    cargueLineasMap = {};
+  }
   const lineasDisponibles = [...new Set(Object.values(cargueLineasMap))].filter(Boolean).sort();
   CARGUE_LINEAS_ACTIVAS = new Set([...CARGUE_LINEAS_ACTIVAS].filter(l => lineasDisponibles.includes(l))); // por si el catálogo cambió
   renderLineaDropdown(lineasDisponibles);
-
-  initFechaRango();
-  await actualizarCargueClientes();
 }
 
 // Vendedores que corresponde MOSTRAR ahora mismo: los de las líneas activas.
@@ -217,6 +229,10 @@ async function actualizarCargueClientes(){
 async function _actualizarCargueClientesInterno(){
   const { desde, hasta } = obtenerRangoFechas();
   const historico = esCargueModoHistorico();
+
+  // Si el catálogo de líneas quedó vacío (falló en la carga inicial), se
+  // reintenta acá -- así el botón Actualizar también "revive" el dropdown.
+  if (!Object.keys(cargueLineasMap).length) await cargarCatalogoLineas();
 
   const [pedidosCrudos, asignaciones] = await Promise.all([
     fetchCarguePedidosRango(desde, hasta),

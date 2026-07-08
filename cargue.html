@@ -38,7 +38,7 @@ button.badge{font-family:inherit}
 
 .cargue-dropdown{position:relative}
 .cargue-dropdown-btn{background:#1e293b;color:#fff;border:1px solid #334155;border-radius:6px;padding:3px 9px;font-size:.68rem;cursor:pointer;white-space:nowrap;font-family:inherit}
-.cargue-dropdown-panel{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:6px;z-index:700;min-width:190px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.cargue-dropdown-panel{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:6px;z-index:1100;min-width:190px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5)}
 .cargue-dropdown-panel.open{display:block}
 .cargue-dropdown-panel label{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;font-size:.72rem;color:#cbd5e1;cursor:pointer}
 .cargue-dropdown-panel label:hover{background:#0f172a}
@@ -218,9 +218,16 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   initCargueGeocercas();
   initCargueListaBusqueda();
   initCargueResumen();
-  await initCarguePanelAsignacion();
-  await initCarguePlantillas();
-  await initCargueHistorial(); // carga fechas + vendedores + pedidos de hoy
+
+  // Los 3 catálogos (camiones, plantillas, líneas+pedidos) se cargan EN
+  // PARALELO -- en serie, cada viaje a Apps Script sumaba varios segundos y
+  // la página tardaba demasiado en estar lista. Si uno falla, los otros dos
+  // siguen funcionando igual (cada init maneja su propio error).
+  await Promise.all([
+    initCarguePanelAsignacion().catch(e => console.error('camiones:', e)),
+    initCarguePlantillas().catch(e => console.error('plantillas:', e)),
+    initCargueHistorial().catch(e => alert('No se pudieron cargar los pedidos: ' + (e.message || e))),
+  ]);
 
   document.getElementById('cargue-btn-actualizar').addEventListener('click', actualizarCargueClientesConFeedback);
 });
