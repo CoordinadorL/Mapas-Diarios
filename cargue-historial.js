@@ -350,5 +350,11 @@ function activarModoEdicion(activo){
   if (panel) panel.style.display = activo ? 'block' : 'none';
   const drawToolbar = document.querySelector('.leaflet-draw');
   if (drawToolbar) drawToolbar.style.display = activo ? '' : 'none';
-  if (!activo) limpiarCargueGeocerca();
+  if (!activo) {
+    // Si estaba editando un cargue (✏️) y el rango pasa a histórico, salir
+    // del modo edición también -- no tiene sentido "editar" algo que ya no
+    // se puede guardar.
+    if (typeof cancelarModoEdicion === 'function') cancelarModoEdicion();
+    else limpiarCargueGeocerca();
+  }
 }

@@ -92,17 +92,21 @@ async function fetchCargueAsignacionesRango(desde, hasta) {
   return Array.isArray(raw) ? raw.map(_mapCargueAsignacionRow) : [];
 }
 
-// Eliminar un cargue guardado DE VERDAD (botón 🗑️, o primer paso de ✏️
-// Editar) -- se borra la fila del Sheet, no se marca. Se identifica por
-// Timestamp -- fire-and-forget, igual que el resto de los guardados (ver
-// guardarCargueAsignacion).
-function eliminarCargueAsignacion({ fecha, timestamp, camion }) {
-  const payload = { tipo: 'cargue_asignacion_eliminar', token: getToken(), fecha, timestamp, camion };
-  return fetchConTimeoutCargue(API_URL, {
-    method: 'POST', mode: 'no-cors',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload),
-  }, 12000);
+// Eliminar un cargue guardado DE VERDAD (botón 🗑️, o al confirmar una
+// edición) -- se borra la fila del Sheet, no se marca. Se identifica por
+// Timestamp. A diferencia de guardar/plantillas, esto SÍ va por JSONP (no
+// POST no-cors): es una acción destructiva, hace falta poder leer si
+// realmente funcionó en vez de asumirlo -- devuelve {ok, error} de verdad.
+async function eliminarCargueAsignacion({ fecha, timestamp, camion }) {
+  const qs = 'tipo=cargue_asignacion_eliminar'
+    + '&timestamp=' + encodeURIComponent(timestamp)
+    + '&fecha=' + encodeURIComponent(fecha || '')
+    + '&camion=' + encodeURIComponent(camion || '');
+  try {
+    return await jsonpCargue(qs, 15000);
+  } catch (e) {
+    return { ok: false, error: e.message || 'Sin respuesta del servidor.' };
+  }
 }
 
 // Guardar una agrupación. Fire-and-forget (no-cors: Apps Script no siempre

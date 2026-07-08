@@ -58,6 +58,9 @@ button.badge{font-family:inherit}
 
 #cargue-modo-aviso{display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:600;background:#7c2d12;border:1px solid #f97316;color:#fed7aa;padding:5px 14px;border-radius:20px;font-size:.68rem;font-weight:700}
 
+#cargue-banner-edicion{display:none;align-items:center;gap:10px;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:650;background:#422006;border:1px solid #fbbf24;color:#fef3c7;padding:6px 8px 6px 16px;border-radius:20px;font-size:.7rem;font-weight:700;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.4)}
+#cargue-btn-cancelar-edicion{background:#fbbf24;color:#422006;border:none;border-radius:14px;padding:4px 10px;font-size:.66rem;font-weight:700;cursor:pointer;font-family:inherit}
+
 aside{width:300px;flex-shrink:0;background:#111827;border-left:1px solid #1e293b;padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
 aside h3{font-size:.66rem;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:5px;display:flex;justify-content:space-between;flex-shrink:0}
 aside ul{list-style:none;font-size:.72rem;display:flex;flex-direction:column;gap:4px}
@@ -154,6 +157,10 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
   <div class="main">
     <div id="cargue-map"></div>
     <div id="cargue-modo-aviso">👁️ Sin pedidos de HOY en la selección — solo lectura, no se puede editar</div>
+    <div id="cargue-banner-edicion">
+      ✏️ Editando el cargue de <span id="cargue-banner-edicion-nombre">—</span> — ajustá la selección y guardá los cambios
+      <button type="button" id="cargue-btn-cancelar-edicion">✖️ Cancelar</button>
+    </div>
     <div id="cargue-vacio-mapa" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:500;background:rgba(15,23,42,.93);border:1px solid #334155;border-radius:12px;padding:18px 26px;text-align:center;font-size:.8rem;color:#94a3b8;max-width:280px;pointer-events:none">📍 Elegí una línea arriba para ver los pedidos puntillados</div>
     <div class="legend">
       <h4>VEND</h4>
