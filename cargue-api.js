@@ -92,11 +92,12 @@ async function fetchCargueAsignacionesRango(desde, hasta) {
   return Array.isArray(raw) ? raw.map(_mapCargueAsignacionRow) : [];
 }
 
-// Anular un cargue guardado (botón Eliminar, o primer paso de Editar). Se
-// identifica por Timestamp -- fire-and-forget, igual que el resto de los
-// guardados (ver guardarCargueAsignacion).
-function anularCargueAsignacion({ fecha, timestamp, camion }) {
-  const payload = { tipo: 'cargue_asignacion_anular', token: getToken(), fecha, timestamp, camion };
+// Eliminar un cargue guardado DE VERDAD (botón 🗑️, o primer paso de ✏️
+// Editar) -- se borra la fila del Sheet, no se marca. Se identifica por
+// Timestamp -- fire-and-forget, igual que el resto de los guardados (ver
+// guardarCargueAsignacion).
+function eliminarCargueAsignacion({ fecha, timestamp, camion }) {
+  const payload = { tipo: 'cargue_asignacion_eliminar', token: getToken(), fecha, timestamp, camion };
   return fetchConTimeoutCargue(API_URL, {
     method: 'POST', mode: 'no-cors',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },

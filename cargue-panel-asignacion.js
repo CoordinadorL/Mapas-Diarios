@@ -2,7 +2,8 @@
 // CARGUE-PANEL-ASIGNACION.JS — panel lateral: pedidos seleccionados por la
 // geocerca activa, selector de camión (catálogo fijo, hoja "Cod Camión") y
 // guardado. También lleva la lista de camiones ya armados, con botones para
-// editarlos o eliminarlos (anular, no borra la fila -- ver CargueAsignacion.gs).
+// editarlos o eliminarlos de verdad (ver CargueAsignacion.gs -- queda
+// registrado en la hoja aparte CARGUE_REPORTE antes de borrar).
 //
 // Se engancha a cargue-geocercas.js vía onCargueSeleccionCambio() (llamada
 // directa por scope global, mismo patrón que el resto del proyecto). Pide
@@ -72,15 +73,15 @@ function guardarSeleccionActual(){
 
 // "Editar": anula el cargue guardado y recarga esos mismos pedidos en la
 // selección para que el usuario los ajuste (agregar/quitar clientes, cambiar
-// de camión) y los vuelva a guardar. No hay edición en el lugar -- mismo
-// criterio de "anular y rehacer" que ya usa el resto del proyecto (ver
-// handleGeoRevertir en Geo.gs).
+// de camión) y los vuelva a guardar. No hay edición en el lugar -- primero
+// elimina de verdad la fila vieja (queda igual registrada en CARGUE_REPORTE
+// como ELIMINADO, ver CargueAsignacion.gs).
 function editarCargueArmado(c){
-  const ok = confirm(`Vas a editar el cargue de "${c.camion}" (${c.pedidos.length} pedidos).\n\nEsto anula ese cargue guardado y carga esos pedidos en la selección para que los ajustes y lo guardes de nuevo.\n\n¿Continuar?`);
+  const ok = confirm(`Vas a editar el cargue de "${c.camion}" (${c.pedidos.length} pedidos).\n\nEsto elimina ese cargue guardado y carga esos pedidos en la selección para que los ajustes y lo guardes de nuevo.\n\n¿Continuar?`);
   if (!ok) return;
   if (!c.timestamp) { alert('Este cargue todavía no terminó de guardarse -- esperá unos segundos y reintentá.'); return; }
 
-  anularCargueAsignacion({ fecha: c.fecha, timestamp: c.timestamp, camion: c.camion });
+  eliminarCargueAsignacion({ fecha: c.fecha, timestamp: c.timestamp, camion: c.camion });
   prepararEdicionCargue(c.pedidos, c.geojson);
 
   const sel = document.getElementById('cargue-sel-camion');
@@ -92,14 +93,15 @@ function editarCargueArmado(c){
   if (typeof refrescarSoloAsignaciones === 'function') setTimeout(refrescarSoloAsignaciones, 1500);
 }
 
-// "Eliminar": anula el cargue guardado (no borra la fila, ver
-// CargueAsignacion.gs) y lo saca de la lista. No toca la selección actual.
+// "Eliminar": borra la fila de verdad en CARGUE_ASIGNACION (queda registrada
+// en CARGUE_REPORTE como ELIMINADO, ver CargueAsignacion.gs). No toca la
+// selección actual.
 function eliminarCargueArmado(c){
   const ok = confirm(`¿Eliminar el cargue de "${c.camion}" (${c.pedidos.length} pedidos, $${c.total.toFixed(2)})?\n\nEsto no se puede deshacer desde acá.`);
   if (!ok) return;
   if (!c.timestamp) { alert('Este cargue todavía no terminó de guardarse -- esperá unos segundos y reintentá.'); return; }
 
-  anularCargueAsignacion({ fecha: c.fecha, timestamp: c.timestamp, camion: c.camion });
+  eliminarCargueAsignacion({ fecha: c.fecha, timestamp: c.timestamp, camion: c.camion });
   if (typeof refrescarSoloAsignaciones === 'function') setTimeout(refrescarSoloAsignaciones, 1500);
 }
 
