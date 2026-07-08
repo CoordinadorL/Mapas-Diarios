@@ -103,6 +103,33 @@ function cargarPlantillaComoGeocerca(geojson){
   if (cargueModoResta) restarPorPoligono(layer); else sumarPorPoligono(layer);
 }
 
+// Recarga en la selección los pedidos de un cargue ya guardado (botón
+// "✏️ Editar" en cargue-panel-asignacion.js). A diferencia de
+// aplicarFiltrosYPintar(), NO limpia la selección antes de pintar -- la
+// arma directo con exactamente esos pedidos, sin importar si sus vendedores
+// están marcados en los chips ahora mismo (los fuerza a activos para que se
+// vean en el mapa). El polígono original se redibuja como referencia, si
+// vino guardado.
+function prepararEdicionCargue(pedidos, geojson){
+  const vendedoresNecesarios = [...new Set(CARGUE_PEDIDOS_TODOS.filter(p => pedidos.includes(p.pedido)).map(p => p.vendedor))];
+  vendedoresNecesarios.forEach(v => CARGUE_VENDEDORES_ACTIVOS.add(v));
+  if (typeof renderVendedorChips === 'function') renderVendedorChips();
+
+  const filtrados = CARGUE_PEDIDOS_TODOS.filter(p => CARGUE_VENDEDORES_ACTIVOS.has(p.vendedor));
+  drawCarguePedidos(filtrados);
+  if (typeof renderListaClientes === 'function') renderListaClientes(filtrados);
+
+  const items = CARGUE_MARKERS.filter(m => pedidos.includes(m.data.pedido));
+  items.forEach(item => setMarcadorSeleccionado(item, true));
+  cargueSeleccionActual = { poligono: geojson || null, items };
+
+  if (cargueDrawnItems) {
+    cargueDrawnItems.clearLayers();
+    if (Array.isArray(geojson) && geojson.length) cargueDrawnItems.addLayer(L.polygon(geojson, { color: '#fbbf24' }));
+  }
+  notificarCambioSeleccion();
+}
+
 // Marca/desmarca UN pedido (checkbox de cargue-lista-clientes.js). Suma o
 // quita sobre la selección actual, no la reemplaza.
 function alternarClienteEnSeleccion(pedidoId){

@@ -261,17 +261,41 @@ async function _actualizarCargueClientesInterno(){
   const aviso = document.getElementById('cargue-modo-aviso');
   if (aviso) aviso.style.display = historico ? 'block' : 'none';
 
-  cargueCamionesArmadosHoy = asignaciones.map(a => {
+  cargueCamionesArmadosHoy = computarCamionesArmados(asignaciones);
+  renderCamionesArmadosHoy();
+}
+
+// Arma la lista "camiones armados" a partir de las asignaciones crudas del
+// backend, cruzando con CARGUE_PEDIDOS_TODOS para sacar kilos/vendedores.
+// Separado de _actualizarCargueClientesInterno para poder reusarlo en
+// refrescarSoloAsignaciones() sin tener que volver a pedir los pedidos.
+function computarCamionesArmados(asignaciones){
+  return asignaciones.map(a => {
     const pedidosDelCamion = CARGUE_PEDIDOS_TODOS.filter(p => a.pedidos.includes(p.pedido));
     return {
-      camion: a.camion,
-      pedidos: a.pedidos,
+      camion: a.camion, pedidos: a.pedidos, fecha: a.fecha, timestamp: a.timestamp, geojson: a.geojson,
       kilos: pedidosDelCamion.reduce((s, p) => s + p.kilos, 0),
       total: pedidosDelCamion.reduce((s, p) => s + p.ventasTotal, 0),
       vendedores: [...new Set(pedidosDelCamion.map(p => p.vendedor))].sort(),
     };
   });
-  renderCamionesArmadosHoy();
+}
+
+// Refresco liviano: solo vuelve a pedir las ASIGNACIONES (no los pedidos ni
+// los filtros de vendedor/línea), para usar después de guardar/editar/
+// eliminar un cargue SIN pisar la selección que el usuario pueda estar
+// armando en ese momento (a diferencia de actualizarCargueClientes(), que sí
+// la resetea al repintar el mapa).
+async function refrescarSoloAsignaciones(){
+  try {
+    const { desde, hasta } = obtenerRangoFechas();
+    const asignaciones = await fetchCargueAsignacionesRango(desde, hasta);
+    dibujarAsignacionesGuardadas(asignaciones);
+    cargueCamionesArmadosHoy = computarCamionesArmados(asignaciones);
+    renderCamionesArmadosHoy();
+  } catch (e) {
+    console.error('No se pudieron refrescar los cargues guardados:', e);
+  }
 }
 
 // Wrapper del botón "🔄 Actualizar clientes" (y de los inputs Desde/Hasta):

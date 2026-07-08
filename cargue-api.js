@@ -83,13 +83,25 @@ function _mapCargueAsignacionRow(row) {
   let pedidos = [], geojson = null;
   try { pedidos = JSON.parse(row.Pedidos || '[]'); } catch (e) {}
   try { geojson = JSON.parse(row.GeoJSON || 'null'); } catch (e) {}
-  return { fecha: row.Fecha, camion: row.Camion, pedidos, geojson, usuario: row.Usuario };
+  return { fecha: row.Fecha, camion: row.Camion, pedidos, geojson, usuario: row.Usuario, timestamp: row.Timestamp };
 }
 // Asignaciones (camiones) ya guardadas para un rango de fechas, con sus geocercas.
 async function fetchCargueAsignacionesRango(desde, hasta) {
   const qs = 'tipo=cargue_asignacion&desde=' + encodeURIComponent(desde) + '&hasta=' + encodeURIComponent(hasta);
   const raw = await jsonpCargue(qs, 25000);
   return Array.isArray(raw) ? raw.map(_mapCargueAsignacionRow) : [];
+}
+
+// Anular un cargue guardado (botón Eliminar, o primer paso de Editar). Se
+// identifica por Timestamp -- fire-and-forget, igual que el resto de los
+// guardados (ver guardarCargueAsignacion).
+function anularCargueAsignacion({ fecha, timestamp, camion }) {
+  const payload = { tipo: 'cargue_asignacion_anular', token: getToken(), fecha, timestamp, camion };
+  return fetchConTimeoutCargue(API_URL, {
+    method: 'POST', mode: 'no-cors',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body: JSON.stringify(payload),
+  }, 12000);
 }
 
 // Guardar una agrupación. Fire-and-forget (no-cors: Apps Script no siempre
