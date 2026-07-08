@@ -28,13 +28,14 @@ button.badge{font-family:inherit}
 .fecha-inline{display:flex;align-items:center;gap:4px}
 .fecha-inline span{font-size:.56rem;color:#64748b}
 .fecha-inline input[type=date]{background:#1e293b;color:#fff;border:1px solid #334155;border-radius:5px;padding:2px 5px;font-size:.66rem;color-scheme:dark}
-.chips{display:flex;gap:4px;flex-wrap:wrap;max-width:280px;max-height:40px;overflow-y:auto}
+.chips{display:flex;gap:4px;flex-wrap:wrap;max-width:340px;max-height:64px;overflow-y:auto}
 .chips.vacio-hint{color:#64748b;font-size:.64rem;font-style:italic}
 .cargue-chip{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:18px;border:1.5px solid #334155;font-size:.6rem;font-weight:700;cursor:pointer;color:#94a3b8;background:transparent;transition:all .15s;user-select:none;white-space:nowrap}
 .cargue-chip:hover{border-color:#3b82f6;color:#93c5fd}
 .cargue-chip.sel{background:#1d4ed8;border-color:#3b82f6;color:#fff}
 .cargue-chip input{display:none}
-#cargue-stat-vivo{background:#052e16;border:1px solid #16a34a;color:#4ade80;border-radius:14px;padding:3px 10px;font-size:.66rem;font-weight:700;white-space:nowrap}
+.toolbar-grupo-vend{display:flex;flex-direction:column;gap:3px}
+#cargue-stat-vivo{background:#052e16;border:1px solid #16a34a;color:#4ade80;border-radius:14px;padding:3px 10px;font-size:.66rem;font-weight:700;white-space:nowrap;align-self:flex-start}
 
 .cargue-dropdown{position:relative}
 .cargue-dropdown-btn{background:#1e293b;color:#fff;border:1px solid #334155;border-radius:6px;padding:3px 9px;font-size:.68rem;cursor:pointer;white-space:nowrap;font-family:inherit}
@@ -53,21 +54,22 @@ button.badge{font-family:inherit}
 
 #cargue-modo-aviso{display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:600;background:#7c2d12;border:1px solid #f97316;color:#fed7aa;padding:5px 14px;border-radius:20px;font-size:.68rem;font-weight:700}
 
-aside{width:300px;flex-shrink:0;background:#111827;border-left:1px solid #1e293b;padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
-aside h3{font-size:.66rem;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:5px;display:flex;justify-content:space-between}
+aside{width:300px;flex-shrink:0;background:#111827;border-left:1px solid #1e293b;padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
+aside h3{font-size:.66rem;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:5px;display:flex;justify-content:space-between;flex-shrink:0}
 aside ul{list-style:none;font-size:.72rem;display:flex;flex-direction:column;gap:4px}
 aside ul li{background:#1e293b;padding:5px 8px;border-radius:6px;color:#e2e8f0}
 aside ul li.vacio{color:#64748b;font-style:italic;background:none;padding:2px 0}
+.aside-fija{flex-shrink:0}
 #cargue-lista-buscar{width:100%;padding:5px 8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#fff;font-size:.72rem}
 .sel-resumen{display:flex;justify-content:space-between;font-size:.76rem;color:#fff;background:#1d4ed8;padding:6px 10px;border-radius:8px;font-weight:700}
 button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:700;font-size:.7rem;cursor:pointer}
 #cargue-btn-guardar{background:#16a34a;color:#fff}
 #cargue-btn-limpiar{background:#334155;color:#cbd5e1}
 #cargue-btn-guardar-plantilla{background:#7c3aed;color:#fff;margin-top:5px}
-#cargue-btn-seleccionar-visible{background:#0369a1;color:#fff}
+#cargue-btn-seleccionar-visible{background:#0369a1;color:#fff;flex:1.4}
 
 .modo-dibujo{display:flex;gap:5px}
-.modo-btn{flex:1;padding:6px;border-radius:6px;border:1.5px solid #334155;background:transparent;color:#94a3b8;font-size:.66rem;font-weight:700;cursor:pointer;font-family:inherit}
+.modo-btn{flex:1;padding:6px 4px;border-radius:6px;border:1.5px solid #334155;background:transparent;color:#94a3b8;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit}
 .modo-btn.activo{background:#1d4ed8;border-color:#3b82f6;color:#fff}
 
 .seccion-colapsable summary{cursor:pointer;font-size:.66rem;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px;list-style:none;padding:2px 0}
@@ -77,7 +79,10 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
 .seccion-colapsable[open] summary::before{content:'▾ ';}
 .seccion-colapsable{display:flex;flex-direction:column;gap:5px}
 
-#cargue-lista-clientes{max-height:260px;overflow-y:auto}
+.aside-crece{flex:1;min-height:60px;display:flex;flex-direction:column;overflow:hidden}
+#cargue-lista-clientes{flex:1;overflow-y:auto;min-height:0}
+#cargue-sel-lista{max-height:110px;overflow-y:auto}
+#cargue-armados{max-height:118px;overflow-y:auto}
 .grupo-vendedor{background:none!important;padding:0!important}
 .grupo-vendedor summary{cursor:pointer;font-weight:700;color:#93c5fd;padding:4px 6px;background:#1e293b;border-radius:6px;list-style:none;font-size:.72rem}
 .grupo-vendedor summary::-webkit-details-marker{display:none}
@@ -89,8 +94,11 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
 .chk-cliente input{flex-shrink:0}
 
 #cargue-modal-resumen{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;align-items:center;justify-content:center}
-#cargue-modal-resumen .caja{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:840px;width:92%;max-height:82vh;overflow:auto}
+#cargue-modal-resumen .caja{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:920px;width:94%;max-height:82vh;overflow:auto}
 #cargue-btn-cerrar-resumen{background:#334155;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:.72rem;font-weight:700}
+.cargue-resumen-cols{display:flex;gap:18px;flex-wrap:wrap}
+.cargue-resumen-cols>div{flex:1;min-width:280px}
+.cargue-resumen-cols h4{font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:6px}
 
 @media (max-width:760px){
   .main{flex-direction:column}
@@ -124,12 +132,11 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
     </div>
   </div>
   <div class="toolbar-sep"></div>
-  <div class="toolbar-grupo">
+  <div class="toolbar-grupo-vend">
     <label>Vendedores <span id="cargue-vendedor-contador" style="text-transform:none;font-weight:400"></span></label>
     <div class="chips" id="cargue-chips-vendedor"></div>
+    <span id="cargue-stat-vivo">🧾 0 facturas · $0.00</span>
   </div>
-  <div class="toolbar-sep"></div>
-  <span id="cargue-stat-vivo">🧾 0 facturas · $0.00</span>
 </div>
 
 <div class="main">
@@ -142,49 +149,58 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
   </div>
 
   <aside>
-    <input type="text" id="cargue-lista-buscar" placeholder="🔍 Buscar cliente, código...">
+    <div class="aside-fija">
+      <h3>Camiones armados hoy</h3>
+      <ul id="cargue-armados"><li class="vacio">Ningún camión armado todavía.</li></ul>
+    </div>
 
-    <div>
+    <input type="text" id="cargue-lista-buscar" class="aside-fija" placeholder="🔍 Buscar cliente, código...">
+
+    <div class="aside-crece">
       <h3>Clientes <span id="cargue-lista-count">0</span></h3>
       <ul id="cargue-lista-clientes"><li class="vacio">No hay pedidos con estos filtros.</li></ul>
     </div>
 
-    <div id="cargue-panel-guardar">
+    <div id="cargue-panel-guardar" class="aside-fija">
       <div class="sel-resumen"><span id="cargue-sel-count">0</span>&nbsp;facturas &middot; <span id="cargue-sel-total">$0.00</span></div>
 
-      <div class="modo-dibujo" style="margin-top:8px">
+      <div class="modo-dibujo" style="margin-top:6px">
         <button type="button" id="cargue-modo-sumar" class="modo-btn activo" title="El próximo polígono SUMA a la selección">➕ Sumar</button>
         <button type="button" id="cargue-modo-restar" class="modo-btn" title="El próximo polígono QUITA de la selección">➖ Restar</button>
+        <button type="button" id="cargue-btn-seleccionar-visible" class="modo-btn" title="Seleccionar todo lo visible en el mapa">🔲 Visible</button>
       </div>
-      <button class="accion" id="cargue-btn-seleccionar-visible" style="margin-top:5px">🔲 Seleccionar todo lo visible</button>
 
-      <ul id="cargue-sel-lista" style="margin-top:8px"><li class="vacio">Dibuja un polígono o marca clientes de la lista de arriba.</li></ul>
+      <ul id="cargue-sel-lista" style="margin-top:6px"><li class="vacio">Dibuja un polígono o marca clientes de la lista de arriba.</li></ul>
 
-      <details class="seccion-colapsable" style="margin-top:8px">
+      <details class="seccion-colapsable" style="margin-top:6px">
         <summary>Plantillas de geocerca</summary>
         <select id="cargue-sel-plantilla"><option value="">— Cargar plantilla —</option></select>
         <button class="accion" id="cargue-btn-guardar-plantilla">⭐ Guardar como plantilla</button>
       </details>
 
-      <select id="cargue-sel-camion" style="width:100%;margin-top:8px"></select>
+      <select id="cargue-sel-camion" style="width:100%;margin-top:6px"></select>
       <button class="accion" id="cargue-btn-guardar" style="margin-top:5px">💾 Guardar cargue</button>
       <button class="accion" id="cargue-btn-limpiar" style="margin-top:5px">✖️ Limpiar selección</button>
     </div>
-
-    <details class="seccion-colapsable">
-      <summary>Camiones armados hoy</summary>
-      <ul id="cargue-armados"><li class="vacio">Ningún camión armado todavía.</li></ul>
-    </details>
   </aside>
 </div>
 
 <div id="cargue-modal-resumen">
   <div class="caja">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <h3 style="font-size:.85rem;color:#f1f5f9;text-transform:none">📊 Pedidos x Vendedor</h3>
+      <h3 style="font-size:.85rem;color:#f1f5f9;text-transform:none">📊 Resumen del cargue</h3>
       <button id="cargue-btn-cerrar-resumen">✕ Cerrar</button>
     </div>
-    <div id="cargue-resumen-tabla"></div>
+    <div class="cargue-resumen-cols">
+      <div>
+        <h4>Pedidos x Vendedor</h4>
+        <div id="cargue-resumen-tabla"></div>
+      </div>
+      <div>
+        <h4>Cargues armados</h4>
+        <div id="cargue-resumen-camiones"></div>
+      </div>
+    </div>
   </div>
 </div>
 

@@ -59,8 +59,43 @@ function renderResumenTabla(){
     </table>`;
 }
 
+// Desglose de los cargues ya armados (cargueCamionesArmadosHoy, de
+// cargue-panel-asignacion.js): código de camión, vendedores incluidos,
+// facturas, kilos y monto -- responde a "¿qué llevo ya armado y con qué?"
+// sin tener que ir a buscarlo en la lista chica del panel lateral.
+function renderResumenCamiones(){
+  const cont = document.getElementById('cargue-resumen-camiones');
+  if (!cont) return;
+
+  if (!cargueCamionesArmadosHoy.length) {
+    cont.innerHTML = '<p style="color:#64748b;font-size:.78rem">Ningún camión armado todavía.</p>';
+    return;
+  }
+
+  cont.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:.75rem">
+      <thead><tr style="text-align:left;color:#94a3b8;border-bottom:1px solid #334155">
+        <th style="padding:5px 6px">Camión</th>
+        <th style="padding:5px 6px">Vendedores</th>
+        <th style="padding:5px 6px;text-align:right">Facturas</th>
+        <th style="padding:5px 6px;text-align:right">Kilos</th>
+        <th style="padding:5px 6px;text-align:right">Monto</th>
+      </tr></thead>
+      <tbody>
+        ${cargueCamionesArmadosHoy.map(c => `<tr style="border-bottom:1px solid #1e293b">
+          <td style="padding:5px 6px">${c.camion}</td>
+          <td style="padding:5px 6px;color:#94a3b8">${(c.vendedores || []).join(', ')}</td>
+          <td style="padding:5px 6px;text-align:right">${c.pedidos.length}</td>
+          <td style="padding:5px 6px;text-align:right">${(c.kilos || 0).toFixed(2)}</td>
+          <td style="padding:5px 6px;text-align:right;font-weight:700">$${c.total.toFixed(2)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
 function abrirResumenCargue(){
   renderResumenTabla();
+  renderResumenCamiones();
   const modal = document.getElementById('cargue-modal-resumen');
   if (modal) modal.style.display = 'flex';
 }

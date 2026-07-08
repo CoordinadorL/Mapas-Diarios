@@ -62,7 +62,12 @@ function guardarSeleccionActual(){
 
   guardarCargueAsignacion({ fecha, camion: camionLabel, pedidos, geojson: cargueSeleccionActual.poligono });
 
-  cargueCamionesArmadosHoy.push({ camion: camionLabel, pedidos, total: items.reduce((s, it) => s + it.data.ventasTotal, 0) });
+  cargueCamionesArmadosHoy.push({
+    camion: camionLabel, pedidos,
+    kilos: items.reduce((s, it) => s + it.data.kilos, 0),
+    total: items.reduce((s, it) => s + it.data.ventasTotal, 0),
+    vendedores: [...new Set(items.map(it => it.data.vendedor))].sort(),
+  });
   renderCamionesArmadosHoy();
   limpiarCargueGeocerca();
   if (sel) sel.value = '';
@@ -73,6 +78,6 @@ function renderCamionesArmadosHoy(){
   if (!cont) return;
   if (!cargueCamionesArmadosHoy.length) { cont.innerHTML = '<li class="vacio">Ningún camión armado todavía.</li>'; return; }
   cont.innerHTML = cargueCamionesArmadosHoy.map(c =>
-    `<li><b>${c.camion}</b> — ${c.pedidos.length} pedidos — $${c.total.toFixed(2)}</li>`
+    `<li><b>${c.camion}</b> — ${c.pedidos.length} pedidos — ${c.kilos.toFixed(1)}kg — $${c.total.toFixed(2)}</li>`
   ).join('');
 }

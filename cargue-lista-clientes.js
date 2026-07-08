@@ -42,10 +42,12 @@ function renderizarListaConBusqueda(){
     return;
   }
 
-  cont.innerHTML = vendedores.map(v => `
+  cont.innerHTML = vendedores.map(v => {
+    const totalVendedor = porVendedor[v].reduce((s, p) => s + p.ventasTotal, 0);
+    return `
     <li class="grupo-vendedor">
       <details ${filtro || vendedores.length <= 3 ? 'open' : ''}>
-        <summary>${v} <span class="contador-grupo">(${porVendedor[v].length})</span></summary>
+        <summary>${v} <span class="contador-grupo">(${porVendedor[v].length}) — $${totalVendedor.toFixed(2)}</span></summary>
         <ul>
           ${porVendedor[v].map(p => `
             <li>
@@ -57,7 +59,8 @@ function renderizarListaConBusqueda(){
         </ul>
       </details>
     </li>
-  `).join('');
+  `;
+  }).join('');
   cont.querySelectorAll('input[type=checkbox]').forEach(chk => {
     chk.addEventListener('change', () => alternarClienteEnSeleccion(chk.dataset.pedido));
   });

@@ -261,10 +261,16 @@ async function _actualizarCargueClientesInterno(){
   const aviso = document.getElementById('cargue-modo-aviso');
   if (aviso) aviso.style.display = historico ? 'block' : 'none';
 
-  cargueCamionesArmadosHoy = asignaciones.map(a => ({
-    camion: a.camion, pedidos: a.pedidos,
-    total: CARGUE_PEDIDOS_TODOS.filter(p => a.pedidos.includes(p.pedido)).reduce((s, p) => s + p.ventasTotal, 0),
-  }));
+  cargueCamionesArmadosHoy = asignaciones.map(a => {
+    const pedidosDelCamion = CARGUE_PEDIDOS_TODOS.filter(p => a.pedidos.includes(p.pedido));
+    return {
+      camion: a.camion,
+      pedidos: a.pedidos,
+      kilos: pedidosDelCamion.reduce((s, p) => s + p.kilos, 0),
+      total: pedidosDelCamion.reduce((s, p) => s + p.ventasTotal, 0),
+      vendedores: [...new Set(pedidosDelCamion.map(p => p.vendedor))].sort(),
+    };
+  });
   renderCamionesArmadosHoy();
 }
 
