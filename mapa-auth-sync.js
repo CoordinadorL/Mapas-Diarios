@@ -34,6 +34,8 @@ function sesionExpirada(){
     if(['admin','bodega','coordinador'].includes(s.rol)){
       const br=document.getElementById('btn-resumen');
       if(br)br.style.display='flex';
+      const bcg=document.getElementById('btn-cargue');
+      if(bcg)bcg.style.display='flex';
     }
     if(['transportista','reparto','admin','bodega','coordinador'].includes(s.rol)){
       const bc=document.getElementById('btn-cuadre');

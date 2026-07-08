@@ -74,6 +74,7 @@ tr:hover td{background:#16213a}
     <h1>📊 MAPAS DIARIOS — RESUMEN</h1>
     <p id="sub-info">Cargando...</p>
   </div>
+  <a class="badge" id="btn-cargue" href="cargue.html" style="display:none;text-decoration:none;background:#7c2d12;border-color:#f97316;color:#fed7aa" title="Mapa de cargue (validar pedidos puntillados)">📍 GENERAR CARGUES</a>
   <div class="badge" onclick="logout()" title="Cerrar sesión">👤 <span id="user-name">—</span> · <span id="user-rol">—</span> ⏻</div>
 </div>
 
@@ -232,6 +233,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   } else {
     document.getElementById('rango-wrap').style.display='block';
     document.getElementById('titulo-detalle-dia').style.display='block';
+    document.getElementById('btn-cargue').style.display='flex';
   }
 });
 

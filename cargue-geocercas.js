@@ -1,0 +1,141 @@
+// ═══════════════════════════════════════════════════════════
+// CARGUE-GEOCERCAS.JS — dueño de la selección actual de pedidos (cargueSeleccionActual).
+// Formas de armarla:
+//  - Dibujar un polígono libre (Leaflet.draw + punto-en-polígono puro de
+//    cargue-utils.js). Modo SUMAR (default): el polígono AGREGA a lo que ya
+//    había. Modo RESTAR: el polígono QUITA de la selección actual lo que
+//    caiga adentro. El toggle lo maneja setCargueModoResta().
+//  - Marcar/desmarcar un cliente uno por uno desde la lista
+//    (cargue-lista-clientes.js llama a alternarClienteEnSeleccion) -- suma o
+//    quita ese único punto, sin tocar el resto.
+//  - "Seleccionar todo lo visible" -- agrega todo lo que entra en el
+//    encuadre actual del mapa, sin dibujar nada.
+//  - Cargar una plantilla guardada (cargue-plantillas.js) -- dibuja ese
+//    polígono y aplica sumar/restar igual que si lo hubieras trazado a mano.
+//
+// No arma el panel ni guarda nada -- al cambiar la selección llama a
+// onCargueSeleccionCambio(seleccion), que define cargue-panel-asignacion.js
+// (mismo patrón de "funciones que se llaman entre módulos por scope global"
+// que ya usa mapa-render.js con buildPopup()).
+// ═══════════════════════════════════════════════════════════
+
+let cargueDrawnItems = null;
+let cargueSeleccionActual = { poligono: null, items: [] };
+let cargueModoResta = false;
+
+function initCargueGeocercas(){
+  cargueDrawnItems = new L.FeatureGroup();
+  cargueMap.addLayer(cargueDrawnItems);
+
+  const drawControl = new L.Control.Draw({
+    draw: {
+      polygon: { allowIntersection: false, showArea: true, shapeOptions: { color: '#fbbf24' } },
+      marker: false, circle: false, circlemarker: false, rectangle: false, polyline: false
+    },
+    edit: { featureGroup: cargueDrawnItems, remove: false }
+  });
+  cargueMap.addControl(drawControl);
+
+  cargueMap.on(L.Draw.Event.CREATED, (e) => {
+    cargueDrawnItems.clearLayers(); // una sola forma visible a la vez (referencia), la SELECCIÓN sí acumula
+    cargueDrawnItems.addLayer(e.layer);
+    if (cargueModoResta) restarPorPoligono(e.layer); else sumarPorPoligono(e.layer);
+  });
+  cargueMap.on(L.Draw.Event.EDITED, (e) => {
+    e.layers.eachLayer(layer => { if (cargueModoResta) restarPorPoligono(layer); else sumarPorPoligono(layer); });
+  });
+
+  const btnSumar = document.getElementById('cargue-modo-sumar');
+  const btnRestar = document.getElementById('cargue-modo-restar');
+  if (btnSumar) btnSumar.addEventListener('click', () => setCargueModoResta(false));
+  if (btnRestar) btnRestar.addEventListener('click', () => setCargueModoResta(true));
+
+  const btnVisible = document.getElementById('cargue-btn-seleccionar-visible');
+  if (btnVisible) btnVisible.addEventListener('click', seleccionarTodoVisible);
+}
+
+function setCargueModoResta(activo){
+  cargueModoResta = activo;
+  const btnSumar = document.getElementById('cargue-modo-sumar');
+  const btnRestar = document.getElementById('cargue-modo-restar');
+  if (btnSumar) btnSumar.classList.toggle('activo', !activo);
+  if (btnRestar) btnRestar.classList.toggle('activo', activo);
+}
+
+function sumarPorPoligono(layer){
+  const poligono = layer.getLatLngs()[0].map(ll => [ll.lat, ll.lng]);
+  const nuevos = CARGUE_MARKERS.filter(item => puntoEnPoligono(item.data.lat, item.data.lng, poligono) && !cargueSeleccionActual.items.includes(item));
+  nuevos.forEach(item => setMarcadorSeleccionado(item, true));
+  cargueSeleccionActual.items.push(...nuevos);
+  cargueSeleccionActual.poligono = poligono;
+  notificarCambioSeleccion();
+}
+
+function restarPorPoligono(layer){
+  const poligono = layer.getLatLngs()[0].map(ll => [ll.lat, ll.lng]);
+  const aQuitar = cargueSeleccionActual.items.filter(item => puntoEnPoligono(item.data.lat, item.data.lng, poligono));
+  aQuitar.forEach(item => {
+    setMarcadorSeleccionado(item, false);
+    const idx = cargueSeleccionActual.items.indexOf(item);
+    if (idx >= 0) cargueSeleccionActual.items.splice(idx, 1);
+  });
+  cargueSeleccionActual.poligono = poligono;
+  notificarCambioSeleccion();
+}
+
+// Agrega todo lo que entra en el encuadre actual del mapa, sin dibujar nada.
+// Siempre suma (ignora el toggle sumar/restar -- "seleccionar" no "quitar").
+function seleccionarTodoVisible(){
+  const bounds = cargueMap.getBounds();
+  const nuevos = CARGUE_MARKERS.filter(item => bounds.contains([item.data.lat, item.data.lng]) && !cargueSeleccionActual.items.includes(item));
+  nuevos.forEach(item => setMarcadorSeleccionado(item, true));
+  cargueSeleccionActual.items.push(...nuevos);
+  notificarCambioSeleccion();
+}
+
+// Dibuja el polígono de una plantilla guardada (cargue-plantillas.js) y le
+// aplica el modo sumar/restar activo, igual que si se hubiera trazado a mano.
+function cargarPlantillaComoGeocerca(geojson){
+  if (!cargueDrawnItems || !Array.isArray(geojson) || !geojson.length) return;
+  cargueDrawnItems.clearLayers();
+  const layer = L.polygon(geojson, { color: '#fbbf24' });
+  cargueDrawnItems.addLayer(layer);
+  if (cargueModoResta) restarPorPoligono(layer); else sumarPorPoligono(layer);
+}
+
+// Marca/desmarca UN pedido (checkbox de cargue-lista-clientes.js). Suma o
+// quita sobre la selección actual, no la reemplaza.
+function alternarClienteEnSeleccion(pedidoId){
+  const item = CARGUE_MARKERS.find(it => it.data.pedido === pedidoId);
+  if (!item) return;
+  const idx = cargueSeleccionActual.items.findIndex(it => it.data.pedido === pedidoId);
+  if (idx >= 0) {
+    setMarcadorSeleccionado(item, false);
+    cargueSeleccionActual.items.splice(idx, 1);
+  } else {
+    setMarcadorSeleccionado(item, true);
+    cargueSeleccionActual.items.push(item);
+  }
+  notificarCambioSeleccion();
+}
+
+function estaSeleccionado(pedidoId){
+  return cargueSeleccionActual.items.some(it => it.data.pedido === pedidoId);
+}
+
+function limpiarResaltado(){
+  cargueSeleccionActual.items.forEach(item => setMarcadorSeleccionado(item, false));
+}
+
+// Borra la geocerca dibujada y la selección (botón "Limpiar" del panel).
+function limpiarCargueGeocerca(){
+  if (cargueDrawnItems) cargueDrawnItems.clearLayers();
+  limpiarResaltado();
+  cargueSeleccionActual = { poligono: null, items: [] };
+  notificarCambioSeleccion();
+}
+
+function notificarCambioSeleccion(){
+  if (typeof onCargueSeleccionCambio === 'function') onCargueSeleccionCambio(cargueSeleccionActual);
+  if (typeof actualizarChecksListaClientes === 'function') actualizarChecksListaClientes();
+}

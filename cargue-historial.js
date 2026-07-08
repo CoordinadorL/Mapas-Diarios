@@ -1,0 +1,308 @@
+// ═══════════════════════════════════════════════════════════
+// CARGUE-HISTORIAL.JS — filtros del mapa de cargue: rango de fechas
+// (Desde/Hasta), línea (multi, dropdown con checkboxes) y vendedores
+// (multi, chips, acotados a la línea elegida -- no aparece nada hasta que
+// se elige línea, para no abrumar con ~150 códigos de una). Elegir línea(s)
+// AUTO-marca sus vendedores; el usuario puede después seguir ajustando
+// vendedores a mano SIN que un refresco de datos (cambiar fecha, botón
+// Actualizar) le pise esos ajustes -- solo cambiar la línea reinicia la
+// selección de vendedores.
+//
+// Dueño de todo el pipeline pedidos-crudos -> filtrados -> dibujados.
+// También pinta las geocercas ya guardadas del rango activo (estáticas, no
+// editables).
+//
+// MODO VIVO vs HISTÓRICO: si HOY cae dentro del rango [Desde,Hasta], se
+// puede dibujar/marcar/guardar (aunque el rango incluya días atrasados,
+// para poder armar un cargue con pedidos viejos + los de hoy). Si HOY no
+// cae en el rango, es una consulta de solo lectura.
+// ═══════════════════════════════════════════════════════════
+
+let CARGUE_VENDEDORES_DISPONIBLES = [];
+let CARGUE_VENDEDORES_ACTIVOS = new Set();
+let CARGUE_PEDIDOS_TODOS = [];  // pedidos crudos+línea del rango activo, SIN filtrar por vendedor
+let CARGUE_LINEAS_ACTIVAS = new Set(); // vacío = ninguna línea elegida (vendedores no muestran nada)
+let cargueLineaPorVendedor = {};       // vendedor (tal cual en CARGUE_PEDIDOS) -> línea
+let cargueLineasMap = {};              // código de vendedor -> línea (catálogo)
+let cargueHistorialLayer = null;
+
+// Un cargue puede mezclar pedidos de varios días del rango (ej. atrasados +
+// hoy) -- se guarda siempre bajo la fecha de HOY (el día en que se arma el
+// cargue), no bajo la fecha original del pedido.
+function obtenerCargueFechaActiva(){ return hoyCargueStr(); }
+
+function hoyCargueStr(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
+// Recuerda rango de fechas + líneas elegidas entre sesiones (para no
+// arrancar de cero cada vez que se abre cargue.html). Los vendedores NO se
+// guardan acá -- se re-derivan solos de la línea guardada al recargar.
+const CARGUE_FILTROS_KEY = 'cargueFiltrosGuardados';
+function guardarFiltrosCargue(){
+  try {
+    localStorage.setItem(CARGUE_FILTROS_KEY, JSON.stringify({
+      desde: document.getElementById('cargue-fecha-desde')?.value || '',
+      hasta: document.getElementById('cargue-fecha-hasta')?.value || '',
+      lineas: [...CARGUE_LINEAS_ACTIVAS],
+    }));
+  } catch (e) {}
+}
+function cargarFiltrosCargueGuardados(){
+  try { return JSON.parse(localStorage.getItem(CARGUE_FILTROS_KEY) || 'null'); } catch (e) { return null; }
+}
+
+function obtenerRangoFechas(){
+  const hoy = hoyCargueStr();
+  const inDesde = document.getElementById('cargue-fecha-desde');
+  const inHasta = document.getElementById('cargue-fecha-hasta');
+  let desde = (inDesde && inDesde.value) || hoy;
+  let hasta = (inHasta && inHasta.value) || hoy;
+  if (desde > hasta) { const t = desde; desde = hasta; hasta = t; } // por si los cruzan sin querer
+  return { desde, hasta };
+}
+
+function esCargueModoHistorico(){
+  const { desde, hasta } = obtenerRangoFechas();
+  const hoy = hoyCargueStr();
+  return !(desde <= hoy && hoy <= hasta);
+}
+
+function initFechaRango(){
+  const hoy = hoyCargueStr();
+  const guardado = cargarFiltrosCargueGuardados();
+  const inDesde = document.getElementById('cargue-fecha-desde');
+  const inHasta = document.getElementById('cargue-fecha-hasta');
+  if (inDesde) {
+    inDesde.max = hoy;
+    inDesde.value = (guardado && guardado.desde) || hoy;
+    inDesde.addEventListener('change', () => { guardarFiltrosCargue(); actualizarCargueClientesConFeedback(); });
+  }
+  if (inHasta) {
+    inHasta.max = hoy;
+    inHasta.value = (guardado && guardado.hasta) || hoy;
+    inHasta.addEventListener('change', () => { guardarFiltrosCargue(); actualizarCargueClientesConFeedback(); });
+  }
+}
+
+async function initCargueHistorial(){
+  cargueHistorialLayer = new L.LayerGroup().addTo(cargueMap);
+
+  const guardado = cargarFiltrosCargueGuardados();
+  if (guardado && Array.isArray(guardado.lineas)) CARGUE_LINEAS_ACTIVAS = new Set(guardado.lineas);
+
+  const lineasRows = await fetchCargueLineas();
+  cargueLineasMap = construirLineasMap(lineasRows);
+  const lineasDisponibles = [...new Set(Object.values(cargueLineasMap))].filter(Boolean).sort();
+  CARGUE_LINEAS_ACTIVAS = new Set([...CARGUE_LINEAS_ACTIVAS].filter(l => lineasDisponibles.includes(l))); // por si el catálogo cambió
+  renderLineaDropdown(lineasDisponibles);
+
+  initFechaRango();
+  await actualizarCargueClientes();
+}
+
+// Vendedores que corresponde MOSTRAR ahora mismo: los de las líneas activas.
+// Sin línea elegida, ninguno (a propósito -- evita el muro de ~150 chips).
+function vendedoresVisibles(){
+  if (!CARGUE_LINEAS_ACTIVAS.size) return [];
+  return CARGUE_VENDEDORES_DISPONIBLES.filter(v => CARGUE_LINEAS_ACTIVAS.has(cargueLineaPorVendedor[v]));
+}
+
+function renderVendedorChips(){
+  const cont = document.getElementById('cargue-chips-vendedor');
+  const contador = document.getElementById('cargue-vendedor-contador');
+  if (!cont) return;
+  const visibles = vendedoresVisibles();
+  if (!visibles.length) {
+    cont.className = 'chips vacio-hint';
+    cont.textContent = CARGUE_LINEAS_ACTIVAS.size ? 'Sin vendedores para esa línea.' : 'Elegí una línea para ver sus vendedores.';
+    if (contador) contador.textContent = '';
+    return;
+  }
+  if (contador) {
+    const marcados = visibles.filter(v => CARGUE_VENDEDORES_ACTIVOS.has(v)).length;
+    contador.textContent = `(${marcados}/${visibles.length})`;
+  }
+  cont.className = 'chips';
+  cont.innerHTML = '';
+
+  if (visibles.length > 1) {
+    const todos = document.createElement('label');
+    const marcarTodos = () => visibles.every(v => CARGUE_VENDEDORES_ACTIVOS.has(v));
+    todos.className = 'cargue-chip' + (marcarTodos() ? ' sel' : '');
+    todos.innerHTML = '<input type="checkbox"> Todos/Ninguno';
+    todos.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (marcarTodos()) visibles.forEach(v => CARGUE_VENDEDORES_ACTIVOS.delete(v));
+      else visibles.forEach(v => CARGUE_VENDEDORES_ACTIVOS.add(v));
+      renderVendedorChips();
+      aplicarFiltrosYPintar();
+    });
+    cont.appendChild(todos);
+  }
+
+  visibles.forEach(v => {
+    const chip = document.createElement('label');
+    chip.className = 'cargue-chip' + (CARGUE_VENDEDORES_ACTIVOS.has(v) ? ' sel' : '');
+    chip.innerHTML = `<input type="checkbox"> ${v}`;
+    chip.addEventListener('click', (e) => {
+      e.preventDefault();
+      if (CARGUE_VENDEDORES_ACTIVOS.has(v)) CARGUE_VENDEDORES_ACTIVOS.delete(v); else CARGUE_VENDEDORES_ACTIVOS.add(v);
+      chip.classList.toggle('sel', CARGUE_VENDEDORES_ACTIVOS.has(v));
+      aplicarFiltrosYPintar();
+    });
+    cont.appendChild(chip);
+  });
+}
+
+// Dropdown con checkboxes (no un <select> nativo, no soporta multi-selección
+// prolija) para elegir una o varias líneas. Elegir línea(s) reinicia la
+// selección de vendedores a "todos los de esa línea" -- es una acción
+// deliberada del usuario, a diferencia de un refresco de datos.
+function renderLineaDropdown(lineas){
+  const btn = document.getElementById('cargue-dropdown-linea-btn');
+  const panel = document.getElementById('cargue-dropdown-linea-panel');
+  if (!btn || !panel) return;
+
+  panel.innerHTML = lineas.map(l => `
+    <label><input type="checkbox" value="${l}" ${CARGUE_LINEAS_ACTIVAS.has(l) ? 'checked' : ''}> ${l}</label>
+  `).join('');
+  panel.querySelectorAll('input[type=checkbox]').forEach(chk => {
+    chk.addEventListener('change', () => {
+      if (chk.checked) CARGUE_LINEAS_ACTIVAS.add(chk.value); else CARGUE_LINEAS_ACTIVAS.delete(chk.value);
+      actualizarBotonLineaDropdown();
+      guardarFiltrosCargue();
+      aplicarSeleccionLineas();
+    });
+  });
+  actualizarBotonLineaDropdown();
+
+  if (!btn.dataset.wired) {
+    btn.dataset.wired = '1';
+    btn.addEventListener('click', (e) => { e.stopPropagation(); panel.classList.toggle('open'); });
+    panel.addEventListener('click', (e) => e.stopPropagation());
+    document.addEventListener('click', () => panel.classList.remove('open'));
+  }
+}
+
+function actualizarBotonLineaDropdown(){
+  const btn = document.getElementById('cargue-dropdown-linea-btn');
+  if (!btn) return;
+  const n = CARGUE_LINEAS_ACTIVAS.size;
+  const etiqueta = n === 0 ? 'Elegí una línea' : n === 1 ? [...CARGUE_LINEAS_ACTIVAS][0] : n + ' líneas';
+  btn.textContent = etiqueta + ' ▾';
+}
+
+// Se llama SOLO cuando cambia el checkbox de línea: reinicia vendedores a
+// "todos los de la línea elegida" (reemplaza cualquier ajuste manual previo).
+function aplicarSeleccionLineas(){
+  CARGUE_VENDEDORES_ACTIVOS = new Set(vendedoresVisibles());
+  renderVendedorChips();
+  aplicarFiltrosYPintar();
+}
+
+// Vuelve a consultar el Sheet para el rango de fechas activo (botón
+// "Actualizar clientes", cambio de Desde/Hasta). Si el Sheet no responde
+// (sin señal, token vencido, etc.) avisa con alert() en vez de fallar en
+// silencio -- antes un error acá dejaba el botón "sin hacer nada".
+async function actualizarCargueClientes(){
+  try {
+    await _actualizarCargueClientesInterno();
+  } catch (e) {
+    alert('No se pudo actualizar: ' + (e.message || e));
+  }
+}
+
+async function _actualizarCargueClientesInterno(){
+  const { desde, hasta } = obtenerRangoFechas();
+  const historico = esCargueModoHistorico();
+
+  const [pedidosCrudos, asignaciones] = await Promise.all([
+    fetchCarguePedidosRango(desde, hasta),
+    fetchCargueAsignacionesRango(desde, hasta),
+  ]);
+  CARGUE_PEDIDOS_TODOS = aplicarLineaVendedor(pedidosCrudos, cargueLineasMap);
+
+  CARGUE_VENDEDORES_DISPONIBLES = [...new Set(CARGUE_PEDIDOS_TODOS.map(p => p.vendedor))].sort();
+  cargueLineaPorVendedor = {};
+  CARGUE_PEDIDOS_TODOS.forEach(p => { cargueLineaPorVendedor[p.vendedor] = p.linea; });
+
+  // Un refresco de datos NO reinicia lo que el usuario ya venía ajustando a
+  // mano -- solo se filtra a lo que sigue siendo visible con los datos
+  // nuevos, y si quedó vacío (primera carga de esa línea) se pre-marca todo.
+  const visibles = vendedoresVisibles();
+  CARGUE_VENDEDORES_ACTIVOS = new Set([...CARGUE_VENDEDORES_ACTIVOS].filter(v => visibles.includes(v)));
+  if (CARGUE_LINEAS_ACTIVAS.size && !CARGUE_VENDEDORES_ACTIVOS.size && visibles.length) {
+    CARGUE_VENDEDORES_ACTIVOS = new Set(visibles);
+  }
+  renderVendedorChips();
+
+  aplicarFiltrosYPintar();
+  dibujarAsignacionesGuardadas(asignaciones);
+  activarModoEdicion(!historico);
+
+  const aviso = document.getElementById('cargue-modo-aviso');
+  if (aviso) aviso.style.display = historico ? 'block' : 'none';
+
+  cargueCamionesArmadosHoy = asignaciones.map(a => ({
+    camion: a.camion, pedidos: a.pedidos,
+    total: CARGUE_PEDIDOS_TODOS.filter(p => a.pedidos.includes(p.pedido)).reduce((s, p) => s + p.ventasTotal, 0),
+  }));
+  renderCamionesArmadosHoy();
+}
+
+// Wrapper del botón "🔄 Actualizar clientes" (y de los inputs Desde/Hasta):
+// da feedback visible (antes no se notaba si el click hacía algo cuando los
+// datos no habían cambiado).
+async function actualizarCargueClientesConFeedback(){
+  const btn = document.getElementById('cargue-btn-actualizar');
+  if (!btn) { actualizarCargueClientes(); return; }
+  const textoOriginal = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '🔄 Actualizando...';
+  await actualizarCargueClientes();
+  btn.textContent = '✅ Actualizado';
+  setTimeout(() => { btn.textContent = textoOriginal; btn.disabled = false; }, 1200);
+}
+
+// Filtra por vendedor activo (la línea ya hizo su trabajo marcando esos
+// vendedores) y repinta mapa + lista. Sin vendedores activos, no se pinta
+// nada -- a propósito, evita el default de "1500+ puntos de una".
+function aplicarFiltrosYPintar(){
+  const filtrados = CARGUE_PEDIDOS_TODOS.filter(p => CARGUE_VENDEDORES_ACTIVOS.has(p.vendedor));
+  const aviso = document.getElementById('cargue-vacio-mapa');
+  if (aviso) aviso.style.display = CARGUE_VENDEDORES_ACTIVOS.size ? 'none' : 'block';
+
+  const stat = document.getElementById('cargue-stat-vivo');
+  if (stat) {
+    const total = filtrados.reduce((s, p) => s + p.ventasTotal, 0);
+    stat.textContent = `🧾 ${filtrados.length} facturas · $${total.toFixed(2)}`;
+  }
+
+  limpiarCargueGeocerca(); // el set de puntos cambió, evita seleccion "fantasma"
+  drawCarguePedidos(filtrados);
+  if (typeof renderListaClientes === 'function') renderListaClientes(filtrados);
+}
+
+// Pinta las geocercas ya guardadas del rango activo como polígonos estáticos.
+function dibujarAsignacionesGuardadas(asignaciones){
+  cargueHistorialLayer.clearLayers();
+  asignaciones.forEach((a, i) => {
+    if (!a.geojson) return;
+    const color = CARGUE_PALETTE[i % CARGUE_PALETTE.length];
+    L.polygon(a.geojson, { color, weight: 2, fillOpacity: 0.12 })
+      .bindTooltip(`${a.camion} — ${a.pedidos.length} pedidos`)
+      .addTo(cargueHistorialLayer);
+  });
+}
+
+// Modo vivo (HOY dentro del rango activo): permite dibujar/marcar/guardar.
+// Modo histórico: solo ver.
+function activarModoEdicion(activo){
+  const panel = document.getElementById('cargue-panel-guardar');
+  if (panel) panel.style.display = activo ? 'block' : 'none';
+  const drawToolbar = document.querySelector('.leaflet-draw');
+  if (drawToolbar) drawToolbar.style.display = activo ? '' : 'none';
+  if (!activo) limpiarCargueGeocerca();
+}

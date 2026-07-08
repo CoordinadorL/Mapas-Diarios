@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<link rel="icon" href="icon-192.png">
+<title>Mapas Diarios — Mapa de Cargue</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+.topbar{background:linear-gradient(90deg,#1e293b,#0f172a);padding:6px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #a855f7;flex-shrink:0;gap:8px;flex-wrap:wrap}
+.topbar h1{font-size:.82rem;font-weight:700;letter-spacing:.3px;color:#f1f5f9}
+.topbar-right{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+select{background:#1e293b;color:#fff;border:1px solid #334155;border-radius:6px;padding:4px 8px;font-size:.72rem}
+.badge{display:flex;align-items:center;gap:4px;background:#1e293b;border:1px solid #475569;border-radius:18px;padding:2px 8px;font-size:.6rem;color:#cbd5e1;font-weight:700;text-decoration:none;cursor:pointer}
+button.badge{font-family:inherit}
+
+.toolbar{background:#111827;border-bottom:1px solid #1e293b;padding:5px 12px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;flex-shrink:0}
+.toolbar-sep{width:1px;height:18px;background:#334155;flex-shrink:0}
+.toolbar-grupo{display:flex;align-items:center;gap:5px}
+.toolbar-grupo label{font-size:.56rem;text-transform:uppercase;letter-spacing:.5px;color:#64748b;white-space:nowrap}
+.fecha-inline{display:flex;align-items:center;gap:4px}
+.fecha-inline span{font-size:.56rem;color:#64748b}
+.fecha-inline input[type=date]{background:#1e293b;color:#fff;border:1px solid #334155;border-radius:5px;padding:2px 5px;font-size:.66rem;color-scheme:dark}
+.chips{display:flex;gap:4px;flex-wrap:wrap;max-width:280px;max-height:40px;overflow-y:auto}
+.chips.vacio-hint{color:#64748b;font-size:.64rem;font-style:italic}
+.cargue-chip{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:18px;border:1.5px solid #334155;font-size:.6rem;font-weight:700;cursor:pointer;color:#94a3b8;background:transparent;transition:all .15s;user-select:none;white-space:nowrap}
+.cargue-chip:hover{border-color:#3b82f6;color:#93c5fd}
+.cargue-chip.sel{background:#1d4ed8;border-color:#3b82f6;color:#fff}
+.cargue-chip input{display:none}
+#cargue-stat-vivo{background:#052e16;border:1px solid #16a34a;color:#4ade80;border-radius:14px;padding:3px 10px;font-size:.66rem;font-weight:700;white-space:nowrap}
+
+.cargue-dropdown{position:relative}
+.cargue-dropdown-btn{background:#1e293b;color:#fff;border:1px solid #334155;border-radius:6px;padding:3px 9px;font-size:.68rem;cursor:pointer;white-space:nowrap;font-family:inherit}
+.cargue-dropdown-panel{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#1e293b;border:1px solid #334155;border-radius:8px;padding:6px;z-index:700;min-width:190px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.cargue-dropdown-panel.open{display:block}
+.cargue-dropdown-panel label{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:5px;font-size:.72rem;color:#cbd5e1;cursor:pointer}
+.cargue-dropdown-panel label:hover{background:#0f172a}
+
+.main{flex:1;display:flex;overflow:hidden;position:relative}
+#cargue-map{flex:1;height:100%}
+
+.legend{position:absolute;bottom:14px;left:10px;background:rgba(15,23,42,.93);padding:6px 10px;border-radius:10px;z-index:500;border:1px solid #1e293b;font-size:.63rem;backdrop-filter:blur(4px);max-height:min(240px,50vh);width:fit-content;overflow-y:auto}
+.legend h4{color:#94a3b8;margin-bottom:3px;font-size:.58rem;text-transform:uppercase;letter-spacing:.8px}
+.li{display:flex;align-items:center;gap:5px;margin-bottom:1px;color:#cbd5e1;white-space:nowrap}
+.ld{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+#cargue-modo-aviso{display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:600;background:#7c2d12;border:1px solid #f97316;color:#fed7aa;padding:5px 14px;border-radius:20px;font-size:.68rem;font-weight:700}
+
+aside{width:300px;flex-shrink:0;background:#111827;border-left:1px solid #1e293b;padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:10px}
+aside h3{font-size:.66rem;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:5px;display:flex;justify-content:space-between}
+aside ul{list-style:none;font-size:.72rem;display:flex;flex-direction:column;gap:4px}
+aside ul li{background:#1e293b;padding:5px 8px;border-radius:6px;color:#e2e8f0}
+aside ul li.vacio{color:#64748b;font-style:italic;background:none;padding:2px 0}
+#cargue-lista-buscar{width:100%;padding:5px 8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#fff;font-size:.72rem}
+.sel-resumen{display:flex;justify-content:space-between;font-size:.76rem;color:#fff;background:#1d4ed8;padding:6px 10px;border-radius:8px;font-weight:700}
+button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:700;font-size:.7rem;cursor:pointer}
+#cargue-btn-guardar{background:#16a34a;color:#fff}
+#cargue-btn-limpiar{background:#334155;color:#cbd5e1}
+#cargue-btn-guardar-plantilla{background:#7c3aed;color:#fff;margin-top:5px}
+#cargue-btn-seleccionar-visible{background:#0369a1;color:#fff}
+
+.modo-dibujo{display:flex;gap:5px}
+.modo-btn{flex:1;padding:6px;border-radius:6px;border:1.5px solid #334155;background:transparent;color:#94a3b8;font-size:.66rem;font-weight:700;cursor:pointer;font-family:inherit}
+.modo-btn.activo{background:#1d4ed8;border-color:#3b82f6;color:#fff}
+
+.seccion-colapsable summary{cursor:pointer;font-size:.66rem;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px;list-style:none;padding:2px 0}
+.seccion-colapsable summary::-webkit-details-marker{display:none}
+.seccion-colapsable summary::marker{content:''}
+.seccion-colapsable summary::before{content:'▸ ';}
+.seccion-colapsable[open] summary::before{content:'▾ ';}
+.seccion-colapsable{display:flex;flex-direction:column;gap:5px}
+
+#cargue-lista-clientes{max-height:260px;overflow-y:auto}
+.grupo-vendedor{background:none!important;padding:0!important}
+.grupo-vendedor summary{cursor:pointer;font-weight:700;color:#93c5fd;padding:4px 6px;background:#1e293b;border-radius:6px;list-style:none;font-size:.72rem}
+.grupo-vendedor summary::-webkit-details-marker{display:none}
+.grupo-vendedor summary::marker{content:''}
+.grupo-vendedor ul{margin-top:3px;padding-left:8px;display:flex;flex-direction:column;gap:3px}
+.grupo-vendedor ul li{background:none;padding:0}
+.contador-grupo{color:#64748b;font-weight:400}
+.chk-cliente{display:flex;align-items:center;gap:6px;cursor:pointer}
+.chk-cliente input{flex-shrink:0}
+
+#cargue-modal-resumen{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;align-items:center;justify-content:center}
+#cargue-modal-resumen .caja{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:840px;width:92%;max-height:82vh;overflow:auto}
+#cargue-btn-cerrar-resumen{background:#334155;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:.72rem;font-weight:700}
+
+@media (max-width:760px){
+  .main{flex-direction:column}
+  aside{width:100%;max-height:38vh;border-left:none;border-top:1px solid #1e293b}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>📍 MAPA DE CARGUE</h1>
+  <div class="topbar-right">
+    <button class="badge" id="cargue-btn-actualizar" title="Volver a consultar el Sheet">🔄 Actualizar</button>
+    <button class="badge" id="cargue-btn-resumen-vendedores" title="Ver reporte de pedidos por vendedor">📊 Ver resumen</button>
+    <a class="badge" href="resumen.html" title="Volver al resumen">📈 Resumen rutas</a>
+    <a class="badge" href="mapa_live_F150.html" title="Volver al mapa de entrega">🗺️ Mapa de entrega</a>
+    <div class="badge" onclick="logout()" title="Cerrar sesión">👤 <span id="user-name">—</span> · <span id="user-rol">—</span> ⏻</div>
+  </div>
+</div>
+
+<div class="toolbar">
+  <div class="toolbar-grupo">
+    <div class="fecha-inline"><span>Desde</span><input type="date" id="cargue-fecha-desde"></div>
+    <div class="fecha-inline"><span>Hasta</span><input type="date" id="cargue-fecha-hasta"></div>
+  </div>
+  <div class="toolbar-sep"></div>
+  <div class="toolbar-grupo">
+    <div class="cargue-dropdown" id="cargue-dropdown-linea">
+      <button type="button" class="cargue-dropdown-btn" id="cargue-dropdown-linea-btn">Elegí una línea ▾</button>
+      <div class="cargue-dropdown-panel" id="cargue-dropdown-linea-panel"></div>
+    </div>
+  </div>
+  <div class="toolbar-sep"></div>
+  <div class="toolbar-grupo">
+    <label>Vendedores <span id="cargue-vendedor-contador" style="text-transform:none;font-weight:400"></span></label>
+    <div class="chips" id="cargue-chips-vendedor"></div>
+  </div>
+  <div class="toolbar-sep"></div>
+  <span id="cargue-stat-vivo">🧾 0 facturas · $0.00</span>
+</div>
+
+<div class="main">
+  <div id="cargue-map"></div>
+  <div id="cargue-modo-aviso">👁️ Sin pedidos de HOY en la selección — solo lectura, no se puede editar</div>
+  <div id="cargue-vacio-mapa" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:500;background:rgba(15,23,42,.93);border:1px solid #334155;border-radius:12px;padding:18px 26px;text-align:center;font-size:.8rem;color:#94a3b8;max-width:280px;pointer-events:none">📍 Elegí una línea arriba para ver los pedidos puntillados</div>
+  <div class="legend">
+    <h4>VEND</h4>
+    <div id="cargue-legend-items"></div>
+  </div>
+
+  <aside>
+    <input type="text" id="cargue-lista-buscar" placeholder="🔍 Buscar cliente, código...">
+
+    <div>
+      <h3>Clientes <span id="cargue-lista-count">0</span></h3>
+      <ul id="cargue-lista-clientes"><li class="vacio">No hay pedidos con estos filtros.</li></ul>
+    </div>
+
+    <div id="cargue-panel-guardar">
+      <div class="sel-resumen"><span id="cargue-sel-count">0</span>&nbsp;facturas &middot; <span id="cargue-sel-total">$0.00</span></div>
+
+      <div class="modo-dibujo" style="margin-top:8px">
+        <button type="button" id="cargue-modo-sumar" class="modo-btn activo" title="El próximo polígono SUMA a la selección">➕ Sumar</button>
+        <button type="button" id="cargue-modo-restar" class="modo-btn" title="El próximo polígono QUITA de la selección">➖ Restar</button>
+      </div>
+      <button class="accion" id="cargue-btn-seleccionar-visible" style="margin-top:5px">🔲 Seleccionar todo lo visible</button>
+
+      <ul id="cargue-sel-lista" style="margin-top:8px"><li class="vacio">Dibuja un polígono o marca clientes de la lista de arriba.</li></ul>
+
+      <details class="seccion-colapsable" style="margin-top:8px">
+        <summary>Plantillas de geocerca</summary>
+        <select id="cargue-sel-plantilla"><option value="">— Cargar plantilla —</option></select>
+        <button class="accion" id="cargue-btn-guardar-plantilla">⭐ Guardar como plantilla</button>
+      </details>
+
+      <select id="cargue-sel-camion" style="width:100%;margin-top:8px"></select>
+      <button class="accion" id="cargue-btn-guardar" style="margin-top:5px">💾 Guardar cargue</button>
+      <button class="accion" id="cargue-btn-limpiar" style="margin-top:5px">✖️ Limpiar selección</button>
+    </div>
+
+    <details class="seccion-colapsable">
+      <summary>Camiones armados hoy</summary>
+      <ul id="cargue-armados"><li class="vacio">Ningún camión armado todavía.</li></ul>
+    </details>
+  </aside>
+</div>
+
+<div id="cargue-modal-resumen">
+  <div class="caja">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h3 style="font-size:.85rem;color:#f1f5f9;text-transform:none">📊 Pedidos x Vendedor</h3>
+      <button id="cargue-btn-cerrar-resumen">✕ Cerrar</button>
+    </div>
+    <div id="cargue-resumen-tabla"></div>
+  </div>
+</div>
+
+<script>
+// ── SESIÓN — solo admin/bodega/coordinador (mismo criterio que resumen.html
+// para "ver todo", pero SIN cartera: esta herramienta arma cargues, cartera
+// no participa de esa decisión) ──────────────────────────────
+const API_URL="https://script.google.com/macros/s/AKfycbwzQRnCJHFXni_9Qvs9kh_6BoikPDtb2sAMNChS3gSk9gAn5e31z5PFvKRGRzeoFqK5og/exec";
+function getSesion(){ try{ return JSON.parse(localStorage.getItem('sesionActiva')||'null'); }catch(e){ return null; } }
+function getToken(){ const s=getSesion(); return (s&&s.token)||''; }
+let _redirigiendoLogin=false;
+function sesionExpirada(){
+  if(_redirigiendoLogin) return;
+  _redirigiendoLogin=true;
+  try{ localStorage.removeItem('sesionActiva'); }catch(e){}
+  alert('Tu sesión expiró o no es válida. Ingresa de nuevo.');
+  window.location.href='login.html';
+}
+function logout(){ if(!confirm('¿Cerrar sesión?'))return; localStorage.removeItem('sesionActiva'); window.location.href='login.html'; }
+
+const ROLES_CARGUE=['admin','bodega','coordinador'];
+const sesion=getSesion();
+if(!sesion || !sesion.rol){ window.location.href='login.html'; }
+else if(!ROLES_CARGUE.includes(sesion.rol)){ window.location.href='mapa_live_F150.html'; }
+
+document.addEventListener('DOMContentLoaded', async ()=>{
+  document.getElementById('user-name').textContent = sesion ? sesion.usuario : '—';
+  document.getElementById('user-rol').textContent = sesion ? sesion.rol.toUpperCase() : '—';
+
+  initCargueMap('cargue-map');
+  initCargueGeocercas();
+  initCargueListaBusqueda();
+  initCargueResumen();
+  await initCarguePanelAsignacion();
+  await initCarguePlantillas();
+  await initCargueHistorial(); // carga fechas + vendedores + pedidos de hoy
+
+  document.getElementById('cargue-btn-actualizar').addEventListener('click', actualizarCargueClientesConFeedback);
+});
+</script>
+<script src="cargue-utils.js"></script>
+<script src="cargue-api.js"></script>
+<script src="cargue-render.js"></script>
+<script src="cargue-geocercas.js"></script>
+<script src="cargue-panel-asignacion.js"></script>
+<script src="cargue-lista-clientes.js"></script>
+<script src="cargue-plantillas.js"></script>
+<script src="cargue-resumen.js"></script>
+<script src="cargue-historial.js"></script>
+</body>
+</html>
