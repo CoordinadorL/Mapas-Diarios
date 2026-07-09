@@ -12,6 +12,15 @@
 // usuario se arrepiente, "✖️ Cancelar" en el banner sale del modo sin tocar
 // nada -- el cargue original queda intacto todo el tiempo hasta ese momento.
 //
+// GRUPOS (🆕 Nuevo cargue, ver cargue-geocercas.js): con 1 solo grupo activo
+// (caso normal) el panel se ve exactamente igual que siempre -- un total, un
+// selector de camión, un botón Guardar. Al congelar un grupo con "Nuevo
+// cargue" aparecen tantas cabeceras "Cargue N" como grupos haya en la
+// selección, cada una con su propio subtotal; los grupos YA congelados
+// llevan su propio selector de camión + botón Guardar inline (ver
+// guardarGrupoCargue), y el selector/botón de arriba del panel siguen
+// gobernando solo el grupo activo (el que se sigue dibujando).
+//
 // Se engancha a cargue-geocercas.js vía onCargueSeleccionCambio() (llamada
 // directa por scope global, mismo patrón que el resto del proyecto). Pide
 // la fecha activa a obtenerCargueFechaActiva(), definida en cargue.html.
@@ -34,6 +43,8 @@ async function initCarguePanelAsignacion(){
   if (btnLimpiar) btnLimpiar.addEventListener('click', limpiarCargueGeocerca);
   const btnCancelarEdicion = document.getElementById('cargue-btn-cancelar-edicion');
   if (btnCancelarEdicion) btnCancelarEdicion.addEventListener('click', cancelarModoEdicion);
+  const btnNuevoCargue = document.getElementById('cargue-btn-nuevo-cargue');
+  if (btnNuevoCargue) btnNuevoCargue.addEventListener('click', () => { if (typeof nuevoGrupoCargue === 'function') nuevoGrupoCargue(); });
 }
 
 // Llamado por cargue-geocercas.js cada vez que cambia la selección dibujada.
@@ -51,7 +62,13 @@ function onCargueSeleccionCambio(seleccion){
   }
 
   const total = seleccion.items.reduce((s, it) => s + it.data.ventasTotal, 0);
-  lista.innerHTML = seleccion.items.map(it => `
+  if (totalEl) totalEl.textContent = '$' + total.toFixed(2);
+  if (contEl) contEl.textContent = String(seleccion.items.length);
+
+  const grupoIds = [...new Set(seleccion.items.map(it => it._cargueGrupo || 1))].sort((a, b) => a - b);
+  const hayVarios = grupoIds.length > 1;
+
+  const filasDeCliente = (items) => items.map(it => `
     <li>
       <label class="chk-cliente">
         <input type="checkbox" checked data-pedido="${it.data.pedido}">
@@ -59,20 +76,55 @@ function onCargueSeleccionCambio(seleccion){
       </label>
     </li>`
   ).join('');
+
+  if (!hayVarios) {
+    // Caso normal (un solo cargue en construcción): lista plana, igual que
+    // siempre -- sin cabeceras de grupo que no aportarían nada.
+    lista.innerHTML = filasDeCliente(seleccion.items);
+  } else {
+    lista.innerHTML = grupoIds.map(gid => {
+      const items = seleccion.items.filter(it => (it._cargueGrupo || 1) === gid);
+      const subtotal = items.reduce((s, it) => s + it.data.ventasTotal, 0);
+      const esActivo = gid === cargueGrupoActivo;
+      const encabezado = `
+        <li class="grupo-cargue-header">
+          <div class="grupo-cargue-info">📦 <b>Cargue ${gid}</b>${esActivo ? ' (dibujando)' : ''} — ${items.length} facturas — $${subtotal.toFixed(2)}</div>
+          ${esActivo ? '' : `
+            <div class="grupo-cargue-guardar">
+              <select class="grupo-camion">
+                <option value="">— Camión —</option>
+                ${CARGUE_CAMIONES.map(c => `<option value="${c.codigo}">${c.camion}</option>`).join('')}
+              </select>
+              <button type="button" class="grupo-btn-guardar" data-grupo="${gid}">💾 Guardar</button>
+            </div>`}
+        </li>`;
+      return encabezado + filasDeCliente(items);
+    }).join('');
+  }
+
   // Todos arrancan tildados (están en la selección por definición) --
   // destildar acá los saca, mismo mecanismo que la lista de Clientes.
   lista.querySelectorAll('input[data-pedido]').forEach(chk => {
     chk.addEventListener('change', () => alternarClienteEnSeleccion(chk.dataset.pedido));
   });
-  if (totalEl) totalEl.textContent = '$' + total.toFixed(2);
-  if (contEl) contEl.textContent = String(seleccion.items.length);
+  lista.querySelectorAll('.grupo-btn-guardar').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const selectEl = btn.parentElement.querySelector('.grupo-camion');
+      guardarGrupoCargue(Number(btn.dataset.grupo), selectEl);
+    });
+  });
 }
 
+// Guarda SOLO el grupo activo (el que se sigue dibujando arriba, ver
+// cargue-geocercas.js) -- si había otro(s) grupo(s) ya congelados con "🆕
+// Nuevo cargue" quedan intactos en la lista, esperando su propio camión
+// (cada uno se guarda aparte con guardarGrupoCargue).
 async function guardarSeleccionActual(){
   const fecha = (typeof obtenerCargueFechaActiva === 'function') ? obtenerCargueFechaActiva() : '';
   const sel = document.getElementById('cargue-sel-camion');
   const camion = sel ? sel.value : '';
-  const items = cargueSeleccionActual.items;
+  const grupoId = cargueGrupoActivo;
+  const items = cargueSeleccionActual.items.filter(it => (it._cargueGrupo || 1) === grupoId);
 
   if (!fecha)        { alert('No hay fecha activa.'); return; }
   if (!camion)        { alert('Selecciona un camión.'); return; }
@@ -81,8 +133,9 @@ async function guardarSeleccionActual(){
   const pedidos = items.map(it => it.data.pedido);
   const camionLabel = sel.options[sel.selectedIndex].textContent;
   const editando = cargueModoEdicion; // guardar referencia: guardarSeleccionActual limpia el modo antes de terminar
+  const geojson = (typeof cargueGrupoPoligonos !== 'undefined' ? cargueGrupoPoligonos[grupoId] : null) || cargueSeleccionActual.poligono;
 
-  guardarCargueAsignacion({ fecha, camion: camionLabel, pedidos, geojson: cargueSeleccionActual.poligono });
+  guardarCargueAsignacion({ fecha, camion: camionLabel, pedidos, geojson });
 
   if (editando) {
     const resultado = await eliminarCargueAsignacion({ fecha: editando.fecha, timestamp: editando.timestamp, camion: editando.camion });
@@ -93,13 +146,50 @@ async function guardarSeleccionActual(){
     actualizarUiModoEdicion();
   }
 
-  limpiarCargueGeocerca();
+  items.forEach(it => setMarcadorSeleccionado(it, false));
+  cargueSeleccionActual.items = cargueSeleccionActual.items.filter(it => (it._cargueGrupo || 1) !== grupoId);
+  if (!cargueSeleccionActual.items.length) {
+    if (cargueDrawnItems) cargueDrawnItems.clearLayers();
+    cargueSeleccionActual.poligono = null;
+    if (typeof _resetGruposCargue === 'function') _resetGruposCargue();
+  }
   if (sel) sel.value = '';
+  notificarCambioSeleccion();
 
   // El guardado nuevo es fire-and-forget (igual que siempre) -- esperamos un
   // toque y refrescamos SOLO los cargues guardados (no los pedidos ni la
   // selección) para traer el Timestamp real, necesario para poder editar o
   // eliminar este cargue después.
+  if (typeof refrescarSoloAsignaciones === 'function') setTimeout(refrescarSoloAsignaciones, 1500);
+}
+
+// Guarda UN grupo ya congelado (botón inline "💾 Guardar" de su cabecera en
+// la lista, ver onCargueSeleccionCambio) sin tocar los demás grupos
+// pendientes ni el que se sigue dibujando arriba.
+async function guardarGrupoCargue(grupoId, selectEl){
+  const fecha = (typeof obtenerCargueFechaActiva === 'function') ? obtenerCargueFechaActiva() : '';
+  const camion = selectEl ? selectEl.value : '';
+  const items = cargueSeleccionActual.items.filter(it => (it._cargueGrupo || 1) === grupoId);
+
+  if (!fecha)       { alert('No hay fecha activa.'); return; }
+  if (!camion)      { alert('Selecciona un camión para este cargue.'); return; }
+  if (!items.length) return;
+
+  const pedidos = items.map(it => it.data.pedido);
+  const camionLabel = selectEl.options[selectEl.selectedIndex].textContent;
+  const geojson = (typeof cargueGrupoPoligonos !== 'undefined') ? (cargueGrupoPoligonos[grupoId] || null) : null;
+
+  guardarCargueAsignacion({ fecha, camion: camionLabel, pedidos, geojson });
+
+  items.forEach(it => setMarcadorSeleccionado(it, false));
+  cargueSeleccionActual.items = cargueSeleccionActual.items.filter(it => (it._cargueGrupo || 1) !== grupoId);
+  if (!cargueSeleccionActual.items.length) {
+    if (cargueDrawnItems) cargueDrawnItems.clearLayers();
+    cargueSeleccionActual.poligono = null;
+    if (typeof _resetGruposCargue === 'function') _resetGruposCargue();
+  }
+  notificarCambioSeleccion();
+
   if (typeof refrescarSoloAsignaciones === 'function') setTimeout(refrescarSoloAsignaciones, 1500);
 }
 
@@ -143,13 +233,17 @@ function actualizarUiModoEdicion(){
   const banner = document.getElementById('cargue-banner-edicion');
   const nombreEl = document.getElementById('cargue-banner-edicion-nombre');
   const btnGuardar = document.getElementById('cargue-btn-guardar');
+  const btnNuevoCargue = document.getElementById('cargue-btn-nuevo-cargue');
   if (cargueModoEdicion) {
     if (nombreEl) nombreEl.textContent = cargueModoEdicion.camion;
     if (banner) banner.style.display = 'flex';
     if (btnGuardar) btnGuardar.textContent = '💾 Guardar cambios';
+    // Editar es siempre UN cargue -- no tiene sentido distinguir zonas acá.
+    if (btnNuevoCargue) btnNuevoCargue.style.display = 'none';
   } else {
     if (banner) banner.style.display = 'none';
     if (btnGuardar) btnGuardar.textContent = '💾 Guardar cargue';
+    if (btnNuevoCargue) btnNuevoCargue.style.display = '';
   }
 }
 

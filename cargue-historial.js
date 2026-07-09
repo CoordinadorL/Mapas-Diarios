@@ -320,13 +320,18 @@ function pedidosAsignados(){
 // usuario venía armando para OTRO camión mientras tanto.
 function repintarConservandoSeleccion(){
   const pedidosSeleccionados = cargueSeleccionActual.items.map(it => it.data.pedido);
+  // drawCarguePedidos reconstruye CARGUE_MARKERS de cero (objetos nuevos) --
+  // hay que guardar a mano a qué grupo pertenecía cada pedido (ver "🆕 Nuevo
+  // cargue" en cargue-geocercas.js) para no perder la distinción al
+  // reasignar la selección sobre los marcadores nuevos.
+  const grupoPorPedido = new Map(cargueSeleccionActual.items.map(it => [it.data.pedido, it._cargueGrupo || 1]));
   const asignados = pedidosAsignados();
   const filtrados = CARGUE_PEDIDOS_TODOS.filter(p => CARGUE_VENDEDORES_ACTIVOS.has(p.vendedor) && !asignados.has(p.pedido));
   drawCarguePedidos(filtrados);
   if (typeof renderListaClientes === 'function') renderListaClientes(filtrados);
 
   const items = CARGUE_MARKERS.filter(m => pedidosSeleccionados.includes(m.data.pedido));
-  items.forEach(item => setMarcadorSeleccionado(item, true));
+  items.forEach(item => { item._cargueGrupo = grupoPorPedido.get(item.data.pedido) || 1; setMarcadorSeleccionado(item, true); });
   cargueSeleccionActual.items = items;
   notificarCambioSeleccion();
 }

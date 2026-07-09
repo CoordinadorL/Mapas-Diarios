@@ -13,6 +13,16 @@
 //  - Cargar una plantilla guardada (cargue-plantillas.js) -- dibuja ese
 //    polígono y aplica sumar/restar igual que si lo hubieras trazado a mano.
 //
+// GRUPOS (cargueGrupoActivo): la selección puede contener más de un "cargue"
+// a la vez -- cada item queda tagueado con item._cargueGrupo (número). Por
+// default todo cae en el grupo 1 (comportamiento de siempre, sin cambios
+// visibles). "🆕 Nuevo cargue" (nuevoGrupoCargue(), llamado desde
+// cargue-panel-asignacion.js) congela el grupo activo y abre uno nuevo --
+// así se puede dibujar el polígono de la ZONA 2 sin que sus pedidos se
+// mezclen con los de la ZONA 1 en el mismo total. cargue-panel-asignacion.js
+// es quien decide qué hacer con cada grupo (mostrarlo aparte, guardarlo con
+// su propio camión).
+//
 // No arma el panel ni guarda nada -- al cambiar la selección llama a
 // onCargueSeleccionCambio(seleccion), que define cargue-panel-asignacion.js
 // (mismo patrón de "funciones que se llaman entre módulos por scope global"
@@ -22,6 +32,8 @@
 let cargueDrawnItems = null;
 let cargueSeleccionActual = { poligono: null, items: [] };
 let cargueModoResta = false;
+let cargueGrupoActivo = 1;             // a qué grupo se suman los próximos pedidos
+let cargueGrupoPoligonos = { 1: null }; // grupo -> último polígono dibujado en ese grupo (referencia visual al editar)
 
 function initCargueGeocercas(){
   cargueDrawnItems = new L.FeatureGroup();
@@ -65,9 +77,10 @@ function setCargueModoResta(activo){
 function sumarPorPoligono(layer){
   const poligono = layer.getLatLngs()[0].map(ll => [ll.lat, ll.lng]);
   const nuevos = CARGUE_MARKERS.filter(item => puntoEnPoligono(item.data.lat, item.data.lng, poligono) && !cargueSeleccionActual.items.includes(item));
-  nuevos.forEach(item => setMarcadorSeleccionado(item, true));
+  nuevos.forEach(item => { item._cargueGrupo = cargueGrupoActivo; setMarcadorSeleccionado(item, true); });
   cargueSeleccionActual.items.push(...nuevos);
   cargueSeleccionActual.poligono = poligono;
+  cargueGrupoPoligonos[cargueGrupoActivo] = poligono;
   notificarCambioSeleccion();
 }
 
@@ -88,9 +101,29 @@ function restarPorPoligono(layer){
 function seleccionarTodoVisible(){
   const bounds = cargueMap.getBounds();
   const nuevos = CARGUE_MARKERS.filter(item => bounds.contains([item.data.lat, item.data.lng]) && !cargueSeleccionActual.items.includes(item));
-  nuevos.forEach(item => setMarcadorSeleccionado(item, true));
+  nuevos.forEach(item => { item._cargueGrupo = cargueGrupoActivo; setMarcadorSeleccionado(item, true); });
   cargueSeleccionActual.items.push(...nuevos);
   notificarCambioSeleccion();
+}
+
+// "🆕 Nuevo cargue": congela el grupo activo (a partir de ahora se muestra
+// aparte, con su propio selector de camión, en la lista de seleccionados) y
+// abre uno nuevo -- lo próximo que se dibuje/marque cae ahí, sin mezclarse
+// con lo que ya había. No hace nada si el grupo activo todavía está vacío
+// (nada que congelar, evita saltar a "Cargue 2" sin necesidad).
+function nuevoGrupoCargue(){
+  const hayAlgoEnGrupoActivo = cargueSeleccionActual.items.some(it => (it._cargueGrupo || 1) === cargueGrupoActivo);
+  if (!hayAlgoEnGrupoActivo) return;
+  cargueGrupoActivo++;
+  cargueGrupoPoligonos[cargueGrupoActivo] = null;
+  notificarCambioSeleccion();
+}
+
+// Vuelve todo al estado "un solo cargue" -- se llama al limpiar la selección
+// entera o cuando se termina de guardar el último grupo pendiente.
+function _resetGruposCargue(){
+  cargueGrupoActivo = 1;
+  cargueGrupoPoligonos = { 1: null };
 }
 
 // Dibuja el polígono de una plantilla guardada (cargue-plantillas.js) y le
@@ -111,6 +144,11 @@ function cargarPlantillaComoGeocerca(geojson){
 // vean en el mapa). El polígono original se redibuja como referencia, si
 // vino guardado.
 function prepararEdicionCargue(pedidos, geojson){
+  // Editar es siempre UN solo cargue -- si había otros grupos pendientes sin
+  // guardar de una sesión de "🆕 Nuevo cargue" anterior, se pierden acá (se
+  // reemplaza toda la selección por la de este cargue puntual).
+  _resetGruposCargue();
+
   const vendedoresNecesarios = [...new Set(CARGUE_PEDIDOS_TODOS.filter(p => pedidos.includes(p.pedido)).map(p => p.vendedor))];
   vendedoresNecesarios.forEach(v => CARGUE_VENDEDORES_ACTIVOS.add(v));
   if (typeof renderVendedorChips === 'function') renderVendedorChips();
@@ -124,8 +162,9 @@ function prepararEdicionCargue(pedidos, geojson){
   if (typeof renderListaClientes === 'function') renderListaClientes(filtrados);
 
   const items = CARGUE_MARKERS.filter(m => pedidos.includes(m.data.pedido));
-  items.forEach(item => setMarcadorSeleccionado(item, true));
+  items.forEach(item => { item._cargueGrupo = 1; setMarcadorSeleccionado(item, true); });
   cargueSeleccionActual = { poligono: geojson || null, items };
+  cargueGrupoPoligonos[1] = geojson || null;
 
   if (cargueDrawnItems) {
     cargueDrawnItems.clearLayers();
@@ -145,6 +184,7 @@ function alternarClienteEnSeleccion(pedidoId){
     setMarcadorSeleccionado(item, false);
     cargueSeleccionActual.items.splice(idx, 1);
   } else {
+    item._cargueGrupo = cargueGrupoActivo;
     setMarcadorSeleccionado(item, true);
     cargueSeleccionActual.items.push(item);
   }
@@ -160,6 +200,7 @@ function seleccionarVarios(pedidoIds, marcar){
     if (!item) return;
     const idx = cargueSeleccionActual.items.indexOf(item);
     if (marcar && idx < 0) {
+      item._cargueGrupo = cargueGrupoActivo;
       setMarcadorSeleccionado(item, true);
       cargueSeleccionActual.items.push(item);
     } else if (!marcar && idx >= 0) {
@@ -183,6 +224,7 @@ function limpiarCargueGeocerca(){
   if (cargueDrawnItems) cargueDrawnItems.clearLayers();
   limpiarResaltado();
   cargueSeleccionActual = { poligono: null, items: [] };
+  _resetGruposCargue();
   notificarCambioSeleccion();
 }
 

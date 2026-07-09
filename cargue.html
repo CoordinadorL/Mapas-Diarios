@@ -74,6 +74,7 @@ aside ul li.vacio{color:#64748b;font-style:italic;background:none;padding:2px 0}
 .sel-resumen{display:flex;justify-content:space-between;font-size:.76rem;color:#fff;background:#1d4ed8;padding:6px 10px;border-radius:8px;font-weight:700}
 button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:700;font-size:.7rem;cursor:pointer}
 #cargue-btn-guardar{background:#16a34a;color:#fff}
+#cargue-btn-nuevo-cargue{background:#0891b2;color:#fff}
 #cargue-btn-limpiar{background:#334155;color:#cbd5e1}
 #cargue-btn-guardar-plantilla{background:#7c3aed;color:#fff;margin-top:5px}
 #cargue-btn-seleccionar-visible{background:#0369a1;color:#fff;flex:1.4}
@@ -103,6 +104,12 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
 .contador-grupo{color:#64748b;font-weight:400}
 .chk-cliente{display:flex;align-items:center;gap:6px;cursor:pointer}
 .chk-cliente input{flex-shrink:0}
+
+.grupo-cargue-header{background:#1e3a5f!important;border:1px solid #2563eb;display:flex;flex-direction:column;gap:5px;padding:6px 8px!important}
+.grupo-cargue-info{font-size:.72rem;color:#bfdbfe}
+.grupo-cargue-guardar{display:flex;gap:5px}
+.grupo-cargue-guardar select{flex:1;background:#0f172a;color:#fff;border:1px solid #334155;border-radius:5px;font-size:.68rem;padding:3px;min-width:0}
+.grupo-cargue-guardar .grupo-btn-guardar{background:#16a34a;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-size:.66rem;font-weight:700;cursor:pointer;flex-shrink:0}
 
 .armado-fila{display:flex;justify-content:space-between;align-items:center;gap:6px}
 .armado-acciones{display:flex;gap:2px;flex-shrink:0}
@@ -190,6 +197,7 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
 
     <select id="cargue-sel-camion" style="width:100%;margin-top:6px"></select>
     <button class="accion" id="cargue-btn-guardar" style="margin-top:5px">💾 Guardar cargue</button>
+    <button class="accion" id="cargue-btn-nuevo-cargue" style="margin-top:5px" title="Congela lo seleccionado como un cargue aparte (con su propio camión) y arranca uno nuevo, sin perder de vista lo ya armado">🆕 Nuevo cargue (otra zona)</button>
     <button class="accion" id="cargue-btn-limpiar" style="margin-top:5px">✖️ Limpiar selección</button>
 
     <ul id="cargue-sel-lista" style="margin-top:6px"><li class="vacio">Dibuja un polígono, marca clientes de la lista de abajo, o clickeá directo en el mapa.</li></ul>
