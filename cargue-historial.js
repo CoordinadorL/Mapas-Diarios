@@ -254,15 +254,17 @@ async function _actualizarCargueClientesInterno(){
   }
   renderVendedorChips();
 
+  // Se calcula ANTES de pintar: aplicarFiltrosYPintar() necesita saber qué
+  // pedidos ya están asignados a algún camión para no volver a mostrarlos.
+  cargueCamionesArmadosHoy = computarCamionesArmados(asignaciones);
+  renderCamionesArmadosHoy();
+
   aplicarFiltrosYPintar();
   dibujarAsignacionesGuardadas(asignaciones);
   activarModoEdicion(!historico);
 
   const aviso = document.getElementById('cargue-modo-aviso');
   if (aviso) aviso.style.display = historico ? 'block' : 'none';
-
-  cargueCamionesArmadosHoy = computarCamionesArmados(asignaciones);
-  renderCamionesArmadosHoy();
 }
 
 // Arma la lista "camiones armados" a partir de las asignaciones crudas del
@@ -283,9 +285,11 @@ function computarCamionesArmados(asignaciones){
 
 // Refresco liviano: solo vuelve a pedir las ASIGNACIONES (no los pedidos ni
 // los filtros de vendedor/línea), para usar después de guardar/editar/
-// eliminar un cargue SIN pisar la selección que el usuario pueda estar
-// armando en ese momento (a diferencia de actualizarCargueClientes(), que sí
-// la resetea al repintar el mapa).
+// eliminar un cargue. A diferencia de aplicarFiltrosYPintar(), NO limpia la
+// selección en progreso -- solo repinta qué pedidos siguen disponibles
+// (algunos recién se ocultaron por asignados, otros recién se liberaron por
+// un eliminar) y vuelve a armar la selección actual contra los marcadores
+// nuevos (mismos pedidos, por id).
 async function refrescarSoloAsignaciones(){
   try {
     const { desde, hasta } = obtenerRangoFechas();
@@ -293,9 +297,38 @@ async function refrescarSoloAsignaciones(){
     dibujarAsignacionesGuardadas(asignaciones);
     cargueCamionesArmadosHoy = computarCamionesArmados(asignaciones);
     renderCamionesArmadosHoy();
+    repintarConservandoSeleccion();
   } catch (e) {
     console.error('No se pudieron refrescar los cargues guardados:', e);
   }
+}
+
+// Pedidos que ya están en algún camión guardado y por eso no corresponde
+// mostrarlos como disponibles -- salvo los del cargue que se está editando
+// en este momento (cargueModoEdicion), que se deja ver igual para poder
+// ajustarlo.
+function pedidosAsignados(){
+  const excepcion = (typeof cargueModoEdicion !== 'undefined' && cargueModoEdicion) ? new Set(cargueModoEdicion.pedidos) : new Set();
+  const asignados = new Set();
+  cargueCamionesArmadosHoy.forEach(c => c.pedidos.forEach(p => { if (!excepcion.has(p)) asignados.add(p); }));
+  return asignados;
+}
+
+// Repinta el mapa/lista con el filtro actual, PERO conserva la selección en
+// progreso (a diferencia de aplicarFiltrosYPintar). Se usa después de un
+// guardar/editar/eliminar en segundo plano, para no perder lo que el
+// usuario venía armando para OTRO camión mientras tanto.
+function repintarConservandoSeleccion(){
+  const pedidosSeleccionados = cargueSeleccionActual.items.map(it => it.data.pedido);
+  const asignados = pedidosAsignados();
+  const filtrados = CARGUE_PEDIDOS_TODOS.filter(p => CARGUE_VENDEDORES_ACTIVOS.has(p.vendedor) && !asignados.has(p.pedido));
+  drawCarguePedidos(filtrados);
+  if (typeof renderListaClientes === 'function') renderListaClientes(filtrados);
+
+  const items = CARGUE_MARKERS.filter(m => pedidosSeleccionados.includes(m.data.pedido));
+  items.forEach(item => setMarcadorSeleccionado(item, true));
+  cargueSeleccionActual.items = items;
+  notificarCambioSeleccion();
 }
 
 // Wrapper del botón "🔄 Actualizar clientes" (y de los inputs Desde/Hasta):
@@ -313,10 +346,12 @@ async function actualizarCargueClientesConFeedback(){
 }
 
 // Filtra por vendedor activo (la línea ya hizo su trabajo marcando esos
-// vendedores) y repinta mapa + lista. Sin vendedores activos, no se pinta
-// nada -- a propósito, evita el default de "1500+ puntos de una".
+// vendedores) y por no estar ya asignado a un camión guardado, y repinta
+// mapa + lista. Sin vendedores activos, no se pinta nada -- a propósito,
+// evita el default de "1500+ puntos de una".
 function aplicarFiltrosYPintar(){
-  const filtrados = CARGUE_PEDIDOS_TODOS.filter(p => CARGUE_VENDEDORES_ACTIVOS.has(p.vendedor));
+  const asignados = pedidosAsignados();
+  const filtrados = CARGUE_PEDIDOS_TODOS.filter(p => CARGUE_VENDEDORES_ACTIVOS.has(p.vendedor) && !asignados.has(p.pedido));
   const aviso = document.getElementById('cargue-vacio-mapa');
   if (aviso) aviso.style.display = CARGUE_VENDEDORES_ACTIVOS.size ? 'none' : 'block';
 

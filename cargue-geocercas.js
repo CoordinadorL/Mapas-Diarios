@@ -115,7 +115,11 @@ function prepararEdicionCargue(pedidos, geojson){
   vendedoresNecesarios.forEach(v => CARGUE_VENDEDORES_ACTIVOS.add(v));
   if (typeof renderVendedorChips === 'function') renderVendedorChips();
 
-  const filtrados = CARGUE_PEDIDOS_TODOS.filter(p => CARGUE_VENDEDORES_ACTIVOS.has(p.vendedor));
+  // cargueModoEdicion ya está seteado (editarCargueArmado lo hace antes de
+  // llamar acá), así que pedidosAsignados() no oculta los pedidos de ESTE
+  // cargue -- solo los de cualquier otro.
+  const asignados = (typeof pedidosAsignados === 'function') ? pedidosAsignados() : new Set();
+  const filtrados = CARGUE_PEDIDOS_TODOS.filter(p => CARGUE_VENDEDORES_ACTIVOS.has(p.vendedor) && !asignados.has(p.pedido));
   drawCarguePedidos(filtrados);
   if (typeof renderListaClientes === 'function') renderListaClientes(filtrados);
 

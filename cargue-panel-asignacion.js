@@ -127,10 +127,14 @@ function editarCargueArmado(c){
 function cancelarModoEdicion(){
   if (!cargueModoEdicion) return;
   cargueModoEdicion = null;
-  limpiarCargueGeocerca();
   const sel = document.getElementById('cargue-sel-camion');
   if (sel) sel.value = '';
   actualizarUiModoEdicion();
+  // Sin la excepción de modo edición, los pedidos de este cargue vuelven a
+  // estar "asignados" -- hay que repintar para que se oculten de nuevo (si
+  // solo se llamara a limpiarCargueGeocerca(), quedarían visibles igual).
+  if (typeof aplicarFiltrosYPintar === 'function') aplicarFiltrosYPintar();
+  else limpiarCargueGeocerca();
 }
 
 // Banner sobre el mapa + texto del botón Guardar, para que sea imposible no
