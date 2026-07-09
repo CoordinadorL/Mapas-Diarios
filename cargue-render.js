@@ -51,8 +51,11 @@ function makeCargueIcon(color, seleccionado){
   });
 }
 
+// Se muestra en un tooltip al PASAR el mouse (no en un popup al hacer
+// clic) -- el clic quedó reservado 100% para seleccionar/deseleccionar, sin
+// que una ventanita tape el mapa de por medio.
 function buildCarguePopup(d){
-  return `<div style="font-family:system-ui;font-size:12.5px;line-height:1.5;min-width:200px">
+  return `<div style="font-family:system-ui;font-size:12.5px;line-height:1.5;min-width:180px">
     <b>${d.cliente || '(sin nombre)'}</b><br>
     <span style="color:#94a3b8">Pedido:</span> ${d.pedido}<br>
     <span style="color:#94a3b8">Vendedor:</span> ${d.vendedor}${d.linea ? ' ('+d.linea+')' : ''}<br>
@@ -77,10 +80,9 @@ function drawCarguePedidos(rows){
   rows.forEach(d => {
     const color = cargueColorMap[d.vendedor] || '#888';
     const marker = L.marker([d.lat, d.lng], { icon: makeCargueIcon(color, false) })
-      .bindPopup(buildCarguePopup(d), { maxWidth: 300, minWidth: 220 });
-    // Clic en el punto también lo selecciona/deselecciona (además de abrir
-    // el popup con el detalle) -- otra forma de armar la selección, sin
-    // tener que dibujar ni buscar en la lista.
+      .bindTooltip(buildCarguePopup(d), { className: 'cargue-tooltip', direction: 'top', opacity: 0.97 });
+    // Clic en el punto lo selecciona/deselecciona directo -- el detalle se
+    // ve al pasar el mouse (tooltip), no hace falta clickear para verlo.
     marker.on('click', () => { if (typeof alternarClienteEnSeleccion === 'function') alternarClienteEnSeleccion(d.pedido); });
     cargueMarkersLayer.addLayer(marker);
     CARGUE_MARKERS.push({ data: d, marker, color });
