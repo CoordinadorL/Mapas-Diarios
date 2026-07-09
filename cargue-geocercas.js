@@ -130,8 +130,9 @@ function prepararEdicionCargue(pedidos, geojson){
   notificarCambioSeleccion();
 }
 
-// Marca/desmarca UN pedido (checkbox de cargue-lista-clientes.js). Suma o
-// quita sobre la selección actual, no la reemplaza.
+// Marca/desmarca UN pedido (checkbox de cargue-lista-clientes.js o clic en
+// el marcador del mapa, ver cargue-render.js). Suma o quita sobre la
+// selección actual, no la reemplaza.
 function alternarClienteEnSeleccion(pedidoId){
   const item = CARGUE_MARKERS.find(it => it.data.pedido === pedidoId);
   if (!item) return;
@@ -143,6 +144,25 @@ function alternarClienteEnSeleccion(pedidoId){
     setMarcadorSeleccionado(item, true);
     cargueSeleccionActual.items.push(item);
   }
+  notificarCambioSeleccion();
+}
+
+// Marca/desmarca VARIOS pedidos de una (checkbox "seleccionar todos" de un
+// vendedor, cargue-lista-clientes.js) -- una sola notificación al final en
+// vez de una por pedido.
+function seleccionarVarios(pedidoIds, marcar){
+  pedidoIds.forEach(pedidoId => {
+    const item = CARGUE_MARKERS.find(it => it.data.pedido === pedidoId);
+    if (!item) return;
+    const idx = cargueSeleccionActual.items.indexOf(item);
+    if (marcar && idx < 0) {
+      setMarcadorSeleccionado(item, true);
+      cargueSeleccionActual.items.push(item);
+    } else if (!marcar && idx >= 0) {
+      setMarcadorSeleccionado(item, false);
+      cargueSeleccionActual.items.splice(idx, 1);
+    }
+  });
   notificarCambioSeleccion();
 }
 

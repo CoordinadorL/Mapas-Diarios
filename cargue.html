@@ -91,7 +91,8 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
 #cargue-sel-lista{max-height:110px;overflow-y:auto}
 #cargue-armados{max-height:118px;overflow-y:auto}
 .grupo-vendedor{background:none!important;padding:0!important}
-.grupo-vendedor summary{cursor:pointer;font-weight:700;color:#93c5fd;padding:4px 6px;background:#1e293b;border-radius:6px;list-style:none;font-size:.72rem}
+.grupo-vendedor summary{cursor:pointer;font-weight:700;color:#93c5fd;padding:4px 6px;background:#1e293b;border-radius:6px;list-style:none;font-size:.72rem;display:flex;align-items:center;gap:6px}
+.chk-vendedor-todos{flex-shrink:0;cursor:pointer}
 .grupo-vendedor summary::-webkit-details-marker{display:none}
 .grupo-vendedor summary::marker{content:''}
 .grupo-vendedor ul{margin-top:3px;padding-left:8px;display:flex;flex-direction:column;gap:3px}
@@ -175,13 +176,6 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
     <ul id="cargue-armados"><li class="vacio">Ningún camión armado todavía.</li></ul>
   </div>
 
-  <input type="text" id="cargue-lista-buscar" class="aside-fija" placeholder="🔍 Buscar cliente, código...">
-
-  <div class="aside-crece">
-    <h3>Clientes <span id="cargue-lista-count">0</span></h3>
-    <ul id="cargue-lista-clientes"><li class="vacio">No hay pedidos con estos filtros.</li></ul>
-  </div>
-
   <div id="cargue-panel-guardar" class="aside-fija">
     <div class="sel-resumen"><span id="cargue-sel-count">0</span>&nbsp;facturas &middot; <span id="cargue-sel-total">$0.00</span></div>
 
@@ -191,17 +185,24 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
       <button type="button" id="cargue-btn-seleccionar-visible" class="modo-btn" title="Seleccionar todo lo visible en el mapa">🔲 Visible</button>
     </div>
 
-    <ul id="cargue-sel-lista" style="margin-top:6px"><li class="vacio">Dibuja un polígono o marca clientes de la lista de arriba.</li></ul>
+    <select id="cargue-sel-camion" style="width:100%;margin-top:6px"></select>
+    <button class="accion" id="cargue-btn-guardar" style="margin-top:5px">💾 Guardar cargue</button>
+    <button class="accion" id="cargue-btn-limpiar" style="margin-top:5px">✖️ Limpiar selección</button>
+
+    <ul id="cargue-sel-lista" style="margin-top:6px"><li class="vacio">Dibuja un polígono, marca clientes de la lista de abajo, o clickeá directo en el mapa.</li></ul>
 
     <details class="seccion-colapsable" style="margin-top:6px">
       <summary>Plantillas de geocerca</summary>
       <select id="cargue-sel-plantilla"><option value="">— Cargar plantilla —</option></select>
       <button class="accion" id="cargue-btn-guardar-plantilla">⭐ Guardar como plantilla</button>
     </details>
+  </div>
 
-    <select id="cargue-sel-camion" style="width:100%;margin-top:6px"></select>
-    <button class="accion" id="cargue-btn-guardar" style="margin-top:5px">💾 Guardar cargue</button>
-    <button class="accion" id="cargue-btn-limpiar" style="margin-top:5px">✖️ Limpiar selección</button>
+  <input type="text" id="cargue-lista-buscar" class="aside-fija" placeholder="🔍 Buscar cliente, código...">
+
+  <div class="aside-crece">
+    <h3>Clientes <span id="cargue-lista-count">0</span></h3>
+    <ul id="cargue-lista-clientes"><li class="vacio">No hay pedidos con estos filtros.</li></ul>
   </div>
 </aside>
 

@@ -35,13 +35,17 @@ function buildCargueColorMap(rows){
   });
 }
 
+// Seleccionado se ve MUY distinto del resto a propósito (más grande, borde
+// grueso, glow amarillo) -- tiene que notarse de un vistazo entre decenas de
+// puntos de colores parecidos, no alcanza con solo cambiar el borde.
 function makeCargueIcon(color, seleccionado){
   const borde = seleccionado ? '#fbbf24' : '#0f172a';
-  const ancho = seleccionado ? 3 : 1.5;
-  const tam = seleccionado ? 20 : 16;
+  const ancho = seleccionado ? 4 : 1.5;
+  const tam = seleccionado ? 26 : 16;
+  const sombra = seleccionado ? '0 0 0 4px rgba(251,191,36,.5), 0 2px 8px rgba(0,0,0,.6)' : '0 1px 4px rgba(0,0,0,.5)';
   return L.divIcon({
     className: '',
-    html: `<div style="width:${tam}px;height:${tam}px;border-radius:50%;background:${color};border:${ancho}px solid ${borde};box-shadow:0 1px 4px rgba(0,0,0,.5)"></div>`,
+    html: `<div style="width:${tam}px;height:${tam}px;border-radius:50%;background:${color};border:${ancho}px solid ${borde};box-shadow:${sombra}"></div>`,
     iconSize: [tam, tam],
     iconAnchor: [tam/2, tam/2],
   });
@@ -74,6 +78,10 @@ function drawCarguePedidos(rows){
     const color = cargueColorMap[d.vendedor] || '#888';
     const marker = L.marker([d.lat, d.lng], { icon: makeCargueIcon(color, false) })
       .bindPopup(buildCarguePopup(d), { maxWidth: 300, minWidth: 220 });
+    // Clic en el punto también lo selecciona/deselecciona (además de abrir
+    // el popup con el detalle) -- otra forma de armar la selección, sin
+    // tener que dibujar ni buscar en la lista.
+    marker.on('click', () => { if (typeof alternarClienteEnSeleccion === 'function') alternarClienteEnSeleccion(d.pedido); });
     cargueMarkersLayer.addLayer(marker);
     CARGUE_MARKERS.push({ data: d, marker, color });
   });
@@ -85,9 +93,12 @@ function drawCarguePedidos(rows){
 }
 
 // Resalta/quita resalte de un marcador (lo usa cargue-geocercas.js al
-// seleccionar/deseleccionar puntos dentro del polígono dibujado).
+// seleccionar/deseleccionar puntos, por geocerca, checkbox o clic directo).
+// zIndexOffset para que un punto seleccionado siempre se vea por encima de
+// los que tiene cerca, aunque se solapen.
 function setMarcadorSeleccionado(item, seleccionado){
   item.marker.setIcon(makeCargueIcon(item.color, seleccionado));
+  item.marker.setZIndexOffset(seleccionado ? 1000 : 0);
 }
 
 function buildCargueLegend(rows){

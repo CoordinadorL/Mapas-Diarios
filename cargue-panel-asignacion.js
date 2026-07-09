@@ -51,9 +51,19 @@ function onCargueSeleccionCambio(seleccion){
   }
 
   const total = seleccion.items.reduce((s, it) => s + it.data.ventasTotal, 0);
-  lista.innerHTML = seleccion.items.map(it =>
-    `<li><b>${it.data.cliente}</b> — ${it.data.vendedor} — $${it.data.ventasTotal.toFixed(2)}</li>`
+  lista.innerHTML = seleccion.items.map(it => `
+    <li>
+      <label class="chk-cliente">
+        <input type="checkbox" checked data-pedido="${it.data.pedido}">
+        <span><b>${it.data.cliente}</b> — ${it.data.vendedor} — $${it.data.ventasTotal.toFixed(2)}</span>
+      </label>
+    </li>`
   ).join('');
+  // Todos arrancan tildados (están en la selección por definición) --
+  // destildar acá los saca, mismo mecanismo que la lista de Clientes.
+  lista.querySelectorAll('input[data-pedido]').forEach(chk => {
+    chk.addEventListener('change', () => alternarClienteEnSeleccion(chk.dataset.pedido));
+  });
   if (totalEl) totalEl.textContent = '$' + total.toFixed(2);
   if (contEl) contEl.textContent = String(seleccion.items.length);
 }

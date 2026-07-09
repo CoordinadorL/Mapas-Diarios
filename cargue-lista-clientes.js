@@ -2,9 +2,10 @@
 // CARGUE-LISTA-CLIENTES.JS — lista con checkbox de TODOS los pedidos que
 // pasan el filtro actual (fecha+vendedor+línea), agrupada por código de
 // vendedor (colapsable, <details>/<summary> nativo) con buscador en vivo --
-// alternativa a dibujar una geocerca: marcar/desmarcar aquí llama a
-// alternarClienteEnSeleccion() de cargue-geocercas.js, que es quien de
-// verdad guarda la selección.
+// alternativa a dibujar una geocerca o clickear en el mapa: marcar/desmarcar
+// un cliente llama a alternarClienteEnSeleccion(); el checkbox del grupo
+// ("seleccionar todos de este vendedor") llama a seleccionarVarios() -- ambas
+// en cargue-geocercas.js, que es quien de verdad guarda la selección.
 // Se vuelve a pintar cada vez que cambia el filtro (cargue-historial.js) o
 // la selección (cargue-geocercas.js, para reflejar clics hechos en el mapa
 // o en la geocerca).
@@ -44,10 +45,14 @@ function renderizarListaConBusqueda(){
 
   cont.innerHTML = vendedores.map(v => {
     const totalVendedor = porVendedor[v].reduce((s, p) => s + p.ventasTotal, 0);
+    const todosMarcados = porVendedor[v].every(p => estaSeleccionado(p.pedido));
     return `
     <li class="grupo-vendedor">
       <details ${filtro || vendedores.length <= 3 ? 'open' : ''}>
-        <summary>${v} <span class="contador-grupo">(${porVendedor[v].length}) — $${totalVendedor.toFixed(2)}</span></summary>
+        <summary>
+          <input type="checkbox" class="chk-vendedor-todos" data-vendedor="${v}" ${todosMarcados ? 'checked' : ''} title="Seleccionar todos los clientes de ${v}">
+          ${v} <span class="contador-grupo">(${porVendedor[v].length}) — $${totalVendedor.toFixed(2)}</span>
+        </summary>
         <ul>
           ${porVendedor[v].map(p => `
             <li>
@@ -61,17 +66,30 @@ function renderizarListaConBusqueda(){
     </li>
   `;
   }).join('');
-  cont.querySelectorAll('input[type=checkbox]').forEach(chk => {
+
+  cont.querySelectorAll('.chk-cliente input[data-pedido]').forEach(chk => {
     chk.addEventListener('change', () => alternarClienteEnSeleccion(chk.dataset.pedido));
+  });
+  cont.querySelectorAll('.chk-vendedor-todos').forEach(chk => {
+    chk.addEventListener('click', (e) => e.stopPropagation()); // no abrir/cerrar el <details>
+    chk.addEventListener('change', () => {
+      const pedidos = cargueListaPedidosActual.filter(p => p.vendedor === chk.dataset.vendedor).map(p => p.pedido);
+      seleccionarVarios(pedidos, chk.checked);
+    });
   });
 }
 
 // Solo actualiza el estado "checked" (lo llama cargue-geocercas.js tras un
-// cambio de selección por geocerca, sin tener que recalcular ni repintar todo).
+// cambio de selección por geocerca/clic en el mapa, sin recalcular ni
+// repintar todo).
 function actualizarChecksListaClientes(){
   const cont = document.getElementById('cargue-lista-clientes');
   if (!cont) return;
-  cont.querySelectorAll('input[type=checkbox]').forEach(chk => {
+  cont.querySelectorAll('.chk-cliente input[data-pedido]').forEach(chk => {
     chk.checked = estaSeleccionado(chk.dataset.pedido);
+  });
+  cont.querySelectorAll('.chk-vendedor-todos').forEach(chk => {
+    const pedidosDelVendedor = cargueListaPedidosActual.filter(p => p.vendedor === chk.dataset.vendedor);
+    chk.checked = pedidosDelVendedor.length > 0 && pedidosDelVendedor.every(p => estaSeleccionado(p.pedido));
   });
 }
