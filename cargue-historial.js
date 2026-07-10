@@ -126,6 +126,13 @@ function renderVendedorChips(){
   const contador = document.getElementById('cargue-vendedor-contador');
   if (!cont) return;
   const visibles = vendedoresVisibles();
+  // La leyenda VEND refleja el catálogo COMPLETO de la línea elegida (no
+  // solo los pedidos dibujados ahora), con su color ya fijo -- así no
+  // cambia al tildar/destildar vendedores de la lista de abajo. Se llama
+  // acá porque renderVendedorChips() se re-ejecuta justo cuando cambia el
+  // universo de vendedores (línea nueva, refresco de datos), pero NO en
+  // cada clic individual de un chip.
+  if (typeof buildCargueLegend === 'function') buildCargueLegend(visibles);
   if (!visibles.length) {
     cont.className = 'chips vacio-hint';
     cont.textContent = CARGUE_LINEAS_ACTIVAS.size ? 'Sin vendedores para esa línea.' : 'Elegí una línea para ver sus vendedores.';

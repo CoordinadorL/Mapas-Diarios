@@ -8,13 +8,23 @@
 // La selección por geocerca (resaltar/desresaltar un marcador) la maneja
 // cargue-geocercas.js llamando a setMarcadorSeleccionado() de este módulo,
 // no duplica el dibujo.
+//
+// COLOR POR VENDEDOR (colorParaVendedorCargue): es un color FIJO, calculado
+// a partir del propio código del vendedor -- no de su posición dentro de la
+// lista de pedidos dibujados en este momento. Antes se armaba con
+// buildCargueColorMap(rows) por índice ordenado alfabéticamente de lo
+// VISIBLE ahora mismo, así que al tildar/destildar un vendedor todos los
+// colores se corrían (y con más de 10 vendedores, la paleta se repetía por
+// el módulo). Ver la función más abajo para el detalle del algoritmo.
 // ═══════════════════════════════════════════════════════════
 
+// CARGUE_PALETTE queda para lo que ya la usaba antes (colorear los polígonos
+// de cargues guardados en cargue-historial.js, por índice de cargue -- no
+// tiene relación con el color de un vendedor).
 const CARGUE_PALETTE = ['#4ade80','#60a5fa','#c084fc','#34d399','#f472b6','#a78bfa','#38bdf8','#2dd4bf','#818cf8','#fb923c'];
 
 let cargueMap = null;
 let cargueMarkersLayer = null;
-let cargueColorMap = {};
 let CARGUE_DATA = [];        // pedidos del día actualmente pintados
 let CARGUE_MARKERS = [];     // [{data, marker}] -- para que geocercas.js sepa qué hay bajo cada punto
 
@@ -28,11 +38,32 @@ function initCargueMap(elementId){
   return cargueMap;
 }
 
-function buildCargueColorMap(rows){
-  cargueColorMap = {};
-  [...new Set(rows.map(r => r.vendedor))].sort().forEach((v, i) => {
-    cargueColorMap[v] = CARGUE_PALETTE[i % CARGUE_PALETTE.length];
-  });
+// Hash simple (djb2) del código de vendedor -> número estable. Determinista
+// por el texto del código en sí, nunca por su posición en ninguna lista --
+// así "F250" siempre hashea al mismo número sin importar qué otros
+// vendedores estén activos, en qué orden se cargó el catálogo, o cuántos
+// haya en total.
+function _hashCodigoVendedorCargue(v){
+  let h = 5381;
+  const s = String(v || '');
+  for (let i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+// Color HSL fijo por vendedor. Ángulo dorado (137.508°) para repartir el
+// tono (hue) lo más lejos posible entre códigos consecutivos del hash -- es
+// la misma técnica que se usa para generar N colores bien distinguibles sin
+// límite de cuántos vendedores haya. Además alterna banda VIVA (bien
+// saturada, más oscura) y PASTEL (clara, suave) según la paridad del hash:
+// así dos vendedores con un tono parecido (dos azules, por ejemplo) también
+// caen en un brillo distinto y no se confunden a simple vista.
+function colorParaVendedorCargue(v){
+  const h = _hashCodigoVendedorCargue(v);
+  const hue = (h * 137.508) % 360;
+  const esVivo = h % 2 === 0;
+  const sat = esVivo ? 78 : 60;
+  const lum = esVivo ? 48 : 74;
+  return `hsl(${hue.toFixed(1)}, ${sat}%, ${lum}%)`;
 }
 
 // Seleccionado se ve MUY distinto del resto a propósito (más grande, borde
@@ -73,12 +104,13 @@ function drawCarguePedidos(rows){
   if (cargueMarkersLayer) cargueMap.removeLayer(cargueMarkersLayer);
   CARGUE_DATA = rows;
   CARGUE_MARKERS = [];
-  buildCargueColorMap(rows);
-  buildCargueLegend(rows);
+  // La leyenda YA NO se arma acá -- ahora refleja el catálogo completo de la
+  // línea activa (vendedoresVisibles(), ver renderVendedorChips() en
+  // cargue-historial.js), no solo los pedidos dibujados en este momento.
 
   cargueMarkersLayer = L.layerGroup();
   rows.forEach(d => {
-    const color = cargueColorMap[d.vendedor] || '#888';
+    const color = colorParaVendedorCargue(d.vendedor);
     const marker = L.marker([d.lat, d.lng], { icon: makeCargueIcon(color, false) })
       .bindTooltip(buildCarguePopup(d), { className: 'cargue-tooltip', direction: 'top', opacity: 0.97 });
     // Clic en el punto lo selecciona/deselecciona directo -- el detalle se
@@ -103,9 +135,13 @@ function setMarcadorSeleccionado(item, seleccionado){
   item.marker.setZIndexOffset(seleccionado ? 1000 : 0);
 }
 
-function buildCargueLegend(rows){
+// Recibe directamente una lista de CÓDIGOS de vendedor (no pedidos) -- la
+// llama cargue-historial.js con vendedoresVisibles(), el catálogo completo
+// de la línea activa, para que la leyenda no cambie según qué vendedores
+// estén tildados ni qué pedidos haya dibujados en este instante.
+function buildCargueLegend(vendedores){
   const cont = document.getElementById('cargue-legend-items');
   if (!cont) return;
-  const vs = [...new Set(rows.map(r => r.vendedor))].sort();
-  cont.innerHTML = vs.map(v => `<div class="li"><div class="ld" style="background:${cargueColorMap[v]}"></div>${v}</div>`).join('');
+  const vs = [...new Set(vendedores)].sort();
+  cont.innerHTML = vs.map(v => `<div class="li"><div class="ld" style="background:${colorParaVendedorCargue(v)}"></div>${v}</div>`).join('');
 }
