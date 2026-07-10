@@ -54,10 +54,13 @@ button.badge{font-family:inherit}
 .cargue-tooltip{background:#111827!important;border:1px solid #334155!important;color:#e2e8f0!important;box-shadow:0 4px 14px rgba(0,0,0,.5)!important;border-radius:8px!important;padding:8px 10px!important}
 .cargue-tooltip::before{display:none!important}
 
-.legend{position:absolute;bottom:14px;left:10px;background:rgba(15,23,42,.93);padding:6px 10px;border-radius:10px;z-index:500;border:1px solid #1e293b;font-size:.63rem;backdrop-filter:blur(4px);max-height:min(240px,50vh);width:fit-content;overflow-y:auto}
+.legend-wrap{position:absolute;bottom:14px;left:10px;z-index:500;display:flex;align-items:flex-end;gap:8px}
+.legend{background:rgba(15,23,42,.93);padding:6px 10px;border-radius:10px;border:1px solid #1e293b;font-size:.63rem;backdrop-filter:blur(4px);max-height:min(240px,50vh);width:fit-content;overflow-y:auto}
 .legend h4{color:#94a3b8;margin-bottom:3px;font-size:.58rem;text-transform:uppercase;letter-spacing:.8px}
 .li{display:flex;align-items:center;gap:5px;margin-bottom:1px;color:#cbd5e1;white-space:nowrap}
 .ld{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+#cargue-btn-fuera-ruta{flex-shrink:0;background:rgba(15,23,42,.93);border:1px solid #1e293b;color:#94a3b8;border-radius:10px;padding:6px 10px;font-size:.66rem;font-weight:700;cursor:pointer;backdrop-filter:blur(4px);white-space:nowrap;font-family:inherit}
+#cargue-btn-fuera-ruta.activo{background:#7c2d12;border-color:#f97316;color:#fed7aa}
 
 #cargue-modo-aviso{display:none;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:600;background:#7c2d12;border:1px solid #f97316;color:#fed7aa;padding:5px 14px;border-radius:20px;font-size:.68rem;font-weight:700}
 
@@ -173,9 +176,12 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
       <button type="button" id="cargue-btn-cancelar-edicion">✖️ Cancelar</button>
     </div>
     <div id="cargue-vacio-mapa" style="display:none;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:500;background:rgba(15,23,42,.93);border:1px solid #334155;border-radius:12px;padding:18px 26px;text-align:center;font-size:.8rem;color:#94a3b8;max-width:280px;pointer-events:none">📍 Elegí una línea arriba para ver los pedidos puntillados</div>
-    <div class="legend">
-      <h4>VEND</h4>
-      <div id="cargue-legend-items"></div>
+    <div class="legend-wrap">
+      <div class="legend">
+        <h4>VEND</h4>
+        <div id="cargue-legend-items"></div>
+      </div>
+      <button type="button" id="cargue-btn-fuera-ruta" title="Marca con ⚠️ los pedidos que parecen fuera de la ruta habitual de su vendedor ese día">⚠️ Fuera de ruta</button>
     </div>
   </div>
 </div>
@@ -278,6 +284,8 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   ]);
 
   document.getElementById('cargue-btn-actualizar').addEventListener('click', actualizarCargueClientesConFeedback);
+  const btnFueraRuta = document.getElementById('cargue-btn-fuera-ruta');
+  if (btnFueraRuta) btnFueraRuta.addEventListener('click', () => { if (typeof alternarCargueFueraDeRuta === 'function') alternarCargueFueraDeRuta(); });
 });
 </script>
 <script src="cargue-utils.js"></script>

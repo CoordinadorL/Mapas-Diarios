@@ -64,3 +64,66 @@ function puntoEnPoligono(lat, lng, poligono) {
   }
   return dentro;
 }
+
+// ── DETECCIÓN DE PEDIDOS FUERA DE RUTA ──────────────────────
+// Los vendedores a veces no respetan la ruta del día e ingresan pedidos que
+// no corresponden a su zona en esa fecha. Esto detecta esos casos: para
+// cada (vendedor, fecha) con suficientes pedidos, calcula el centro
+// (mediana de lat/lng -- más robusta que un promedio ante el propio outlier
+// que se busca detectar) y marca como atípico el que quede muchísimo más
+// lejos que el resto de ESE grupo. La vara es la dispersión típica del
+// propio grupo (no un km fijo), así se auto-ajusta sola a una zona urbana
+// compacta o a una ruta rural más abierta.
+
+function _medianaCargue(valoresOrdenados) {
+  const n = valoresOrdenados.length;
+  if (!n) return 0;
+  const mid = Math.floor(n / 2);
+  return n % 2 ? valoresOrdenados[mid] : (valoresOrdenados[mid - 1] + valoresOrdenados[mid]) / 2;
+}
+
+// Haversine, en km.
+function distanciaKmCargue(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+// Devuelve un Set con los "Pedido" que parecen fuera de la ruta habitual de
+// su vendedor en esa fecha puntual -- agrupado por (vendedor, fecha), no
+// global: cada día es la zona propia de ese vendedor, mezclar fechas
+// distintas escondería anomalías reales o inventaría falsas.
+function detectarCarguePedidosFueraDeRuta(pedidos) {
+  const MIN_PUNTOS = 4;  // con menos no hay grupo confiable con qué comparar
+  const PISO_KM = 1.5;   // por debajo de esto, ninguna distancia se considera sospechosa
+  const K = 3.5;         // umbral tipo z-score modificado (Iglewicz & Hoaglin)
+
+  const grupos = {};
+  pedidos.forEach(p => {
+    const key = p.vendedor + '|' + p.fecha;
+    (grupos[key] = grupos[key] || []).push(p);
+  });
+
+  const atipicos = new Set();
+  Object.values(grupos).forEach(grupo => {
+    if (grupo.length < MIN_PUNTOS) return;
+
+    const medLat = _medianaCargue(grupo.map(p => p.lat).sort((a, b) => a - b));
+    const medLng = _medianaCargue(grupo.map(p => p.lng).sort((a, b) => a - b));
+    const distancias = grupo.map(p => distanciaKmCargue(p.lat, p.lng, medLat, medLng));
+
+    const medDist = _medianaCargue([...distancias].sort((a, b) => a - b));
+    const madCrudo = _medianaCargue(distancias.map(d => Math.abs(d - medDist)).sort((a, b) => a - b));
+    const mad = Math.max(madCrudo * 1.4826, 0.3); // piso: no dividir por ~0 en zonas muy compactas
+
+    grupo.forEach((p, i) => {
+      const d = distancias[i];
+      if (d < PISO_KM) return;
+      if ((d - medDist) / mad > K) atipicos.add(p.pedido);
+    });
+  });
+
+  return atipicos;
+}

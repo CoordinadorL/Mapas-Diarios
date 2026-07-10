@@ -26,7 +26,8 @@ const CARGUE_PALETTE = ['#4ade80','#60a5fa','#c084fc','#34d399','#f472b6','#a78b
 let cargueMap = null;
 let cargueMarkersLayer = null;
 let CARGUE_DATA = [];        // pedidos del día actualmente pintados
-let CARGUE_MARKERS = [];     // [{data, marker}] -- para que geocercas.js sepa qué hay bajo cada punto
+let CARGUE_MARKERS = [];     // [{data, marker, color, atipico}] -- para que geocercas.js sepa qué hay bajo cada punto
+let cargueMostrarFueraDeRuta = false; // apagado por defecto al cargar (botón junto al cuadro VEND)
 
 function initCargueMap(elementId){
   cargueMap = L.map(elementId).setView([-1.685,-78.644], 13);
@@ -69,14 +70,24 @@ function colorParaVendedorCargue(v){
 // Seleccionado se ve MUY distinto del resto a propósito (más grande, borde
 // grueso, glow amarillo) -- tiene que notarse de un vistazo entre decenas de
 // puntos de colores parecidos, no alcanza con solo cambiar el borde.
-function makeCargueIcon(color, seleccionado){
+//
+// alerta=true (solo cuando cargueMostrarFueraDeRuta está activo Y el pedido
+// quedó marcado por detectarCarguePedidosFueraDeRuta) dibuja un ⚠️ DENTRO
+// del mismo círculo de color -- a propósito no se cambia el color ni se
+// agrega un anillo aparte: con el botón apagado el punto se ve 100% normal,
+// y con el botón prendido alcanza con mirar adentro del punto para saber si
+// ese cliente está OK o posiblemente cargado en el día equivocado.
+function makeCargueIcon(color, seleccionado, alerta){
   const borde = seleccionado ? '#fbbf24' : '#0f172a';
   const ancho = seleccionado ? 4 : 1.5;
   const tam = seleccionado ? 26 : 16;
   const sombra = seleccionado ? '0 0 0 4px rgba(251,191,36,.5), 0 2px 8px rgba(0,0,0,.6)' : '0 1px 4px rgba(0,0,0,.5)';
+  const advertencia = alerta
+    ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:${Math.round(tam * 0.62)}px;line-height:1;filter:drop-shadow(0 0 1px #000)">⚠️</div>`
+    : '';
   return L.divIcon({
     className: '',
-    html: `<div style="width:${tam}px;height:${tam}px;border-radius:50%;background:${color};border:${ancho}px solid ${borde};box-shadow:${sombra}"></div>`,
+    html: `<div style="position:relative;width:${tam}px;height:${tam}px;border-radius:50%;background:${color};border:${ancho}px solid ${borde};box-shadow:${sombra}">${advertencia}</div>`,
     iconSize: [tam, tam],
     iconAnchor: [tam/2, tam/2],
   });
@@ -85,8 +96,9 @@ function makeCargueIcon(color, seleccionado){
 // Se muestra en un tooltip al PASAR el mouse (no en un popup al hacer
 // clic) -- el clic quedó reservado 100% para seleccionar/deseleccionar, sin
 // que una ventanita tape el mapa de por medio.
-function buildCarguePopup(d){
+function buildCarguePopup(d, alerta){
   return `<div style="font-family:system-ui;font-size:12.5px;line-height:1.5;min-width:180px">
+    ${alerta ? '<div style="color:#fca5a5;font-weight:700;margin-bottom:4px">⚠️ Posible pedido fuera de ruta</div>' : ''}
     <b>${d.cliente || '(sin nombre)'}</b><br>
     <span style="color:#94a3b8">Pedido:</span> ${d.pedido}<br>
     <span style="color:#94a3b8">Vendedor:</span> ${d.vendedor}${d.linea ? ' ('+d.linea+')' : ''}<br>
@@ -111,13 +123,15 @@ function drawCarguePedidos(rows){
   cargueMarkersLayer = L.layerGroup();
   rows.forEach(d => {
     const color = colorParaVendedorCargue(d.vendedor);
-    const marker = L.marker([d.lat, d.lng], { icon: makeCargueIcon(color, false) })
-      .bindTooltip(buildCarguePopup(d), { className: 'cargue-tooltip', direction: 'top', opacity: 0.97 });
+    const atipico = (typeof CARGUE_PEDIDOS_ATIPICOS !== 'undefined') && CARGUE_PEDIDOS_ATIPICOS.has(d.pedido);
+    const alerta = atipico && cargueMostrarFueraDeRuta;
+    const marker = L.marker([d.lat, d.lng], { icon: makeCargueIcon(color, false, alerta) })
+      .bindTooltip(buildCarguePopup(d, alerta), { className: 'cargue-tooltip', direction: 'top', opacity: 0.97 });
     // Clic en el punto lo selecciona/deselecciona directo -- el detalle se
     // ve al pasar el mouse (tooltip), no hace falta clickear para verlo.
     marker.on('click', () => { if (typeof alternarClienteEnSeleccion === 'function') alternarClienteEnSeleccion(d.pedido); });
     cargueMarkersLayer.addLayer(marker);
-    CARGUE_MARKERS.push({ data: d, marker, color });
+    CARGUE_MARKERS.push({ data: d, marker, color, atipico });
   });
   cargueMap.addLayer(cargueMarkersLayer);
 
@@ -131,8 +145,24 @@ function drawCarguePedidos(rows){
 // zIndexOffset para que un punto seleccionado siempre se vea por encima de
 // los que tiene cerca, aunque se solapen.
 function setMarcadorSeleccionado(item, seleccionado){
-  item.marker.setIcon(makeCargueIcon(item.color, seleccionado));
+  item.marker.setIcon(makeCargueIcon(item.color, seleccionado, item.atipico && cargueMostrarFueraDeRuta));
   item.marker.setZIndexOffset(seleccionado ? 1000 : 0);
+}
+
+// Botón "⚠️ Fuera de ruta" (junto al cuadro VEND, ver cargue.html). Prende o
+// apaga la señal visual sin redibujar el mapa entero -- conserva zoom,
+// encuadre y la selección en progreso, solo actualiza el ícono/tooltip de
+// cada marcador ya puesto.
+function alternarCargueFueraDeRuta(){
+  cargueMostrarFueraDeRuta = !cargueMostrarFueraDeRuta;
+  const btn = document.getElementById('cargue-btn-fuera-ruta');
+  if (btn) btn.classList.toggle('activo', cargueMostrarFueraDeRuta);
+  CARGUE_MARKERS.forEach(item => {
+    const seleccionado = (typeof estaSeleccionado === 'function') && estaSeleccionado(item.data.pedido);
+    const alerta = item.atipico && cargueMostrarFueraDeRuta;
+    item.marker.setIcon(makeCargueIcon(item.color, seleccionado, alerta));
+    item.marker.setTooltipContent(buildCarguePopup(item.data, alerta));
+  });
 }
 
 // Recibe directamente una lista de CÓDIGOS de vendedor (no pedidos) -- la

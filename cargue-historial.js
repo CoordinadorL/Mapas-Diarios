@@ -21,6 +21,7 @@
 let CARGUE_VENDEDORES_DISPONIBLES = [];
 let CARGUE_VENDEDORES_ACTIVOS = new Set();
 let CARGUE_PEDIDOS_TODOS = [];  // pedidos crudos+línea del rango activo, SIN filtrar por vendedor
+let CARGUE_PEDIDOS_ATIPICOS = new Set(); // "Pedido" que parecen fuera de la ruta habitual (ver cargue-utils.js)
 let CARGUE_LINEAS_ACTIVAS = new Set(); // vacío = ninguna línea elegida (vendedores no muestran nada)
 let cargueLineaPorVendedor = {};       // vendedor (tal cual en CARGUE_PEDIDOS) -> línea
 let cargueLineasMap = {};              // código de vendedor -> línea (catálogo)
@@ -246,6 +247,11 @@ async function _actualizarCargueClientesInterno(){
     fetchCargueAsignacionesRango(desde, hasta),
   ]);
   CARGUE_PEDIDOS_TODOS = aplicarLineaVendedor(pedidosCrudos, cargueLineasMap);
+
+  // Independiente del filtro de vendedores activos -- se recalcula solo
+  // cuando cambian los pedidos del rango, no en cada tilde/destilde.
+  CARGUE_PEDIDOS_ATIPICOS = (typeof detectarCarguePedidosFueraDeRuta === 'function')
+    ? detectarCarguePedidosFueraDeRuta(CARGUE_PEDIDOS_TODOS) : new Set();
 
   CARGUE_VENDEDORES_DISPONIBLES = [...new Set(CARGUE_PEDIDOS_TODOS.map(p => p.vendedor))].sort();
   cargueLineaPorVendedor = {};
