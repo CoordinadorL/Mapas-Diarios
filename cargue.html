@@ -152,6 +152,7 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
       <div class="toolbar-grupo">
         <div class="fecha-inline"><span>Desde</span><input type="date" id="cargue-fecha-desde"></div>
         <div class="fecha-inline"><span>Hasta</span><input type="date" id="cargue-fecha-hasta"></div>
+        <button type="button" class="badge" id="cargue-btn-pendientes-atrasados" title="Trae el pedido pendiente más antiguo que exista, sin tener que escribir una fecha vieja a mano">📋 Ver atrasados</button>
       </div>
       <div class="cargue-dropdown" id="cargue-dropdown-linea">
         <button type="button" class="cargue-dropdown-btn" id="cargue-dropdown-linea-btn">Elegí una línea ▾</button>
@@ -286,6 +287,8 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('cargue-btn-actualizar').addEventListener('click', actualizarCargueClientesConFeedback);
   const btnFueraRuta = document.getElementById('cargue-btn-fuera-ruta');
   if (btnFueraRuta) btnFueraRuta.addEventListener('click', () => { if (typeof alternarCargueFueraDeRuta === 'function') alternarCargueFueraDeRuta(); });
+  const btnPendientesAtrasados = document.getElementById('cargue-btn-pendientes-atrasados');
+  if (btnPendientesAtrasados) btnPendientesAtrasados.addEventListener('click', () => { if (typeof verPendientesAtrasados === 'function') verPendientesAtrasados(); });
 });
 </script>
 <script src="cargue-utils.js"></script>

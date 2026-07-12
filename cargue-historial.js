@@ -349,6 +349,35 @@ function repintarConservandoSeleccion(){
   notificarCambioSeleccion();
 }
 
+// Botón "📋 Ver atrasados": desde que CARGUE_PEDIDOS ya no se archiva por
+// antigüedad (ver backend/CargueArchivado.gs -- un pedido pendiente se
+// queda activo para siempre hasta que se asigna a un camión), puede haber
+// pedidos viejos "escondidos" fuera del rango Desde/Hasta de hoy. En vez de
+// que el coordinador tenga que adivinar y escribir una fecha vieja a mano,
+// esto trae la fecha real más antigua que exista (fetchCargueFechas(), el
+// mismo endpoint cargue_fechas del backend) y arma el rango con eso.
+async function verPendientesAtrasados(){
+  const btn = document.getElementById('cargue-btn-pendientes-atrasados');
+  const textoOriginal = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '📋 Buscando...'; }
+  try {
+    const fechas = await fetchCargueFechas();
+    if (!fechas.length) { alert('No hay pedidos registrados en CARGUE_PEDIDOS todavía.'); return; }
+    const masAntigua = fechas.slice().sort()[0];
+    const hoy = hoyCargueStr();
+    const inDesde = document.getElementById('cargue-fecha-desde');
+    const inHasta = document.getElementById('cargue-fecha-hasta');
+    if (inDesde) inDesde.value = masAntigua;
+    if (inHasta) inHasta.value = hoy;
+    guardarFiltrosCargue();
+    await actualizarCargueClientesConFeedback();
+  } catch (e) {
+    alert('No se pudo consultar las fechas disponibles: ' + (e.message || e));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = textoOriginal; }
+  }
+}
+
 // Wrapper del botón "🔄 Actualizar clientes" (y de los inputs Desde/Hasta):
 // da feedback visible (antes no se notaba si el click hacía algo cuando los
 // datos no habían cambiado).

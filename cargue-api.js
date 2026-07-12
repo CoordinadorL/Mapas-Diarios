@@ -57,6 +57,14 @@ function _mapCarguePedidoRow(row) {
     lng: pnCargue(gfCargue(row, 'longitud_x', 'Longitud', 'longitud', 'lng')),
   };
 }
+// Fechas distintas con pedidos en CARGUE_PEDIDOS (liviano, solo la columna
+// Fecha) -- lo usa el botón "📋 Ver atrasados" para saber cuál es el pedido
+// pendiente más antiguo sin tener que adivinar una fecha a mano.
+async function fetchCargueFechas() {
+  const r = await jsonpCargue('tipo=cargue_fechas', 20000);
+  return Array.isArray(r) ? r : [];
+}
+
 // Por rango de fechas (desde/hasta) -- lo usa cargue-historial.js para el
 // selector "Desde/Hasta".
 async function fetchCarguePedidosRango(desde, hasta) {
