@@ -757,7 +757,7 @@ textarea.cuadre-input{resize:vertical;min-height:56px;font-weight:400;font-size:
   </div>
   <div class="sep"></div>
   <span>Vista:</span>
-  <button class="icon-btn" id="btn-ruta" style="border-color:#475569;background:transparent;color:#64748b" onclick="toggleRuta(this)">Ruta</button>
+  <button class="icon-btn" id="btn-ruta" style="border-color:#3b82f6;background:#1d4ed8;color:#fff" onclick="toggleRuta(this)">Ruta</button>
   <button class="icon-btn" id="btn-nums" style="border-color:#22c55e;background:#15803d;color:#fff" onclick="toggleNums(this)">Números</button>
   <button class="icon-btn dark-btn" id="btn-cluster" onclick="toggleCluster(this)">Cluster</button>
   <button class="icon-btn dark-btn on" id="btn-dark" onclick="toggleDark(this)">☀️ Día</button>
@@ -1028,7 +1028,13 @@ const TILE_LIGHT='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
 
 let ALL_ROWS=[],DATA=[],colorMap={};
 let allMarkers=[],allLines=[],clusterGroup=null;
-let showRuta=false,showNums=true,useCluster=false,darkMode=false,panelOpen=false;
+// showRuta arranca en true a propósito: antes había que tocar el botón
+// "Ruta" a mano cada vez que se abría el mapa o se aplicaba un camión/fecha
+// nuevo (el cálculo de la ruta -- nearestNeighborFrom en applyFiltersAndDraw
+// -- siempre corría, pero DIBUJAR las líneas quedaba apagado por defecto y
+// no se guardaba entre sesiones). Ahora las líneas aparecen solas; el botón
+// sigue sirviendo para ocultarlas si alguien lo prefiere en esa sesión.
+let showRuta=true,showNums=true,useCluster=false,darkMode=false,panelOpen=false;
 let activeVendedor='ALL',activeFecha='',activeChofer='';
 let activeLiqs=new Set();
 let completed=new Set();    // ✅ entregados
