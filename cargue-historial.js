@@ -295,6 +295,10 @@ function computarCamionesArmados(asignaciones){
       kilos: pedidosDelCamion.reduce((s, p) => s + p.kilos, 0),
       total: pedidosDelCamion.reduce((s, p) => s + p.ventasTotal, 0),
       vendedores: [...new Set(pedidosDelCamion.map(p => p.vendedor))].sort(),
+      // Objetos completos (cliente, dirección, monto...), no solo los IDs --
+      // para que el resumen (cargue-resumen.js) pueda desplegar el detalle
+      // pedido por pedido de cualquier camión sin tener que refiltrar.
+      pedidosDetalle: pedidosDelCamion,
     };
   });
 }

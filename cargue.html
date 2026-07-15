@@ -120,11 +120,33 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
 .armado-btn:hover{background:#334155}
 
 #cargue-modal-resumen{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;align-items:center;justify-content:center}
-#cargue-modal-resumen .caja{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:920px;width:94%;max-height:82vh;overflow:auto}
+#cargue-modal-resumen .caja{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:1080px;width:94%;max-height:82vh;overflow:auto}
 #cargue-btn-cerrar-resumen{background:#334155;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:.72rem;font-weight:700}
 .cargue-resumen-cols{display:flex;gap:18px;flex-wrap:wrap}
 .cargue-resumen-cols>div{flex:1;min-width:280px}
+.cargue-resumen-cols>div:last-child{flex:1.4;min-width:340px}
 .cargue-resumen-cols h4{font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:6px}
+
+/* Tabla de camiones armados con filas desplegables (▸/▾) -- ver detalle
+   pedido por pedido agrupado por vendedor, ej. para camiones "fuera de
+   ruta" pero funciona igual para cualquier camión. */
+.resumen-camiones-tabla{display:flex;flex-direction:column;gap:1px}
+.rc-fila{display:grid;grid-template-columns:14px 1.3fr 1.6fr .7fr .7fr .9fr;gap:6px;align-items:center;padding:5px 6px;font-size:.75rem}
+.rc-header{color:#94a3b8;border-bottom:1px solid #334155;font-size:.65rem;text-transform:uppercase;letter-spacing:.4px}
+.rc-num{text-align:right}
+.rc-monto{font-weight:700;color:#fff}
+.rc-vend{color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rc-fila-detalle{border-bottom:1px solid #1e293b}
+.rc-fila-detalle summary{list-style:none;cursor:pointer}
+.rc-fila-detalle summary::-webkit-details-marker{display:none}
+.rc-fila-detalle summary::marker{content:''}
+.rc-fila-detalle:hover summary{background:#1e293b}
+.rc-caret::before{content:'▸';color:#64748b;display:inline-block}
+.rc-fila-detalle[open] .rc-caret::before{content:'▾';color:#93c5fd}
+.rc-detalle{padding:2px 6px 10px 26px;display:flex;flex-direction:column;gap:8px}
+.rcd-vendedor b{color:#93c5fd;font-size:.72rem}
+.rcd-vendedor ul{list-style:none;margin-top:3px;display:flex;flex-direction:column;gap:2px}
+.rcd-vendedor li{font-size:.7rem;color:#cbd5e1;padding-left:6px;border-left:2px solid #334155}
 
 @media (max-width:760px){
   body{flex-direction:column}

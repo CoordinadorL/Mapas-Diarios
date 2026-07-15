@@ -60,9 +60,15 @@ function renderResumenTabla(){
 }
 
 // Desglose de los cargues ya armados (cargueCamionesArmadosHoy, de
-// cargue-panel-asignacion.js): código de camión, vendedores incluidos,
-// facturas, kilos y monto -- responde a "¿qué llevo ya armado y con qué?"
-// sin tener que ir a buscarlo en la lista chica del panel lateral.
+// cargue-historial.js): código de camión, vendedores incluidos, facturas,
+// kilos y monto -- responde a "¿qué llevo ya armado y con qué?" sin tener
+// que ir a buscarlo en la lista chica del panel lateral.
+//
+// Cada fila es un <details> desplegable (▸/▾) con el detalle pedido por
+// pedido agrupado por vendedor -- pensado sobre todo para camiones "cajón"
+// como los de fuera de ruta (ej. F140/F141), donde hace falta poder leerle
+// a cada vendedor exactamente qué pedidos suyos quedaron ahí, pero funciona
+// igual para cualquier camión.
 function renderResumenCamiones(){
   const cont = document.getElementById('cargue-resumen-camiones');
   if (!cont) return;
@@ -72,25 +78,39 @@ function renderResumenCamiones(){
     return;
   }
 
+  const detalleDeCamionPorVendedor = (c) => {
+    const porVendedor = {};
+    (c.pedidosDetalle || []).forEach(p => {
+      (porVendedor[p.vendedor] = porVendedor[p.vendedor] || []).push(p);
+    });
+    return Object.keys(porVendedor).sort().map(v => `
+      <div class="rcd-vendedor">
+        <b>${(typeof extraerCodigoVendedor === 'function' ? extraerCodigoVendedor(v) : '') || v}</b>
+        <ul>
+          ${porVendedor[v].map(p => `<li>${p.cliente || '(sin nombre)'} — ${p.direccion || '—'} — $${p.ventasTotal.toFixed(2)} · ${p.kilos.toFixed(1)}kg</li>`).join('')}
+        </ul>
+      </div>`).join('');
+  };
+
   cont.innerHTML = `
-    <table style="width:100%;border-collapse:collapse;font-size:.75rem">
-      <thead><tr style="text-align:left;color:#94a3b8;border-bottom:1px solid #334155">
-        <th style="padding:5px 6px">Camión</th>
-        <th style="padding:5px 6px">Vendedores</th>
-        <th style="padding:5px 6px;text-align:right">Facturas</th>
-        <th style="padding:5px 6px;text-align:right">Kilos</th>
-        <th style="padding:5px 6px;text-align:right">Monto</th>
-      </tr></thead>
-      <tbody>
-        ${cargueCamionesArmadosHoy.map(c => `<tr style="border-bottom:1px solid #1e293b">
-          <td style="padding:5px 6px">${c.camion}</td>
-          <td style="padding:5px 6px;color:#94a3b8">${(c.vendedores || []).join(', ')}</td>
-          <td style="padding:5px 6px;text-align:right">${c.pedidos.length}</td>
-          <td style="padding:5px 6px;text-align:right">${(c.kilos || 0).toFixed(2)}</td>
-          <td style="padding:5px 6px;text-align:right;font-weight:700">$${c.total.toFixed(2)}</td>
-        </tr>`).join('')}
-      </tbody>
-    </table>`;
+    <div class="resumen-camiones-tabla">
+      <div class="rc-fila rc-header">
+        <span></span><span>Camión</span><span>Vendedores</span><span>Facturas</span><span>Kilos</span><span>Monto</span>
+      </div>
+      ${cargueCamionesArmadosHoy.map(c => `
+        <details class="rc-fila-detalle">
+          <summary class="rc-fila">
+            <span class="rc-caret"></span>
+            <span>${c.camion}</span>
+            <span class="rc-vend">${(c.vendedores || []).join(', ')}</span>
+            <span class="rc-num">${c.pedidos.length}</span>
+            <span class="rc-num">${(c.kilos || 0).toFixed(2)}</span>
+            <span class="rc-num rc-monto">$${c.total.toFixed(2)}</span>
+          </summary>
+          <div class="rc-detalle">${detalleDeCamionPorVendedor(c)}</div>
+        </details>
+      `).join('')}
+    </div>`;
 }
 
 function abrirResumenCargue(){
