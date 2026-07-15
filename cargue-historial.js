@@ -30,7 +30,15 @@ let cargueHistorialLayer = null;
 // Un cargue puede mezclar pedidos de varios días del rango (ej. atrasados +
 // hoy) -- se guarda siempre bajo la fecha de HOY (el día en que se arma el
 // cargue), no bajo la fecha original del pedido.
-function obtenerCargueFechaActiva(){ return hoyCargueStr(); }
+// Un cargue puede mezclar pedidos de varios días del rango (ej. atrasados +
+// hoy) -- se guarda bajo el día MÁS RECIENTE del rango activo (Hasta). En
+// el caso normal (modo vivo) Hasta suele ser hoy, así que esto no cambia
+// nada -- pero si bodega/coordinador está armando un cargue puntualmente
+// sobre un rango histórico (ver puedeCargueEditarHistorico), se guarda con
+// la fecha de ESE rango en vez de la fecha real de hoy -- si no, el cargue
+// recién armado quedaría fuera de "Camiones armados" hasta ampliar el
+// rango hasta hoy, aunque se acabara de guardar bien.
+function obtenerCargueFechaActiva(){ return obtenerRangoFechas().hasta; }
 
 function hoyCargueStr(){
   const d = new Date();
