@@ -137,7 +137,17 @@ async function guardarSeleccionActual(){
   const editando = cargueModoEdicion; // guardar referencia: guardarSeleccionActual limpia el modo antes de terminar
   const geojson = (typeof cargueGrupoPoligonos !== 'undefined' ? cargueGrupoPoligonos[grupoId] : null) || cargueSeleccionActual.poligono;
 
-  guardarCargueAsignacion({ fecha, camion: camionLabel, pedidos, geojson });
+  // Guardar PRIMERO, eliminar el viejo (si estaba editando) DESPUÉS -- y
+  // solo si el guardado nuevo de verdad funcionó. Antes esto era al revés
+  // en la práctica (guardado fire-and-forget sin confirmación real): si el
+  // guardado fallaba en silencio después de haber tocado el viejo, se
+  // perdían pedidos sin ningún aviso. Ahora si el guardado falla, no se
+  // toca nada más -- la selección queda intacta para reintentar.
+  const resultadoGuardar = await guardarCargueAsignacion({ fecha, camion: camionLabel, pedidos, geojson });
+  if (!resultadoGuardar.ok) {
+    alert('No se pudo guardar el cargue: ' + (resultadoGuardar.error || 'error desconocido') + '\n\nNo se tocó nada más -- podés reintentar.');
+    return;
+  }
 
   if (editando) {
     const resultado = await eliminarCargueAsignacion({ fecha: editando.fecha, timestamp: editando.timestamp, camion: editando.camion });
@@ -158,11 +168,9 @@ async function guardarSeleccionActual(){
   if (sel) sel.value = '';
   notificarCambioSeleccion();
 
-  // El guardado nuevo es fire-and-forget (igual que siempre) -- esperamos un
-  // toque y refrescamos SOLO los cargues guardados (no los pedidos ni la
-  // selección) para traer el Timestamp real, necesario para poder editar o
-  // eliminar este cargue después.
-  if (typeof refrescarSoloAsignaciones === 'function') setTimeout(refrescarSoloAsignaciones, 1500);
+  // El guardado ahora se confirma de verdad (JSONP) -- ya no hace falta
+  // esperar "a ciegas" antes de refrescar, como cuando era fire-and-forget.
+  if (typeof refrescarSoloAsignaciones === 'function') refrescarSoloAsignaciones();
 }
 
 // Guarda UN grupo ya congelado (botón inline "💾 Guardar" de su cabecera en
@@ -181,7 +189,11 @@ async function guardarGrupoCargue(grupoId, selectEl){
   const camionLabel = selectEl.options[selectEl.selectedIndex].textContent;
   const geojson = (typeof cargueGrupoPoligonos !== 'undefined') ? (cargueGrupoPoligonos[grupoId] || null) : null;
 
-  guardarCargueAsignacion({ fecha, camion: camionLabel, pedidos, geojson });
+  const resultadoGuardar = await guardarCargueAsignacion({ fecha, camion: camionLabel, pedidos, geojson });
+  if (!resultadoGuardar.ok) {
+    alert('No se pudo guardar este cargue: ' + (resultadoGuardar.error || 'error desconocido') + '\n\nNo se tocó nada más -- podés reintentar.');
+    return;
+  }
 
   items.forEach(it => setMarcadorSeleccionado(it, false));
   cargueSeleccionActual.items = cargueSeleccionActual.items.filter(it => (it._cargueGrupo || 1) !== grupoId);
@@ -192,7 +204,7 @@ async function guardarGrupoCargue(grupoId, selectEl){
   }
   notificarCambioSeleccion();
 
-  if (typeof refrescarSoloAsignaciones === 'function') setTimeout(refrescarSoloAsignaciones, 1500);
+  if (typeof refrescarSoloAsignaciones === 'function') refrescarSoloAsignaciones();
 }
 
 // "Editar": entra en modo edición SIN borrar nada todavía. Carga esos
@@ -271,8 +283,15 @@ async function eliminarCargueArmado(c){
 // selección actual (el grupo activo, mismo alcance que Guardar cargue) y la
 // suma a un camión que ya se guardó hoy, sin tener que pasar por Editar
 // (que carga el cargue ENTERO en la selección). Mismo patrón de siempre
-// (eliminar viejo + guardar de nuevo con la lista de pedidos combinada) --
-// CARGUE_ASIGNACION no tiene "agregar una fila a un array ya guardado".
+// (guardar de nuevo con la lista de pedidos combinada + eliminar el viejo)
+// -- CARGUE_ASIGNACION no tiene "agregar una fila a un array ya guardado".
+//
+// Guardar PRIMERO, eliminar el viejo DESPUÉS -- y solo si el guardado nuevo
+// de verdad funcionó (ver el mismo razonamiento en guardarSeleccionActual).
+// Si el guardado falla, el cargue viejo queda intacto -- nada se pierde, a
+// lo sumo hay que reintentar. El orden al revés (eliminar y recién
+// entonces guardar) es justamente el que puede perder pedidos si el
+// guardado falla después de haber borrado el viejo.
 async function agregarSeleccionACamionArmado(){
   const sel = document.getElementById('cargue-sel-camion-agregar');
   const idx = sel ? sel.value : '';
@@ -288,13 +307,19 @@ async function agregarSeleccionACamionArmado(){
   const nuevosIds = items.map(it => it.data.pedido);
   const pedidosCombinados = [...new Set([...camionExistente.pedidos, ...nuevosIds])];
 
-  const resultado = await eliminarCargueAsignacion({ fecha: camionExistente.fecha, timestamp: camionExistente.timestamp, camion: camionExistente.camion });
-  if (!resultado.ok) { alert('No se pudo agregar: ' + (resultado.error || 'error desconocido')); return; }
-
   // Mismo camión, misma fecha original del cargue (no la de hoy) -- solo
   // crece la lista de pedidos. El polígono de referencia se descarta (los
   // nuevos pedidos pueden caer afuera del original), no afecta nada más.
-  guardarCargueAsignacion({ fecha: camionExistente.fecha, camion: camionExistente.camion, pedidos: pedidosCombinados, geojson: null });
+  const resultadoGuardar = await guardarCargueAsignacion({ fecha: camionExistente.fecha, camion: camionExistente.camion, pedidos: pedidosCombinados, geojson: null });
+  if (!resultadoGuardar.ok) {
+    alert('No se pudo agregar: ' + (resultadoGuardar.error || 'error desconocido') + '\n\nEl camión armado sigue igual que antes -- podés reintentar.');
+    return;
+  }
+
+  const resultadoEliminar = await eliminarCargueAsignacion({ fecha: camionExistente.fecha, timestamp: camionExistente.timestamp, camion: camionExistente.camion });
+  if (!resultadoEliminar.ok) {
+    alert('Se agregó el pedido, pero quedó un cargue viejo duplicado de "' + camionExistente.camion + '" que no se pudo borrar automáticamente (' + (resultadoEliminar.error || 'error desconocido') + '). Eliminalo a mano de la lista para no contar los pedidos dos veces.');
+  }
 
   items.forEach(it => setMarcadorSeleccionado(it, false));
   cargueSeleccionActual.items = cargueSeleccionActual.items.filter(it => (it._cargueGrupo || 1) !== grupoId);
@@ -302,7 +327,7 @@ async function agregarSeleccionACamionArmado(){
   if (sel) sel.value = '';
   notificarCambioSeleccion();
 
-  if (typeof refrescarSoloAsignaciones === 'function') setTimeout(refrescarSoloAsignaciones, 1500);
+  if (typeof refrescarSoloAsignaciones === 'function') refrescarSoloAsignaciones();
 }
 
 function renderCamionesArmadosHoy(){

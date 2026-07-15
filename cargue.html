@@ -67,6 +67,8 @@ button.badge{font-family:inherit}
 #cargue-banner-edicion{display:none;align-items:center;gap:10px;position:absolute;top:10px;left:50%;transform:translateX(-50%);z-index:650;background:#422006;border:1px solid #fbbf24;color:#fef3c7;padding:6px 8px 6px 16px;border-radius:20px;font-size:.7rem;font-weight:700;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.4)}
 #cargue-btn-cancelar-edicion{background:#fbbf24;color:#422006;border:none;border-radius:14px;padding:4px 10px;font-size:.66rem;font-weight:700;cursor:pointer;font-family:inherit}
 
+#cargue-aviso-archivado-atrasado{display:none;background:#7c2d12;border-bottom:1px solid #f97316;color:#fed7aa;padding:5px 14px;font-size:.68rem;font-weight:700;text-align:center;flex-shrink:0}
+
 aside{width:300px;flex-shrink:0;background:#111827;border-left:1px solid #1e293b;padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
 aside h3{font-size:.62rem;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:4px;display:flex;justify-content:space-between;flex-shrink:0}
 aside ul{list-style:none;font-size:.66rem;display:flex;flex-direction:column;gap:3px}
@@ -185,6 +187,7 @@ button.accion{width:100%;padding:6px;border-radius:8px;border:none;font-weight:7
           <button type="button" class="cargue-dropdown-btn" id="cargue-dropdown-linea-btn">Elegí una línea ▾</button>
           <div class="cargue-dropdown-panel" id="cargue-dropdown-linea-panel"></div>
         </div>
+        <span id="cargue-aviso-sin-linea" class="badge" style="display:none;background:#422006;border-color:#f97316;color:#fed7aa" title=""></span>
         <span id="cargue-stat-vivo">🧾 0 facturas · $0.00</span>
       </div>
     </div>
@@ -196,6 +199,8 @@ button.accion{width:100%;padding:6px;border-radius:8px;border:none;font-weight:7
       </div>
     </div>
   </div>
+
+  <div id="cargue-aviso-archivado-atrasado" title="El archivado automático diario de CARGUE_PEDIDOS (backend/CargueArchivado.gs) no dejó rastro de haber corrido en las últimas horas."></div>
 
   <div class="main">
     <div id="cargue-map"></div>

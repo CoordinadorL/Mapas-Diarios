@@ -77,6 +77,20 @@ async function fetchCargueFechas() {
   return Array.isArray(r) ? r : [];
 }
 
+// Última corrida exitosa del archivado diario (backend/CargueArchivado.gs)
+// -- para avisar en el tablero si el disparador se dejó de ejecutar, en vez
+// de que nadie se entere hasta que CARGUE_PEDIDOS vuelva a crecer solo.
+// Si falla la consulta, no es motivo para romper nada más: se trata como
+// "sin dato" y no se avisa (mejor no avisar que avisar mal).
+async function fetchCargueSaludArchivado() {
+  try {
+    const r = await jsonpCargue('tipo=cargue_salud_archivado', 10000);
+    return (r && r.ultimoDiario) || null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // Por rango de fechas (desde/hasta) -- lo usa cargue-historial.js para el
 // selector "Desde/Hasta".
 async function fetchCarguePedidosRango(desde, hasta) {
@@ -129,17 +143,37 @@ async function eliminarCargueAsignacion({ fecha, timestamp, camion }) {
   }
 }
 
-// Guardar una agrupación. Fire-and-forget (no-cors: Apps Script no siempre
-// responde con headers legibles en POST) -- mismo patrón que el resto del
-// proyecto (ver Avance/Cuadre/Geo). Validar los campos ANTES de llamar esto,
-// porque no se puede leer un {ok:false} de vuelta.
-function guardarCargueAsignacion({ fecha, camion, pedidos, geojson }) {
-  const payload = { tipo: 'cargue_asignacion', token: getToken(), fecha, camion, pedidos, geojson };
-  return fetchConTimeoutCargue(API_URL, {
-    method: 'POST', mode: 'no-cors',
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body: JSON.stringify(payload),
-  }, 12000);
+// Guardar una agrupación -- vía JSONP (no POST no-cors, a diferencia de
+// como era antes): un guardado fire-and-forget que fallara en silencio
+// podía perder pedidos sin que nadie se entere, sobre todo combinado con
+// flujos que primero eliminan un cargue viejo (ver guardarSeleccionActual /
+// agregarSeleccionACamionArmado en cargue-panel-asignacion.js). Devuelve
+// {ok, error} de verdad, mismo contrato que eliminarCargueAsignacion.
+//
+// pedidos/geojson van pre-serializados con JSON.stringify() porque viajan
+// en la URL, no en un body -- el backend (tipo=cargue_asignacion_guardar)
+// los acepta igual vengan como string (este caso) o como array/objeto ya
+// deserializado.
+async function guardarCargueAsignacion({ fecha, camion, pedidos, geojson }) {
+  const qs = 'tipo=cargue_asignacion_guardar'
+    + '&fecha=' + encodeURIComponent(fecha || '')
+    + '&camion=' + encodeURIComponent(camion || '')
+    + '&pedidos=' + encodeURIComponent(JSON.stringify(pedidos || []))
+    + '&geojson=' + encodeURIComponent(JSON.stringify(geojson || null));
+
+  // Salvavidas: una URL demasiado larga (cargue con muchísimos pedidos)
+  // puede comportarse de formas raras según el navegador/servidor -- mejor
+  // avisar claro y sugerir partir el cargue en dos con "🆕 Nuevo cargue"
+  // que arriesgar un envío que quizás ni llegue.
+  if (qs.length > 6000) {
+    return { ok: false, error: 'Este cargue tiene demasiados pedidos para guardarlo de una vez (' + (pedidos || []).length + '). Partilo en dos con "🆕 Nuevo cargue" y guardá cada parte por separado.' };
+  }
+
+  try {
+    return await jsonpCargue(qs, 20000);
+  } catch (e) {
+    return { ok: false, error: e.message || 'Sin respuesta del servidor.' };
+  }
 }
 
 // Plantillas de geocerca (sectores fijos guardados con nombre, reusables día

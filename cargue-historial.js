@@ -97,6 +97,28 @@ async function initCargueHistorial(){
   // Catálogo de líneas y pedidos del rango EN PARALELO (antes era en serie y
   // sumaba varios segundos de espera extra en cada carga de la página).
   await Promise.all([cargarCatalogoLineas(), actualizarCargueClientes()]);
+
+  verificarSaludArchivadoDiario(); // no bloquea el resto de la carga
+}
+
+// Avisa si el archivado automático de CARGUE_PEDIDOS (backend/
+// CargueArchivado.gs, corre solo todos los días ~3am) lleva demasiado sin
+// ejecutarse -- 36h de margen sobre el ciclo diario normal, para no
+// disparar el aviso por una corrida que arrancó un poco tarde. Sin dato
+// (nunca corrió, o falló la consulta) NO avisa -- mejor no alarmar de más
+// que avisar mal.
+async function verificarSaludArchivadoDiario(){
+  const banner = document.getElementById('cargue-aviso-archivado-atrasado');
+  if (!banner) return;
+  const ultimo = await fetchCargueSaludArchivado();
+  if (!ultimo) { banner.style.display = 'none'; return; }
+  const horas = (Date.now() - new Date(ultimo).getTime()) / 3600000;
+  if (horas > 36) {
+    banner.style.display = 'block';
+    banner.textContent = `⚠️ El archivado automático de pedidos no corrió en las últimas ${Math.floor(horas / 24)} día(s) -- avisale al admin.`;
+  } else {
+    banner.style.display = 'none';
+  }
 }
 
 // Carga (o recarga) el catálogo de líneas y pinta el dropdown. Si la llamada
@@ -120,6 +142,21 @@ async function cargarCatalogoLineas(){
 function vendedoresVisibles(){
   if (!CARGUE_LINEAS_ACTIVAS.size) return [];
   return CARGUE_VENDEDORES_DISPONIBLES.filter(v => CARGUE_LINEAS_ACTIVAS.has(cargueLineaPorVendedor[v]));
+}
+
+// Un vendedor sin línea en el catálogo "Cod Camión" no aparece en NINGUNA
+// línea -- sus pedidos quedan invisibles en todo el tablero sin ningún
+// error ni aviso (vendedoresVisibles() los excluye de todas). Este aviso
+// hace visible ese hueco en vez de que se note recién cuando alguien
+// pregunte "¿y los pedidos de tal vendedor?".
+function renderAvisoVendedoresSinLinea(){
+  const badge = document.getElementById('cargue-aviso-sin-linea');
+  if (!badge) return;
+  const sinLinea = CARGUE_VENDEDORES_DISPONIBLES.filter(v => !cargueLineaPorVendedor[v]);
+  if (!sinLinea.length) { badge.style.display = 'none'; return; }
+  badge.style.display = 'flex';
+  badge.textContent = `⚠️ ${sinLinea.length} sin línea`;
+  badge.title = 'No están en el catálogo "Cod Camión" -- sus pedidos no aparecen en ninguna línea:\n' + sinLinea.join(', ');
 }
 
 function renderVendedorChips(){
@@ -259,6 +296,7 @@ async function _actualizarCargueClientesInterno(){
   CARGUE_VENDEDORES_DISPONIBLES = [...new Set(CARGUE_PEDIDOS_TODOS.map(p => p.vendedor))].sort();
   cargueLineaPorVendedor = {};
   CARGUE_PEDIDOS_TODOS.forEach(p => { cargueLineaPorVendedor[p.vendedor] = p.linea; });
+  renderAvisoVendedoresSinLinea();
 
   // Un refresco de datos NO reinicia lo que el usuario ya venía ajustando a
   // mano -- solo se filtra a lo que sigue siendo visible con los datos
