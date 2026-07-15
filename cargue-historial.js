@@ -70,6 +70,19 @@ function esCargueModoHistorico(){
   return !(desde <= hoy && hoy <= hasta);
 }
 
+// Bodega y coordinador pueden armar/editar cargues aunque el rango elegido
+// sea puramente histórico (no incluya HOY) -- por ejemplo, para resolver de
+// una vez los pedidos pendientes de un día atrasado puntual, sin tener que
+// mezclarlos con los de hoy ampliando el rango. Mismo criterio de negocio
+// que ya se usa para "editar histórico" en el resto del proyecto (ver
+// ROLES_EDITAR_HISTORICO en Auth.gs) -- admin queda afuera a propósito,
+// misma decisión ya tomada ahí.
+const ROLES_CARGUE_EDITAR_HISTORICO = ['bodega', 'coordinador'];
+function puedeCargueEditarHistorico(){
+  const s = (typeof getSesion === 'function') ? getSesion() : null;
+  return !!(s && ROLES_CARGUE_EDITAR_HISTORICO.includes(s.rol));
+}
+
 function initFechaRango(){
   const hoy = hoyCargueStr();
   const guardado = cargarFiltrosCargueGuardados();
@@ -277,6 +290,9 @@ async function actualizarCargueClientes(){
 async function _actualizarCargueClientesInterno(){
   const { desde, hasta } = obtenerRangoFechas();
   const historico = esCargueModoHistorico();
+  // Bodega/coordinador ignoran el "solo lectura" del modo histórico -- ver
+  // puedeCargueEditarHistorico().
+  const soloLectura = historico && !puedeCargueEditarHistorico();
 
   // Si el catálogo de líneas quedó vacío (falló en la carga inicial), se
   // reintenta acá -- así el botón Actualizar también "revive" el dropdown.
@@ -315,10 +331,10 @@ async function _actualizarCargueClientesInterno(){
 
   aplicarFiltrosYPintar();
   dibujarAsignacionesGuardadas(asignaciones);
-  activarModoEdicion(!historico);
+  activarModoEdicion(!soloLectura);
 
   const aviso = document.getElementById('cargue-modo-aviso');
-  if (aviso) aviso.style.display = historico ? 'block' : 'none';
+  if (aviso) aviso.style.display = soloLectura ? 'block' : 'none';
 }
 
 // Arma la lista "camiones armados" a partir de las asignaciones crudas del
