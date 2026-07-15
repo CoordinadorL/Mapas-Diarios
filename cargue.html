@@ -68,22 +68,26 @@ button.badge{font-family:inherit}
 #cargue-btn-cancelar-edicion{background:#fbbf24;color:#422006;border:none;border-radius:14px;padding:4px 10px;font-size:.66rem;font-weight:700;cursor:pointer;font-family:inherit}
 
 aside{width:300px;flex-shrink:0;background:#111827;border-left:1px solid #1e293b;padding:10px;overflow-y:auto;display:flex;flex-direction:column;gap:8px}
-aside h3{font-size:.66rem;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:5px;display:flex;justify-content:space-between;flex-shrink:0}
-aside ul{list-style:none;font-size:.72rem;display:flex;flex-direction:column;gap:4px}
-aside ul li{background:#1e293b;padding:5px 8px;border-radius:6px;color:#e2e8f0}
+aside h3{font-size:.62rem;text-transform:uppercase;letter-spacing:.6px;color:#94a3b8;margin-bottom:4px;display:flex;justify-content:space-between;flex-shrink:0}
+aside ul{list-style:none;font-size:.66rem;display:flex;flex-direction:column;gap:3px}
+aside ul li{background:#1e293b;padding:4px 7px;border-radius:6px;color:#e2e8f0}
 aside ul li.vacio{color:#64748b;font-style:italic;background:none;padding:2px 0}
 .aside-fija{flex-shrink:0}
-#cargue-lista-buscar{width:100%;padding:5px 8px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#fff;font-size:.72rem}
-.sel-resumen{display:flex;justify-content:space-between;font-size:.76rem;color:#fff;background:#1d4ed8;padding:6px 10px;border-radius:8px;font-weight:700}
-button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:700;font-size:.7rem;cursor:pointer}
+#cargue-lista-buscar{width:100%;padding:4px 7px;background:#1e293b;border:1px solid #334155;border-radius:6px;color:#fff;font-size:.68rem}
+.sel-resumen{display:flex;justify-content:space-between;font-size:.7rem;color:#fff;background:#1d4ed8;padding:4px 8px;border-radius:8px;font-weight:700}
+button.accion{width:100%;padding:6px;border-radius:8px;border:none;font-weight:700;font-size:.64rem;cursor:pointer}
+.fila-acciones{display:flex;gap:4px}
+.fila-acciones button.accion{width:auto;flex:1;padding:5px 2px;font-size:.6rem;white-space:nowrap}
 #cargue-btn-guardar{background:#16a34a;color:#fff}
 #cargue-btn-nuevo-cargue{background:#0891b2;color:#fff}
 #cargue-btn-limpiar{background:#334155;color:#cbd5e1}
+#cargue-btn-agregar-armado{background:#7c3aed;color:#fff}
+#cargue-sel-camion-agregar{background:#1e293b;color:#fff;border:1px solid #334155;border-radius:6px;font-size:.62rem;padding:2px 4px}
 #cargue-btn-guardar-plantilla{background:#7c3aed;color:#fff;margin-top:5px}
 #cargue-btn-seleccionar-visible{background:#0369a1;color:#fff;flex:1.4}
 
-.modo-dibujo{display:flex;gap:5px}
-.modo-btn{flex:1;padding:6px 4px;border-radius:6px;border:1.5px solid #334155;background:transparent;color:#94a3b8;font-size:.62rem;font-weight:700;cursor:pointer;font-family:inherit}
+.modo-dibujo{display:flex;gap:4px}
+.modo-btn{flex:1;padding:4px 3px;border-radius:6px;border:1.5px solid #334155;background:transparent;color:#94a3b8;font-size:.58rem;font-weight:700;cursor:pointer;font-family:inherit}
 .modo-btn.activo{background:#1d4ed8;border-color:#3b82f6;color:#fff}
 
 .seccion-colapsable summary{cursor:pointer;font-size:.66rem;text-transform:uppercase;color:#94a3b8;letter-spacing:.5px;list-style:none;padding:2px 0}
@@ -98,7 +102,7 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
 #cargue-sel-lista{max-height:110px;overflow-y:auto}
 #cargue-armados{max-height:118px;overflow-y:auto}
 .grupo-vendedor{background:none!important;padding:0!important}
-.grupo-vendedor summary{cursor:pointer;font-weight:700;color:#93c5fd;padding:4px 6px;background:#1e293b;border-radius:6px;list-style:none;font-size:.72rem;display:flex;align-items:center;gap:6px}
+.grupo-vendedor summary{cursor:pointer;font-weight:700;color:#93c5fd;padding:3px 5px;background:#1e293b;border-radius:6px;list-style:none;font-size:.66rem;display:flex;align-items:center;gap:6px}
 .chk-vendedor-todos{flex-shrink:0;cursor:pointer}
 .grupo-vendedor summary::-webkit-details-marker{display:none}
 .grupo-vendedor summary::marker{content:''}
@@ -109,7 +113,7 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
 .chk-cliente input{flex-shrink:0}
 
 .grupo-cargue-header{background:#1e3a5f!important;border:1px solid #2563eb;display:flex;flex-direction:column;gap:5px;padding:6px 8px!important}
-.grupo-cargue-info{font-size:.72rem;color:#bfdbfe}
+.grupo-cargue-info{font-size:.66rem;color:#bfdbfe}
 .grupo-cargue-guardar{display:flex;gap:5px}
 .grupo-cargue-guardar select{flex:1;background:#0f172a;color:#fff;border:1px solid #334155;border-radius:5px;font-size:.68rem;padding:3px;min-width:0}
 .grupo-cargue-guardar .grupo-btn-guardar{background:#16a34a;color:#fff;border:none;border-radius:5px;padding:4px 8px;font-size:.66rem;font-weight:700;cursor:pointer;flex-shrink:0}
@@ -220,16 +224,23 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
   <div id="cargue-panel-guardar" class="aside-fija">
     <div class="sel-resumen"><span id="cargue-sel-count">0</span>&nbsp;facturas &middot; <span id="cargue-sel-total">$0.00</span></div>
 
-    <div class="modo-dibujo" style="margin-top:6px">
+    <div class="modo-dibujo" style="margin-top:4px">
       <button type="button" id="cargue-modo-sumar" class="modo-btn activo" title="El próximo polígono SUMA a la selección">➕ Sumar</button>
       <button type="button" id="cargue-modo-restar" class="modo-btn" title="El próximo polígono QUITA de la selección">➖ Restar</button>
       <button type="button" id="cargue-btn-seleccionar-visible" class="modo-btn" title="Seleccionar todo lo visible en el mapa">🔲 Visible</button>
     </div>
 
     <select id="cargue-sel-camion" style="width:100%;margin-top:6px"></select>
-    <button class="accion" id="cargue-btn-guardar" style="margin-top:5px">💾 Guardar cargue</button>
-    <button class="accion" id="cargue-btn-nuevo-cargue" style="margin-top:5px" title="Congela lo seleccionado como un cargue aparte (con su propio camión) y arranca uno nuevo, sin perder de vista lo ya armado">🆕 Nuevo cargue (otra zona)</button>
-    <button class="accion" id="cargue-btn-limpiar" style="margin-top:5px">✖️ Limpiar selección</button>
+    <div class="fila-acciones" style="margin-top:5px">
+      <button class="accion" id="cargue-btn-guardar" title="Guardar cargue">💾 Guardar</button>
+      <button class="accion" id="cargue-btn-nuevo-cargue" title="Congela lo seleccionado como un cargue aparte (con su propio camión) y arranca uno nuevo, sin perder de vista lo ya armado">🆕 Nueva zona</button>
+      <button class="accion" id="cargue-btn-limpiar" title="Limpiar selección">✖️ Limpiar</button>
+    </div>
+
+    <div class="fila-acciones" id="cargue-fila-agregar-armado" style="margin-top:5px">
+      <select id="cargue-sel-camion-agregar" style="flex:1;min-width:0"></select>
+      <button class="accion" id="cargue-btn-agregar-armado" style="flex:0 0 auto;width:auto;padding:6px 9px" title="Agrega los pedidos seleccionados a un camión que ya armaste hoy, sin tener que editarlo entero">➕ Agregar</button>
+    </div>
 
     <ul id="cargue-sel-lista" style="margin-top:6px"><li class="vacio">Dibuja un polígono, marca clientes de la lista de abajo, o clickeá directo en el mapa.</li></ul>
 

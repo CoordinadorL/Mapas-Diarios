@@ -45,6 +45,8 @@ async function initCarguePanelAsignacion(){
   if (btnCancelarEdicion) btnCancelarEdicion.addEventListener('click', cancelarModoEdicion);
   const btnNuevoCargue = document.getElementById('cargue-btn-nuevo-cargue');
   if (btnNuevoCargue) btnNuevoCargue.addEventListener('click', () => { if (typeof nuevoGrupoCargue === 'function') nuevoGrupoCargue(); });
+  const btnAgregarArmado = document.getElementById('cargue-btn-agregar-armado');
+  if (btnAgregarArmado) btnAgregarArmado.addEventListener('click', agregarSeleccionACamionArmado);
 }
 
 // Llamado por cargue-geocercas.js cada vez que cambia la selección dibujada.
@@ -234,16 +236,20 @@ function actualizarUiModoEdicion(){
   const nombreEl = document.getElementById('cargue-banner-edicion-nombre');
   const btnGuardar = document.getElementById('cargue-btn-guardar');
   const btnNuevoCargue = document.getElementById('cargue-btn-nuevo-cargue');
+  const filaAgregarArmado = document.getElementById('cargue-fila-agregar-armado');
   if (cargueModoEdicion) {
     if (nombreEl) nombreEl.textContent = cargueModoEdicion.camion;
     if (banner) banner.style.display = 'flex';
     if (btnGuardar) btnGuardar.textContent = '💾 Guardar cambios';
-    // Editar es siempre UN cargue -- no tiene sentido distinguir zonas acá.
+    // Editar es siempre UN cargue -- no tiene sentido distinguir zonas ni
+    // agregar a OTRO camión mientras se edita este.
     if (btnNuevoCargue) btnNuevoCargue.style.display = 'none';
+    if (filaAgregarArmado) filaAgregarArmado.style.display = 'none';
   } else {
     if (banner) banner.style.display = 'none';
     if (btnGuardar) btnGuardar.textContent = '💾 Guardar cargue';
     if (btnNuevoCargue) btnNuevoCargue.style.display = '';
+    if (filaAgregarArmado) filaAgregarArmado.style.display = '';
   }
 }
 
@@ -261,8 +267,51 @@ async function eliminarCargueArmado(c){
   if (typeof refrescarSoloAsignaciones === 'function') await refrescarSoloAsignaciones();
 }
 
+// "➕ Agregar" (junto al selector de camiones YA armados): toma la
+// selección actual (el grupo activo, mismo alcance que Guardar cargue) y la
+// suma a un camión que ya se guardó hoy, sin tener que pasar por Editar
+// (que carga el cargue ENTERO en la selección). Mismo patrón de siempre
+// (eliminar viejo + guardar de nuevo con la lista de pedidos combinada) --
+// CARGUE_ASIGNACION no tiene "agregar una fila a un array ya guardado".
+async function agregarSeleccionACamionArmado(){
+  const sel = document.getElementById('cargue-sel-camion-agregar');
+  const idx = sel ? sel.value : '';
+  if (idx === '') { alert('Elegí a qué camión armado agregar la selección.'); return; }
+  const camionExistente = cargueCamionesArmadosHoy[Number(idx)];
+  if (!camionExistente) { alert('Ese camión ya no está en la lista -- actualizá e intentá de nuevo.'); return; }
+  if (!camionExistente.timestamp) { alert('Ese cargue todavía no terminó de guardarse -- esperá unos segundos y reintentá.'); return; }
+
+  const grupoId = cargueGrupoActivo;
+  const items = cargueSeleccionActual.items.filter(it => (it._cargueGrupo || 1) === grupoId);
+  if (!items.length) { alert('No hay pedidos seleccionados para agregar.'); return; }
+
+  const nuevosIds = items.map(it => it.data.pedido);
+  const pedidosCombinados = [...new Set([...camionExistente.pedidos, ...nuevosIds])];
+
+  const resultado = await eliminarCargueAsignacion({ fecha: camionExistente.fecha, timestamp: camionExistente.timestamp, camion: camionExistente.camion });
+  if (!resultado.ok) { alert('No se pudo agregar: ' + (resultado.error || 'error desconocido')); return; }
+
+  // Mismo camión, misma fecha original del cargue (no la de hoy) -- solo
+  // crece la lista de pedidos. El polígono de referencia se descarta (los
+  // nuevos pedidos pueden caer afuera del original), no afecta nada más.
+  guardarCargueAsignacion({ fecha: camionExistente.fecha, camion: camionExistente.camion, pedidos: pedidosCombinados, geojson: null });
+
+  items.forEach(it => setMarcadorSeleccionado(it, false));
+  cargueSeleccionActual.items = cargueSeleccionActual.items.filter(it => (it._cargueGrupo || 1) !== grupoId);
+  if (!cargueSeleccionActual.items.length && typeof _resetGruposCargue === 'function') _resetGruposCargue();
+  if (sel) sel.value = '';
+  notificarCambioSeleccion();
+
+  if (typeof refrescarSoloAsignaciones === 'function') setTimeout(refrescarSoloAsignaciones, 1500);
+}
+
 function renderCamionesArmadosHoy(){
   const cont = document.getElementById('cargue-armados');
+  const selAgregar = document.getElementById('cargue-sel-camion-agregar');
+  if (selAgregar) {
+    selAgregar.innerHTML = '<option value="">— Agregar a camión armado —</option>' +
+      cargueCamionesArmadosHoy.map((c, i) => `<option value="${i}">${c.camion} (${c.pedidos.length})</option>`).join('');
+  }
   if (!cont) return;
   if (!cargueCamionesArmadosHoy.length) { cont.innerHTML = '<li class="vacio">Ningún camión armado todavía.</li>'; return; }
 
