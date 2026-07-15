@@ -36,23 +36,35 @@ function jsonpCargue(qs, ms) {
   });
 }
 
-// Encabezados reales de CARGUE_PEDIDOS: Fecha, Vendedor, Pedido, Cliente,
-// Dirección, Kilos, Litros, Ventas Netas, Ventas Total, Status, longitud_x,
-// latitud_y -- no trae código de vendedor ni de cliente por separado.
-// "Pedido" es el identificador único de fila (se usa para armar/guardar la
-// asignación a camión).
+// CARGUE_PEDIDOS ahora se pega tal cual lo exporta el sistema (columnas de
+// más incluidas: HoraCreacion, Ruta, Cajas, Empresa, Clavecorr, Serie,
+// Nrodoc, Prove -- se ignoran a propósito, ni se leen). Las que sí importan:
+// Fecha, Vendedor, Pedido, Cliente, Direccion, Kilos, Ventas Total,
+// longitud_x, latitud_y.
+//  - Vendedor viene como "F131-HARO JEFFERSON" (código+nombre completo) --
+//    se recorta a los primeros 5 caracteres ("F131-", el código de 4 más el
+//    guion) porque el nombre completo no hace falta en ningún lado del
+//    tablero. extraerCodigoVendedor() (cargue-utils.js) sigue funcionando
+//    igual sobre el valor ya recortado.
+//  - Pedido ahora es el número de documento real (ej. "79 001 VI 98051"),
+//    no el contador 1,2,3... de antes -- sigue siendo el identificador
+//    único de fila puertas adentro (selección, asignación a camión,
+//    archivado diario), pero ya NO se muestra en el resumen: es solo el
+//    número de ingreso al sistema, no un dato de negocio.
+//  - Cliente viene como "Código + Sucursal + Razón social" (mismo código
+//    puede repetirse en más de una sucursal) -- se deja tal cual llega.
+//  - Litros, Ventas Netas y Status ya no se leen: no se usan en ningún
+//    lado más que el resumen, así que se sacan del todo en vez de traerlos
+//    sin usarlos.
 function _mapCarguePedidoRow(row) {
   return {
     fecha: ffCargue(gfCargue(row, 'Fecha', 'fecha')),
-    vendedor: String(gfCargue(row, 'Vendedor', 'vendedor')).trim(),
+    vendedor: String(gfCargue(row, 'Vendedor', 'vendedor')).trim().slice(0, 5),
     pedido: String(gfCargue(row, 'Pedido', 'pedido')).trim(),
     cliente: String(gfCargue(row, 'Cliente', 'cliente')).trim(),
     direccion: String(gfCargue(row, 'Direccion', 'direccion', 'Dirección')).trim(),
     kilos: pnCargue(gfCargue(row, 'Kilos', 'kilos')),
-    litros: pnCargue(gfCargue(row, 'Litros', 'litros')),
-    ventasNetas: pnCargue(gfCargue(row, 'Ventas Netas', 'ventas_netas')),
     ventasTotal: pnCargue(gfCargue(row, 'Ventas Total', 'ventas_total')),
-    status: String(gfCargue(row, 'Status', 'status')).trim(),
     lat: pnCargue(gfCargue(row, 'latitud_y', 'Latitud', 'latitud', 'lat')),
     lng: pnCargue(gfCargue(row, 'longitud_x', 'Longitud', 'longitud', 'lng')),
   };

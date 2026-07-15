@@ -93,19 +93,31 @@ function makeCargueIcon(color, seleccionado, alerta){
   });
 }
 
+// DD-MM-AAAA para mostrar -- d.fecha ya viene normalizada a AAAA-MM-DD
+// desde cargue-api.js (el formato que se usa para filtrar/comparar rangos
+// de fechas en todo el resto del tablero). Esto SOLO cambia cómo se ve acá,
+// no toca el dato real ni el filtro Desde/Hasta.
+function _fechaCargueDisplay(fechaIso){
+  const m = String(fechaIso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : (fechaIso || '—');
+}
+
 // Se muestra en un tooltip al PASAR el mouse (no en un popup al hacer
 // clic) -- el clic quedó reservado 100% para seleccionar/deseleccionar, sin
 // que una ventanita tape el mapa de por medio.
+//
+// "Pedido" (el número de documento real) NO se muestra a propósito -- es
+// solo el número de ingreso al sistema, no un dato útil para armar cargues
+// (ver cargue-api.js). Litros/Ventas Netas/Status tampoco se leen más.
 function buildCarguePopup(d, alerta){
   return `<div style="font-family:system-ui;font-size:12.5px;line-height:1.5;min-width:180px">
     ${alerta ? '<div style="color:#fca5a5;font-weight:700;margin-bottom:4px">⚠️ Posible pedido fuera de ruta</div>' : ''}
     <b>${d.cliente || '(sin nombre)'}</b><br>
-    <span style="color:#94a3b8">Pedido:</span> ${d.pedido}<br>
+    <span style="color:#94a3b8">Fecha:</span> ${_fechaCargueDisplay(d.fecha)}<br>
     <span style="color:#94a3b8">Vendedor:</span> ${d.vendedor}${d.linea ? ' ('+d.linea+')' : ''}<br>
     <span style="color:#94a3b8">Dirección:</span> ${d.direccion || '—'}<br>
     <span style="color:#94a3b8">Ventas Total:</span> $${d.ventasTotal.toFixed(2)}<br>
-    <span style="color:#94a3b8">Kilos / Litros:</span> ${d.kilos} / ${d.litros}<br>
-    ${d.status ? `<span style="color:#94a3b8">Status:</span> ${d.status}` : ''}
+    <span style="color:#94a3b8">Kilos:</span> ${d.kilos}
   </div>`;
 }
 
