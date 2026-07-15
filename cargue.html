@@ -31,7 +31,7 @@ button.badge{font-family:inherit}
 .fecha-inline{display:flex;align-items:center;gap:4px}
 .fecha-inline span{font-size:.56rem;color:#64748b}
 .fecha-inline input[type=date]{background:#1e293b;color:#fff;border:1px solid #334155;border-radius:5px;padding:2px 5px;font-size:.66rem;color-scheme:dark}
-.chips{display:flex;gap:4px;flex-wrap:wrap;max-width:min(560px,45vw);max-height:64px;overflow-y:auto}
+.chips{display:flex;gap:4px;flex-wrap:wrap;max-width:min(760px,58vw);max-height:64px;overflow-y:auto}
 .chips.vacio-hint{color:#64748b;font-size:.64rem;font-style:italic}
 .cargue-chip{display:inline-flex;align-items:center;gap:3px;padding:1px 7px;border-radius:18px;border:1.5px solid #334155;font-size:.6rem;font-weight:700;cursor:pointer;color:#94a3b8;background:transparent;transition:all .15s;user-select:none;white-space:nowrap}
 .cargue-chip:hover{border-color:#3b82f6;color:#93c5fd}
@@ -154,9 +154,12 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
         <div class="fecha-inline"><span>Hasta</span><input type="date" id="cargue-fecha-hasta"></div>
         <button type="button" class="badge" id="cargue-btn-pendientes-atrasados" title="Trae el pedido pendiente más antiguo que exista, sin tener que escribir una fecha vieja a mano">📋 Ver atrasados</button>
       </div>
-      <div class="cargue-dropdown" id="cargue-dropdown-linea">
-        <button type="button" class="cargue-dropdown-btn" id="cargue-dropdown-linea-btn">Elegí una línea ▾</button>
-        <div class="cargue-dropdown-panel" id="cargue-dropdown-linea-panel"></div>
+      <div class="toolbar-grupo">
+        <div class="cargue-dropdown" id="cargue-dropdown-linea">
+          <button type="button" class="cargue-dropdown-btn" id="cargue-dropdown-linea-btn">Elegí una línea ▾</button>
+          <div class="cargue-dropdown-panel" id="cargue-dropdown-linea-panel"></div>
+        </div>
+        <span id="cargue-stat-vivo">🧾 0 facturas · $0.00</span>
       </div>
     </div>
     <div class="toolbar-sep"></div>
@@ -164,7 +167,6 @@ button.accion{width:100%;padding:7px;border-radius:8px;border:none;font-weight:7
       <label>Vendedores <span id="cargue-vendedor-contador" style="text-transform:none;font-weight:400"></span></label>
       <div class="vend-fila">
         <div class="chips" id="cargue-chips-vendedor"></div>
-        <span id="cargue-stat-vivo">🧾 0 facturas · $0.00</span>
       </div>
     </div>
   </div>

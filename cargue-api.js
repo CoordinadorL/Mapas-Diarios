@@ -41,11 +41,11 @@ function jsonpCargue(qs, ms) {
 // Nrodoc, Prove -- se ignoran a propósito, ni se leen). Las que sí importan:
 // Fecha, Vendedor, Pedido, Cliente, Direccion, Kilos, Ventas Total,
 // longitud_x, latitud_y.
-//  - Vendedor viene como "F131-HARO JEFFERSON" (código+nombre completo) --
-//    se recorta a los primeros 5 caracteres ("F131-", el código de 4 más el
-//    guion) porque el nombre completo no hace falta en ningún lado del
-//    tablero. extraerCodigoVendedor() (cargue-utils.js) sigue funcionando
-//    igual sobre el valor ya recortado.
+//  - Vendedor se guarda COMPLETO ("F131-HARO JEFFERSON") -- la leyenda y el
+//    tooltip lo necesitan así. Donde el espacio aprieta (chips de
+//    Vendedores, lista de Clientes) se muestra solo el código con
+//    extraerCodigoVendedor(v) al momento de renderizar, sin tocar el dato
+//    de fondo (cargue-historial.js/cargue-lista-clientes.js).
 //  - Pedido ahora es el número de documento real (ej. "79 001 VI 98051"),
 //    no el contador 1,2,3... de antes -- sigue siendo el identificador
 //    único de fila puertas adentro (selección, asignación a camión,
@@ -59,7 +59,7 @@ function jsonpCargue(qs, ms) {
 function _mapCarguePedidoRow(row) {
   return {
     fecha: ffCargue(gfCargue(row, 'Fecha', 'fecha')),
-    vendedor: String(gfCargue(row, 'Vendedor', 'vendedor')).trim().slice(0, 5),
+    vendedor: String(gfCargue(row, 'Vendedor', 'vendedor')).trim(),
     pedido: String(gfCargue(row, 'Pedido', 'pedido')).trim(),
     cliente: String(gfCargue(row, 'Cliente', 'cliente')).trim(),
     direccion: String(gfCargue(row, 'Direccion', 'direccion', 'Dirección')).trim(),

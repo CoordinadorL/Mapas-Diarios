@@ -51,7 +51,7 @@ function renderizarListaConBusqueda(){
       <details ${filtro || vendedores.length <= 3 ? 'open' : ''}>
         <summary>
           <input type="checkbox" class="chk-vendedor-todos" data-vendedor="${v}" ${todosMarcados ? 'checked' : ''} title="Seleccionar todos los clientes de ${v}">
-          ${v} <span class="contador-grupo">(${porVendedor[v].length}) — $${totalVendedor.toFixed(2)}</span>
+          ${extraerCodigoVendedor(v) || v} <span class="contador-grupo">(${porVendedor[v].length}) — $${totalVendedor.toFixed(2)}</span>
         </summary>
         <ul>
           ${porVendedor[v].map(p => `

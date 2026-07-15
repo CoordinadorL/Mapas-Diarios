@@ -165,7 +165,10 @@ function renderVendedorChips(){
   visibles.forEach(v => {
     const chip = document.createElement('label');
     chip.className = 'cargue-chip' + (CARGUE_VENDEDORES_ACTIVOS.has(v) ? ' sel' : '');
-    chip.innerHTML = `<input type="checkbox"> ${v}`;
+    // Solo el código acá (el chip aprieta espacio) -- v sigue siendo el
+    // vendedor completo por dentro (selección/filtro), solo cambia la
+    // etiqueta visible. La leyenda VEND sí muestra el nombre completo.
+    chip.innerHTML = `<input type="checkbox"> ${extraerCodigoVendedor(v) || v}`;
     chip.addEventListener('click', (e) => {
       e.preventDefault();
       if (CARGUE_VENDEDORES_ACTIVOS.has(v)) CARGUE_VENDEDORES_ACTIVOS.delete(v); else CARGUE_VENDEDORES_ACTIVOS.add(v);
