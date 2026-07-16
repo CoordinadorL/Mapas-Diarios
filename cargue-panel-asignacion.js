@@ -345,6 +345,7 @@ function renderCamionesArmadosHoy(){
       <div class="armado-fila">
         <div>
           <b>${c.camion}</b> — ${c.pedidos.length} pedidos — ${c.kilos.toFixed(1)}kg — $${c.total.toFixed(2)}
+          ${c.usuario ? `<span class="armado-usuario">· ${c.usuario}</span>` : ''}
         </div>
         <div class="armado-acciones">
           <button type="button" class="armado-btn" data-idx="${i}" data-accion="editar" title="Editar: carga estos pedidos en la selección para ajustarlos">✏️</button>

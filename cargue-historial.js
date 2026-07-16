@@ -354,6 +354,7 @@ function computarCamionesArmados(asignaciones){
     const pedidosDelCamion = CARGUE_PEDIDOS_TODOS.filter(p => a.pedidos.includes(p.pedido));
     return {
       camion: a.camion, pedidos: a.pedidos, fecha: a.fecha, timestamp: a.timestamp, geojson: a.geojson,
+      usuario: a.usuario || '',
       kilos: pedidosDelCamion.reduce((s, p) => s + p.kilos, 0),
       total: pedidosDelCamion.reduce((s, p) => s + p.ventasTotal, 0),
       vendedores: [...new Set(pedidosDelCamion.map(p => p.vendedor))].sort(),

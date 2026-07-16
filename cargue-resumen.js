@@ -59,16 +59,66 @@ function renderResumenTabla(){
     </table>`;
 }
 
+// Arma un texto legible (para copiar y pegar en WhatsApp) con el detalle de
+// los pedidos de UN vendedor dentro de un camión.
+function _textoDetalleVendedorCargue(camion, codigoVendedor, pedidos){
+  const total = pedidos.reduce((s, p) => s + p.ventasTotal, 0);
+  const lineas = pedidos.map((p, i) => `${i + 1}. ${p.cliente || '(sin nombre)'} — ${p.direccion || '—'} — $${p.ventasTotal.toFixed(2)} · ${p.kilos.toFixed(1)}kg`);
+  return `CAMIÓN: ${camion}\nVENDEDOR: ${codigoVendedor}\n${pedidos.length} pedido${pedidos.length === 1 ? '' : 's'} — $${total.toFixed(2)}\n\n${lineas.join('\n')}`;
+}
+
+// Ídem pero con TODOS los vendedores de un camión, uno debajo del otro.
+function _textoDetalleCamionCargue(c, porVendedor){
+  const bloques = Object.keys(porVendedor).sort().map(v => {
+    const codigo = (typeof extraerCodigoVendedor === 'function' ? extraerCodigoVendedor(v) : '') || v;
+    return _textoDetalleVendedorCargue(c.camion, codigo, porVendedor[v]);
+  });
+  return `CAMIÓN: ${c.camion} — ${c.pedidos.length} pedido${c.pedidos.length === 1 ? '' : 's'} — $${c.total.toFixed(2)}\n\n${bloques.join('\n\n---\n\n')}`;
+}
+
+// Copia un texto al portapapeles con feedback visual en el botón tocado
+// ("✅ Copiado" un toque y vuelve a su ícono). navigator.clipboard requiere
+// contexto seguro (https) -- si no está disponible (ej. abierto como
+// file:// en vez del link publicado), cae al método viejo (textarea +
+// execCommand); si ni eso funciona, muestra el texto en una alerta para
+// copiarlo a mano en vez de fallar en silencio.
+async function copiarAlPortapapeles(texto, boton){
+  const iconoOriginal = boton ? boton.textContent : '';
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(texto);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = texto;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    if (boton) {
+      boton.textContent = '✅';
+      setTimeout(() => { boton.textContent = iconoOriginal; }, 1500);
+    }
+  } catch (err) {
+    alert('No se pudo copiar automáticamente. Copialo a mano:\n\n' + texto);
+  }
+}
+
 // Desglose de los cargues ya armados (cargueCamionesArmadosHoy, de
-// cargue-historial.js): código de camión, vendedores incluidos, facturas,
-// kilos y monto -- responde a "¿qué llevo ya armado y con qué?" sin tener
-// que ir a buscarlo en la lista chica del panel lateral.
+// cargue-historial.js): código de camión, quién lo armó, vendedores
+// incluidos, facturas, kilos y monto -- responde a "¿qué llevo ya armado y
+// con qué?" sin tener que ir a buscarlo en la lista chica del panel
+// lateral.
 //
 // Cada fila es un <details> desplegable (▸/▾) con el detalle pedido por
-// pedido agrupado por vendedor -- pensado sobre todo para camiones "cajón"
-// como los de fuera de ruta (ej. F140/F141), donde hace falta poder leerle
-// a cada vendedor exactamente qué pedidos suyos quedaron ahí, pero funciona
-// igual para cualquier camión.
+// pedido agrupado por vendedor (cada vendedor a su vez desplegable aparte,
+// contraído por defecto) -- pensado sobre todo para camiones "cajón" como
+// los de fuera de ruta (ej. F140/F141), donde hace falta poder leerle a
+// cada vendedor exactamente qué pedidos suyos quedaron ahí, pero funciona
+// igual para cualquier camión. El botón 📋 (por vendedor y por camión)
+// copia ese detalle listo para pegar y pasarle la info al vendedor.
 function renderResumenCamiones(){
   const cont = document.getElementById('cargue-resumen-camiones');
   if (!cont) return;
@@ -78,11 +128,16 @@ function renderResumenCamiones(){
     return;
   }
 
-  const detalleDeCamionPorVendedor = (c) => {
+  const porVendedorDeCamion = (c) => {
     const porVendedor = {};
     (c.pedidosDetalle || []).forEach(p => {
       (porVendedor[p.vendedor] = porVendedor[p.vendedor] || []).push(p);
     });
+    return porVendedor;
+  };
+
+  const detalleDeCamionPorVendedor = (c, camionIdx) => {
+    const porVendedor = porVendedorDeCamion(c);
     return Object.keys(porVendedor).sort().map(v => {
       const pedidosDelVendedor = porVendedor[v];
       const totalVendedor = pedidosDelVendedor.reduce((s, p) => s + p.ventasTotal, 0);
@@ -92,6 +147,7 @@ function renderResumenCamiones(){
           <span class="rcd-caret"></span>
           <b>${(typeof extraerCodigoVendedor === 'function' ? extraerCodigoVendedor(v) : '') || v}</b>
           <span class="rcd-vendedor-total">${pedidosDelVendedor.length} pedido${pedidosDelVendedor.length === 1 ? '' : 's'} — $${totalVendedor.toFixed(2)}</span>
+          <button type="button" class="rcd-btn-copiar" data-camion-idx="${camionIdx}" data-vendedor="${v}" title="Copiar el detalle de ${v} para pasárselo">📋</button>
         </summary>
         <ul>
           ${pedidosDelVendedor.map(p => `<li>${p.cliente || '(sin nombre)'} — ${p.direccion || '—'} — $${p.ventasTotal.toFixed(2)} · ${p.kilos.toFixed(1)}kg</li>`).join('')}
@@ -103,22 +159,43 @@ function renderResumenCamiones(){
   cont.innerHTML = `
     <div class="resumen-camiones-tabla">
       <div class="rc-fila rc-header">
-        <span></span><span>Camión</span><span>Vendedores</span><span>Facturas</span><span>Kilos</span><span>Monto</span>
+        <span></span><span>Camión</span><span>Vendedores</span><span>Facturas</span><span>Kilos</span><span>Monto</span><span></span>
       </div>
-      ${cargueCamionesArmadosHoy.map(c => `
+      ${cargueCamionesArmadosHoy.map((c, i) => `
         <details class="rc-fila-detalle">
           <summary class="rc-fila">
             <span class="rc-caret"></span>
-            <span>${c.camion}</span>
+            <span>${c.camion}${c.usuario ? `<br><small class="rc-usuario">armado por ${c.usuario}</small>` : ''}</span>
             <span class="rc-vend">${(c.vendedores || []).join(', ')}</span>
             <span class="rc-num">${c.pedidos.length}</span>
             <span class="rc-num">${(c.kilos || 0).toFixed(2)}</span>
             <span class="rc-num rc-monto">$${c.total.toFixed(2)}</span>
+            <button type="button" class="rc-btn-copiar" data-camion-idx="${i}" title="Copiar el detalle completo de este camión">📋</button>
           </summary>
-          <div class="rc-detalle">${detalleDeCamionPorVendedor(c)}</div>
+          <div class="rc-detalle">${detalleDeCamionPorVendedor(c, i)}</div>
         </details>
       `).join('')}
     </div>`;
+
+  cont.querySelectorAll('.rcd-btn-copiar').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const c = cargueCamionesArmadosHoy[Number(btn.dataset.camionIdx)];
+      if (!c) return;
+      const v = btn.dataset.vendedor;
+      const pedidosDelVendedor = (c.pedidosDetalle || []).filter(p => p.vendedor === v);
+      const codigo = (typeof extraerCodigoVendedor === 'function' ? extraerCodigoVendedor(v) : '') || v;
+      copiarAlPortapapeles(_textoDetalleVendedorCargue(c.camion, codigo, pedidosDelVendedor), btn);
+    });
+  });
+  cont.querySelectorAll('.rc-btn-copiar').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const c = cargueCamionesArmadosHoy[Number(btn.dataset.camionIdx)];
+      if (!c) return;
+      copiarAlPortapapeles(_textoDetalleCamionCargue(c, porVendedorDeCamion(c)), btn);
+    });
+  });
 }
 
 function abrirResumenCargue(){

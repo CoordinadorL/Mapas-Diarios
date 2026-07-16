@@ -124,6 +124,7 @@ button.accion{width:100%;padding:6px;border-radius:8px;border:none;font-weight:7
 .armado-acciones{display:flex;gap:2px;flex-shrink:0}
 .armado-btn{background:none;border:none;cursor:pointer;font-size:.8rem;padding:2px 5px;border-radius:5px;line-height:1}
 .armado-btn:hover{background:#334155}
+.armado-usuario{color:#64748b;font-weight:400;font-size:.62rem}
 
 #cargue-modal-resumen{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;align-items:center;justify-content:center}
 #cargue-modal-resumen .caja{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:1080px;width:94%;max-height:82vh;overflow:auto}
@@ -137,11 +138,15 @@ button.accion{width:100%;padding:6px;border-radius:8px;border:none;font-weight:7
    pedido por pedido agrupado por vendedor, ej. para camiones "fuera de
    ruta" pero funciona igual para cualquier camión. */
 .resumen-camiones-tabla{display:flex;flex-direction:column;gap:1px}
-.rc-fila{display:grid;grid-template-columns:14px 1.3fr 1.6fr .7fr .7fr .9fr;gap:6px;align-items:center;padding:5px 6px;font-size:.75rem}
+.rc-fila{display:grid;grid-template-columns:14px 1.3fr 1.6fr .7fr .7fr .9fr 22px;gap:6px;align-items:center;padding:5px 6px;font-size:.75rem}
 .rc-header{color:#94a3b8;border-bottom:1px solid #334155;font-size:.65rem;text-transform:uppercase;letter-spacing:.4px}
 .rc-num{text-align:right}
 .rc-monto{font-weight:700;color:#fff}
 .rc-vend{color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rc-usuario{color:#64748b;font-weight:400}
+.rc-btn-copiar,.rcd-btn-copiar{background:none;border:none;cursor:pointer;color:#94a3b8;font-size:.68rem;padding:2px 4px;border-radius:4px;line-height:1;flex-shrink:0}
+.rc-btn-copiar:hover,.rcd-btn-copiar:hover{background:#334155;color:#fff}
+.rcd-btn-copiar{margin-left:auto}
 .rc-fila-detalle{border-bottom:1px solid #1e293b}
 .rc-fila-detalle summary{list-style:none;cursor:pointer}
 .rc-fila-detalle summary::-webkit-details-marker{display:none}
