@@ -87,13 +87,16 @@ function renderResumenCamiones(){
       const pedidosDelVendedor = porVendedor[v];
       const totalVendedor = pedidosDelVendedor.reduce((s, p) => s + p.ventasTotal, 0);
       return `
-      <div class="rcd-vendedor">
-        <b>${(typeof extraerCodigoVendedor === 'function' ? extraerCodigoVendedor(v) : '') || v}</b>
-        <span class="rcd-vendedor-total">${pedidosDelVendedor.length} pedido${pedidosDelVendedor.length === 1 ? '' : 's'} — $${totalVendedor.toFixed(2)}</span>
+      <details class="rcd-vendedor">
+        <summary>
+          <span class="rcd-caret"></span>
+          <b>${(typeof extraerCodigoVendedor === 'function' ? extraerCodigoVendedor(v) : '') || v}</b>
+          <span class="rcd-vendedor-total">${pedidosDelVendedor.length} pedido${pedidosDelVendedor.length === 1 ? '' : 's'} — $${totalVendedor.toFixed(2)}</span>
+        </summary>
         <ul>
           ${pedidosDelVendedor.map(p => `<li>${p.cliente || '(sin nombre)'} — ${p.direccion || '—'} — $${p.ventasTotal.toFixed(2)} · ${p.kilos.toFixed(1)}kg</li>`).join('')}
         </ul>
-      </div>`;
+      </details>`;
     }).join('');
   };
 
