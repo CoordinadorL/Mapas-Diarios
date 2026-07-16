@@ -83,13 +83,18 @@ function renderResumenCamiones(){
     (c.pedidosDetalle || []).forEach(p => {
       (porVendedor[p.vendedor] = porVendedor[p.vendedor] || []).push(p);
     });
-    return Object.keys(porVendedor).sort().map(v => `
+    return Object.keys(porVendedor).sort().map(v => {
+      const pedidosDelVendedor = porVendedor[v];
+      const totalVendedor = pedidosDelVendedor.reduce((s, p) => s + p.ventasTotal, 0);
+      return `
       <div class="rcd-vendedor">
         <b>${(typeof extraerCodigoVendedor === 'function' ? extraerCodigoVendedor(v) : '') || v}</b>
+        <span class="rcd-vendedor-total">${pedidosDelVendedor.length} pedido${pedidosDelVendedor.length === 1 ? '' : 's'} — $${totalVendedor.toFixed(2)}</span>
         <ul>
-          ${porVendedor[v].map(p => `<li>${p.cliente || '(sin nombre)'} — ${p.direccion || '—'} — $${p.ventasTotal.toFixed(2)} · ${p.kilos.toFixed(1)}kg</li>`).join('')}
+          ${pedidosDelVendedor.map(p => `<li>${p.cliente || '(sin nombre)'} — ${p.direccion || '—'} — $${p.ventasTotal.toFixed(2)} · ${p.kilos.toFixed(1)}kg</li>`).join('')}
         </ul>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   };
 
   cont.innerHTML = `
