@@ -127,19 +127,30 @@ button.accion{width:100%;padding:6px;border-radius:8px;border:none;font-weight:7
 .armado-usuario{color:#64748b;font-weight:400;font-size:.62rem}
 
 #cargue-modal-resumen{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:2000;align-items:center;justify-content:center}
-#cargue-modal-resumen .caja{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:1080px;width:94%;max-height:82vh;overflow:auto}
+#cargue-modal-resumen .caja{background:#111827;border:1px solid #334155;border-radius:12px;padding:16px;max-width:1080px;width:94%;max-height:82vh;overflow:hidden;display:flex;flex-direction:column}
 #cargue-btn-cerrar-resumen{background:#334155;color:#fff;border:none;border-radius:6px;padding:5px 12px;cursor:pointer;font-size:.72rem;font-weight:700}
-.cargue-resumen-cols{display:flex;gap:18px;flex-wrap:wrap}
-.cargue-resumen-cols>div{flex:1;min-width:280px}
+/* Cada columna scrollea por su cuenta (h4 fijo arriba, la lista de abajo con
+   su propia barra) -- antes todo el .caja compartía un solo scroll, así que
+   bajar en "Cargues armados" para ver los últimos hacía perder de vista
+   "Pedidos x Vendedor". */
+/* Sin flex-wrap acá a propósito: con wrap, el tamaño de la línea se calcula
+   del contenido ANTES de estirar, así que si el contenido es más alto que
+   el .caja, align-items:stretch no lo achica y las columnas se desbordan en
+   vez de quedar cada una con su propio scroll. Sin wrap, el contenedor pasa
+   una altura definida a los hijos y el stretch sí funciona. En mobile se
+   apilan con flex-direction:column (ver media query), no con wrap. */
+.cargue-resumen-cols{display:flex;gap:18px;flex:1;min-height:0}
+.cargue-resumen-cols>div{flex:1;min-width:280px;display:flex;flex-direction:column;min-height:0}
 .cargue-resumen-cols>div:last-child{flex:1.4;min-width:340px}
-.cargue-resumen-cols h4{font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:6px}
+.cargue-resumen-cols h4{font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;color:#94a3b8;margin-bottom:6px;flex-shrink:0}
+#cargue-resumen-tabla,#cargue-resumen-camiones{flex:1;min-height:0;overflow-y:auto}
 
 /* Tabla de camiones armados con filas desplegables (▸/▾) -- ver detalle
    pedido por pedido agrupado por vendedor, ej. para camiones "fuera de
    ruta" pero funciona igual para cualquier camión. */
 .resumen-camiones-tabla{display:flex;flex-direction:column;gap:1px}
 .rc-fila{display:grid;grid-template-columns:14px 1.3fr 1.6fr .7fr .7fr .9fr 22px;gap:6px;align-items:center;padding:5px 6px;font-size:.75rem}
-.rc-header{color:#94a3b8;border-bottom:1px solid #334155;font-size:.65rem;text-transform:uppercase;letter-spacing:.4px}
+.rc-header{color:#94a3b8;border-bottom:1px solid #334155;font-size:.65rem;text-transform:uppercase;letter-spacing:.4px;position:sticky;top:0;background:#111827;z-index:1}
 .rc-num{text-align:right}
 .rc-monto{font-weight:700;color:#fff}
 .rc-vend{color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -170,6 +181,8 @@ button.accion{width:100%;padding:6px;border-radius:8px;border:none;font-weight:7
   body{flex-direction:column}
   .main{flex-direction:column}
   aside{width:100%;max-height:38vh;border-left:none;border-top:1px solid #1e293b}
+  .cargue-resumen-cols{flex-direction:column}
+  .cargue-resumen-cols>div{flex:none;max-height:34vh}
 }
 </style>
 </head>
@@ -182,6 +195,7 @@ button.accion{width:100%;padding:6px;border-radius:8px;border:none;font-weight:7
       <button class="badge" id="cargue-btn-actualizar" title="Volver a consultar el Sheet">🔄 Actualizar</button>
       <button class="badge" id="cargue-btn-resumen-vendedores" title="Ver reporte de pedidos por vendedor">📊 Ver resumen</button>
       <a class="badge" href="resumen.html" title="Volver al resumen">📈 Resumen rutas</a>
+      <a class="badge" href="historial-cargues.html" title="Historial de cargues armados día por día">🗓️ Historial</a>
       <a class="badge" href="mapa_live_F150.html" title="Volver al mapa de entrega">🗺️ Mapa de entrega</a>
       <div class="badge" onclick="logout()" title="Cerrar sesión">👤 <span id="user-name">—</span> · <span id="user-rol">—</span> ⏻</div>
     </div>
@@ -278,7 +292,7 @@ button.accion{width:100%;padding:6px;border-radius:8px;border:none;font-weight:7
 
 <div id="cargue-modal-resumen">
   <div class="caja">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-shrink:0">
       <h3 style="font-size:.85rem;color:#f1f5f9;text-transform:none">📊 Resumen del cargue</h3>
       <button id="cargue-btn-cerrar-resumen">✕ Cerrar</button>
     </div>

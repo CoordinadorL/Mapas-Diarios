@@ -349,18 +349,31 @@ async function _actualizarCargueClientesInterno(){
 // backend, cruzando con CARGUE_PEDIDOS_TODOS para sacar kilos/vendedores.
 // Separado de _actualizarCargueClientesInterno para poder reusarlo en
 // refrescarSoloAsignaciones() sin tener que volver a pedir los pedidos.
+//
+// El cruce en vivo se queda corto en cuanto el archivado diario
+// (CargueArchivado.gs) mueve los pedidos RESUELTOS de un cargue a el
+// histórico anual -- pasa un solo día después de armarlo, así que hasta un
+// cargue "de hace 2 días" puede no encontrar ninguno de sus pedidos acá. En
+// ese caso (cruce incompleto) se usan los totales que quedaron CACHEADOS en
+// la propia fila de CARGUE_ASIGNACION al momento de guardar (columnas
+// Kilos/Monto/Vendedores, ver CargueAsignacion.gs) en vez de mostrar 0 --
+// el detalle pedido por pedido (pedidosDetalle) sí se pierde en ese caso: no
+// hay forma de reconstruirlo sin ir al histórico anual (ver
+// historial-cargues.html para el reporte que si contempla eso).
 function computarCamionesArmados(asignaciones){
   return asignaciones.map(a => {
     const pedidosDelCamion = CARGUE_PEDIDOS_TODOS.filter(p => a.pedidos.includes(p.pedido));
+    const detalleCompleto = pedidosDelCamion.length === a.pedidos.length;
     return {
       camion: a.camion, pedidos: a.pedidos, fecha: a.fecha, timestamp: a.timestamp, geojson: a.geojson,
       usuario: a.usuario || '',
-      kilos: pedidosDelCamion.reduce((s, p) => s + p.kilos, 0),
-      total: pedidosDelCamion.reduce((s, p) => s + p.ventasTotal, 0),
-      vendedores: [...new Set(pedidosDelCamion.map(p => p.vendedor))].sort(),
+      kilos: detalleCompleto ? pedidosDelCamion.reduce((s, p) => s + p.kilos, 0) : (a.kilos || 0),
+      total: detalleCompleto ? pedidosDelCamion.reduce((s, p) => s + p.ventasTotal, 0) : (a.monto || 0),
+      vendedores: detalleCompleto ? [...new Set(pedidosDelCamion.map(p => p.vendedor))].sort() : (a.vendedores || []),
       // Objetos completos (cliente, dirección, monto...), no solo los IDs --
       // para que el resumen (cargue-resumen.js) pueda desplegar el detalle
-      // pedido por pedido de cualquier camión sin tener que refiltrar.
+      // pedido por pedido de cualquier camión sin tener que refiltrar. Queda
+      // vacío si ya se archivó (ver comentario arriba).
       pedidosDetalle: pedidosDelCamion,
     };
   });

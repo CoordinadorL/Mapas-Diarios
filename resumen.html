@@ -75,6 +75,7 @@ tr:hover td{background:#16213a}
     <p id="sub-info">Cargando...</p>
   </div>
   <a class="badge" id="btn-cargue" href="cargue.html" style="display:none;text-decoration:none;background:#7c2d12;border-color:#f97316;color:#fed7aa" title="Mapa de cargue (validar pedidos puntillados)">📍 GENERAR CARGUES</a>
+  <a class="badge" id="btn-historial-cargues" href="historial-cargues.html" style="display:none;text-decoration:none" title="Historial de cargues armados día por día">🗓️ Historial de cargues</a>
   <div class="badge" onclick="logout()" title="Cerrar sesión">👤 <span id="user-name">—</span> · <span id="user-rol">—</span> ⏻</div>
 </div>
 
@@ -234,6 +235,7 @@ document.addEventListener('DOMContentLoaded',()=>{
     document.getElementById('rango-wrap').style.display='block';
     document.getElementById('titulo-detalle-dia').style.display='block';
     document.getElementById('btn-cargue').style.display='flex';
+    document.getElementById('btn-historial-cargues').style.display='flex';
   }
 });
 

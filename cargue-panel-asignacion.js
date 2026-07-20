@@ -30,6 +30,19 @@ let CARGUE_CAMIONES = [];          // catálogo cacheado {codigo, camion}
 let cargueCamionesArmadosHoy = []; // [{camion, pedidos, fecha, timestamp, geojson, kilos, total, vendedores}]
 let cargueModoEdicion = null;      // null = normal; si no, el cargue que se está reemplazando
 
+// Totales de un grupo de items seleccionados (kilos, monto, vendedores) --
+// se calculan acá, al momento de guardar, para cachearlos en
+// CARGUE_ASIGNACION (ver guardarCargueAsignacion) y que historial-cargues.html
+// no dependa de recruzar contra CARGUE_PEDIDOS una vez que el archivado
+// diario ya movió esos pedidos al histórico anual.
+function _totalesDeItemsCargue(items){
+  return {
+    kilos: items.reduce((s, it) => s + (it.data.kilos || 0), 0),
+    monto: items.reduce((s, it) => s + (it.data.ventasTotal || 0), 0),
+    vendedores: [...new Set(items.map(it => it.data.vendedor))].sort(),
+  };
+}
+
 async function initCarguePanelAsignacion(){
   CARGUE_CAMIONES = await fetchCargueCamiones();
   const sel = document.getElementById('cargue-sel-camion');
@@ -136,6 +149,7 @@ async function guardarSeleccionActual(){
   const camionLabel = sel.options[sel.selectedIndex].textContent;
   const editando = cargueModoEdicion; // guardar referencia: guardarSeleccionActual limpia el modo antes de terminar
   const geojson = (typeof cargueGrupoPoligonos !== 'undefined' ? cargueGrupoPoligonos[grupoId] : null) || cargueSeleccionActual.poligono;
+  const { kilos, monto, vendedores } = _totalesDeItemsCargue(items);
 
   // Guardar PRIMERO, eliminar el viejo (si estaba editando) DESPUÉS -- y
   // solo si el guardado nuevo de verdad funcionó. Antes esto era al revés
@@ -143,7 +157,7 @@ async function guardarSeleccionActual(){
   // guardado fallaba en silencio después de haber tocado el viejo, se
   // perdían pedidos sin ningún aviso. Ahora si el guardado falla, no se
   // toca nada más -- la selección queda intacta para reintentar.
-  const resultadoGuardar = await guardarCargueAsignacion({ fecha, camion: camionLabel, pedidos, geojson });
+  const resultadoGuardar = await guardarCargueAsignacion({ fecha, camion: camionLabel, pedidos, geojson, kilos, monto, vendedores });
   if (!resultadoGuardar.ok) {
     alert('No se pudo guardar el cargue: ' + (resultadoGuardar.error || 'error desconocido') + '\n\nNo se tocó nada más -- podés reintentar.');
     return;
@@ -188,8 +202,9 @@ async function guardarGrupoCargue(grupoId, selectEl){
   const pedidos = items.map(it => it.data.pedido);
   const camionLabel = selectEl.options[selectEl.selectedIndex].textContent;
   const geojson = (typeof cargueGrupoPoligonos !== 'undefined') ? (cargueGrupoPoligonos[grupoId] || null) : null;
+  const { kilos, monto, vendedores } = _totalesDeItemsCargue(items);
 
-  const resultadoGuardar = await guardarCargueAsignacion({ fecha, camion: camionLabel, pedidos, geojson });
+  const resultadoGuardar = await guardarCargueAsignacion({ fecha, camion: camionLabel, pedidos, geojson, kilos, monto, vendedores });
   if (!resultadoGuardar.ok) {
     alert('No se pudo guardar este cargue: ' + (resultadoGuardar.error || 'error desconocido') + '\n\nNo se tocó nada más -- podés reintentar.');
     return;
@@ -277,6 +292,14 @@ async function eliminarCargueArmado(c){
   const resultado = await eliminarCargueAsignacion({ fecha: c.fecha, timestamp: c.timestamp, camion: c.camion });
   if (!resultado.ok) { alert('No se pudo eliminar: ' + (resultado.error || 'error desconocido')); return; }
   if (typeof refrescarSoloAsignaciones === 'function') await refrescarSoloAsignaciones();
+
+  // Algunos de estos pedidos pueden haber estado ya ARCHIVADOS (ver
+  // _restaurarPedidosArchivadosSiHaceFalta en el backend) -- si el backend
+  // los recuperó, avisar: sin esto, quedaba invisible que ahora sí van a
+  // aparecer de nuevo en el mapa para poder armarlos en otro cargue.
+  if (resultado.restaurados > 0) {
+    alert(`Cargue eliminado. ${resultado.restaurados} pedido${resultado.restaurados === 1 ? '' : 's'} que ya se había${resultado.restaurados === 1 ? '' : 'n'} archivado volvió${resultado.restaurados === 1 ? '' : 'n'} a estar disponible${resultado.restaurados === 1 ? '' : 's'} para armar un cargue.`);
+  }
 }
 
 // "➕ Agregar" (junto al selector de camiones YA armados): toma la
@@ -307,10 +330,18 @@ async function agregarSeleccionACamionArmado(){
   const nuevosIds = items.map(it => it.data.pedido);
   const pedidosCombinados = [...new Set([...camionExistente.pedidos, ...nuevosIds])];
 
+  // Totales combinados: los del cargue existente (ya calculados por
+  // computarCamionesArmados, cruzando contra CARGUE_PEDIDOS_TODOS) más los
+  // de la nueva selección que se está agregando.
+  const nuevosTotales = _totalesDeItemsCargue(items);
+  const kilos = (camionExistente.kilos || 0) + nuevosTotales.kilos;
+  const monto = (camionExistente.total || 0) + nuevosTotales.monto;
+  const vendedores = [...new Set([...(camionExistente.vendedores || []), ...nuevosTotales.vendedores])].sort();
+
   // Mismo camión, misma fecha original del cargue (no la de hoy) -- solo
   // crece la lista de pedidos. El polígono de referencia se descarta (los
   // nuevos pedidos pueden caer afuera del original), no afecta nada más.
-  const resultadoGuardar = await guardarCargueAsignacion({ fecha: camionExistente.fecha, camion: camionExistente.camion, pedidos: pedidosCombinados, geojson: null });
+  const resultadoGuardar = await guardarCargueAsignacion({ fecha: camionExistente.fecha, camion: camionExistente.camion, pedidos: pedidosCombinados, geojson: null, kilos, monto, vendedores });
   if (!resultadoGuardar.ok) {
     alert('No se pudo agregar: ' + (resultadoGuardar.error || 'error desconocido') + '\n\nEl camión armado sigue igual que antes -- podés reintentar.');
     return;

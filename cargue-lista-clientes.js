@@ -48,7 +48,7 @@ function renderizarListaConBusqueda(){
     const todosMarcados = porVendedor[v].every(p => estaSeleccionado(p.pedido));
     return `
     <li class="grupo-vendedor">
-      <details ${filtro || vendedores.length <= 3 ? 'open' : ''}>
+      <details ${filtro ? 'open' : ''}>
         <summary>
           <input type="checkbox" class="chk-vendedor-todos" data-vendedor="${v}" ${todosMarcados ? 'checked' : ''} title="Seleccionar todos los clientes de ${v}">
           ${extraerCodigoVendedor(v) || v} <span class="contador-grupo">(${porVendedor[v].length}) — $${totalVendedor.toFixed(2)}</span>
@@ -58,7 +58,7 @@ function renderizarListaConBusqueda(){
             <li>
               <label class="chk-cliente">
                 <input type="checkbox" data-pedido="${p.pedido}" ${estaSeleccionado(p.pedido) ? 'checked' : ''}>
-                <span>${p.cliente} — $${p.ventasTotal.toFixed(2)}</span>
+                <span>${p.cliente} — <b>$${p.ventasTotal.toFixed(2)}</b></span>
               </label>
             </li>`).join('')}
         </ul>

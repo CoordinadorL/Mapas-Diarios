@@ -41,11 +41,13 @@ function jsonpCargue(qs, ms) {
 // Nrodoc, Prove -- se ignoran a propósito, ni se leen). Las que sí importan:
 // Fecha, Vendedor, Pedido, Cliente, Direccion, Kilos, Ventas Total,
 // longitud_x, latitud_y.
-//  - Vendedor se guarda COMPLETO ("F131-HARO JEFFERSON") -- la leyenda y el
-//    tooltip lo necesitan así. Donde el espacio aprieta (chips de
-//    Vendedores, lista de Clientes) se muestra solo el código con
+//  - Vendedor se guarda COMPLETO ("F131-HARO JEFFERSON") -- el tooltip de
+//    cada punto lo necesita así (buildCarguePopup). En todo lo demás donde
+//    el espacio aprieta (chips de Vendedores, lista de Clientes, leyenda del
+//    mapa, columna Vendedores del resumen) se muestra solo el código con
 //    extraerCodigoVendedor(v) al momento de renderizar, sin tocar el dato
-//    de fondo (cargue-historial.js/cargue-lista-clientes.js).
+//    de fondo (cargue-historial.js/cargue-lista-clientes.js/cargue-render.js
+//    /cargue-resumen.js).
 //  - Pedido ahora es el número de documento real (ej. "79 001 VI 98051"),
 //    no el contador 1,2,3... de antes -- sigue siendo el identificador
 //    único de fila puertas adentro (selección, asignación a camión,
@@ -114,10 +116,16 @@ async function fetchCargueLineas() {
 }
 
 function _mapCargueAsignacionRow(row) {
-  let pedidos = [], geojson = null;
+  let pedidos = [], geojson = null, vendedores = [];
   try { pedidos = JSON.parse(row.Pedidos || '[]'); } catch (e) {}
   try { geojson = JSON.parse(row.GeoJSON || 'null'); } catch (e) {}
-  return { fecha: row.Fecha, camion: row.Camion, pedidos, geojson, usuario: row.Usuario, timestamp: row.Timestamp };
+  try { vendedores = JSON.parse(row.Vendedores || '[]'); } catch (e) {}
+  return {
+    fecha: row.Fecha, camion: row.Camion, pedidos, geojson, usuario: row.Usuario, timestamp: row.Timestamp,
+    // Kilos/Monto/Vendedores: columnas agregadas después -- filas viejas no
+    // las tienen, de ahí los valores por defecto (0 / []) en vez de undefined.
+    kilos: Number(row.Kilos) || 0, monto: Number(row.Monto) || 0, vendedores,
+  };
 }
 // Asignaciones (camiones) ya guardadas para un rango de fechas, con sus geocercas.
 async function fetchCargueAsignacionesRango(desde, hasta) {
@@ -150,16 +158,21 @@ async function eliminarCargueAsignacion({ fecha, timestamp, camion }) {
 // agregarSeleccionACamionArmado en cargue-panel-asignacion.js). Devuelve
 // {ok, error} de verdad, mismo contrato que eliminarCargueAsignacion.
 //
-// pedidos/geojson van pre-serializados con JSON.stringify() porque viajan
-// en la URL, no en un body -- el backend (tipo=cargue_asignacion_guardar)
-// los acepta igual vengan como string (este caso) o como array/objeto ya
-// deserializado.
-async function guardarCargueAsignacion({ fecha, camion, pedidos, geojson }) {
+// pedidos/geojson/vendedores van pre-serializados con JSON.stringify()
+// porque viajan en la URL, no en un body -- el backend
+// (tipo=cargue_asignacion_guardar) los acepta igual vengan como string (este
+// caso) o como array/objeto ya deserializado. kilos/monto se calculan en el
+// llamador (cargue-panel-asignacion.js) a partir de los pedidos ya en
+// memoria y se guardan tal cual, como caché para historial-cargues.html.
+async function guardarCargueAsignacion({ fecha, camion, pedidos, geojson, kilos, monto, vendedores }) {
   const qs = 'tipo=cargue_asignacion_guardar'
     + '&fecha=' + encodeURIComponent(fecha || '')
     + '&camion=' + encodeURIComponent(camion || '')
     + '&pedidos=' + encodeURIComponent(JSON.stringify(pedidos || []))
-    + '&geojson=' + encodeURIComponent(JSON.stringify(geojson || null));
+    + '&geojson=' + encodeURIComponent(JSON.stringify(geojson || null))
+    + '&kilos=' + encodeURIComponent(kilos || 0)
+    + '&monto=' + encodeURIComponent(monto || 0)
+    + '&vendedores=' + encodeURIComponent(JSON.stringify(vendedores || []));
 
   // Salvavidas: una URL demasiado larga (cargue con muchísimos pedidos)
   // puede comportarse de formas raras según el navegador/servidor -- mejor

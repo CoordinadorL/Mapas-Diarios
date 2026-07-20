@@ -37,10 +37,10 @@ function renderResumenTabla(){
   cont.innerHTML = `
     <table style="width:100%;max-width:420px;border-collapse:collapse;font-size:.75rem">
       <thead><tr style="text-align:left;color:#94a3b8;border-bottom:1px solid #334155">
-        <th style="padding:5px 6px">Vendedor</th>
-        <th style="padding:5px 6px;text-align:right">Pedidos</th>
-        <th style="padding:5px 6px;text-align:right">Kilos</th>
-        <th style="padding:5px 6px;text-align:right">Total</th>
+        <th style="padding:5px 6px;position:sticky;top:0;background:#111827">Vendedor</th>
+        <th style="padding:5px 6px;text-align:right;position:sticky;top:0;background:#111827">Pedidos</th>
+        <th style="padding:5px 6px;text-align:right;position:sticky;top:0;background:#111827">Kilos</th>
+        <th style="padding:5px 6px;text-align:right;position:sticky;top:0;background:#111827">Total</th>
       </tr></thead>
       <tbody>
         ${filas.map(f => `<tr style="border-bottom:1px solid #1e293b">
@@ -138,6 +138,14 @@ function renderResumenCamiones(){
 
   const detalleDeCamionPorVendedor = (c, camionIdx) => {
     const porVendedor = porVendedorDeCamion(c);
+    // Sin pedidosDetalle pero CON pedidos -- ya se archivaron (ver
+    // computarCamionesArmados en cargue-historial.js): no hay forma de
+    // reconstruir el detalle pedido por pedido sin ir al histórico anual,
+    // así que se avisa en vez de dejar el desplegable vacío como si no
+    // hubiera nada que ver.
+    if (!Object.keys(porVendedor).length && (c.pedidos || []).length) {
+      return '<p style="color:#64748b;font-size:.75rem;padding:4px 0">Este cargue ya se archivó (los pedidos pasaron al histórico anual) — no hay detalle pedido por pedido acá. Los totales de arriba sí son los reales, guardados al armar el cargue.</p>';
+    }
     return Object.keys(porVendedor).sort().map(v => {
       const pedidosDelVendedor = porVendedor[v];
       const totalVendedor = pedidosDelVendedor.reduce((s, p) => s + p.ventasTotal, 0);
@@ -166,7 +174,7 @@ function renderResumenCamiones(){
           <summary class="rc-fila">
             <span class="rc-caret"></span>
             <span>${c.camion}${c.usuario ? `<br><small class="rc-usuario">armado por ${c.usuario}</small>` : ''}</span>
-            <span class="rc-vend">${(c.vendedores || []).join(', ')}</span>
+            <span class="rc-vend">${(c.vendedores || []).map(v => (typeof extraerCodigoVendedor === 'function' ? extraerCodigoVendedor(v) : '') || v).join(', ')}</span>
             <span class="rc-num">${c.pedidos.length}</span>
             <span class="rc-num">${(c.kilos || 0).toFixed(2)}</span>
             <span class="rc-num rc-monto">$${c.total.toFixed(2)}</span>

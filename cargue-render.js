@@ -181,9 +181,15 @@ function alternarCargueFueraDeRuta(){
 // llama cargue-historial.js con vendedoresVisibles(), el catálogo completo
 // de la línea activa, para que la leyenda no cambie según qué vendedores
 // estén tildados ni qué pedidos haya dibujados en este instante.
+//
+// Muestra solo el CÓDIGO (extraerCodigoVendedor), no el nombre completo --
+// con muchos vendedores activos a la vez el nombre completo hacía la leyenda
+// demasiado ancha/larga para leerla de un vistazo. El tooltip de cada punto
+// (buildCarguePopup) sigue mostrando el nombre completo -- ahí sí hay
+// espacio y contexto de un solo cliente a la vez.
 function buildCargueLegend(vendedores){
   const cont = document.getElementById('cargue-legend-items');
   if (!cont) return;
   const vs = [...new Set(vendedores)].sort();
-  cont.innerHTML = vs.map(v => `<div class="li"><div class="ld" style="background:${colorParaVendedorCargue(v)}"></div>${v}</div>`).join('');
+  cont.innerHTML = vs.map(v => `<div class="li"><div class="ld" style="background:${colorParaVendedorCargue(v)}"></div>${extraerCodigoVendedor(v) || v}</div>`).join('');
 }
