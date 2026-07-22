@@ -26,7 +26,7 @@ const CARGUE_PALETTE = ['#4ade80','#60a5fa','#c084fc','#34d399','#f472b6','#a78b
 let cargueMap = null;
 let cargueMarkersLayer = null;
 let CARGUE_DATA = [];        // pedidos del día actualmente pintados
-let CARGUE_MARKERS = [];     // [{data, marker, color, atipico}] -- para que geocercas.js sepa qué hay bajo cada punto
+let CARGUE_MARKERS = [];     // [{data, marker, color, atipico, codigo}] -- para que geocercas.js sepa qué hay bajo cada punto
 let cargueMostrarFueraDeRuta = false; // apagado por defecto al cargar (botón junto al cuadro VEND)
 
 function initCargueMap(elementId){
@@ -77,7 +77,18 @@ function colorParaVendedorCargue(v){
 // agrega un anillo aparte: con el botón apagado el punto se ve 100% normal,
 // y con el botón prendido alcanza con mirar adentro del punto para saber si
 // ese cliente está OK o posiblemente cargado en el día equivocado.
-function makeCargueIcon(color, seleccionado, alerta){
+//
+// codigo (código de vendedor, ej. "F131"): se dibuja como una etiqueta
+// chiquita ARRIBA del círculo, no adentro -- con muchos vendedores activos a
+// la vez los colores empiezan a parecerse entre sí y cuesta elegir el punto
+// correcto solo por color; el código de un vistazo lo desambigua sin tocar
+// el color en sí (el color sigue siendo la seña visual principal, esto es
+// un refuerzo). El ícono queda más ALTO que el círculo para hacerle lugar a
+// la etiqueta, pero iconAnchor sigue apuntando al CENTRO DEL CÍRCULO (no del
+// ícono completo), así el punto geográfico no se corre. La etiqueta tiene
+// pointer-events:none (y el contenedor también) para que el área extra no
+// robe el clic de selección -- solo el círculo en sí sigue siendo clickeable.
+function makeCargueIcon(color, seleccionado, alerta, codigo){
   const borde = seleccionado ? '#fbbf24' : '#0f172a';
   const ancho = seleccionado ? 4 : 1.5;
   const tam = seleccionado ? 26 : 16;
@@ -85,11 +96,22 @@ function makeCargueIcon(color, seleccionado, alerta){
   const advertencia = alerta
     ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:${Math.round(tam * 0.62)}px;line-height:1;filter:drop-shadow(0 0 1px #000)">⚠️</div>`
     : '';
+
+  const LABEL_W = 30, LABEL_H = 10;
+  const boxW = Math.max(tam, LABEL_W);
+  const boxH = tam + LABEL_H;
+  const etiqueta = codigo
+    ? `<div style="position:absolute;top:0;left:0;width:${boxW}px;height:${LABEL_H}px;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;line-height:1;color:#fff;text-shadow:0 0 2px #000,0 0 2px #000,0 1px 1px #000;white-space:nowrap">${codigo}</div>`
+    : '';
+
   return L.divIcon({
     className: '',
-    html: `<div style="position:relative;width:${tam}px;height:${tam}px;border-radius:50%;background:${color};border:${ancho}px solid ${borde};box-shadow:${sombra}">${advertencia}</div>`,
-    iconSize: [tam, tam],
-    iconAnchor: [tam/2, tam/2],
+    html: `<div style="position:relative;width:${boxW}px;height:${boxH}px;pointer-events:none">
+      ${etiqueta}
+      <div style="position:absolute;top:${LABEL_H}px;left:${(boxW - tam) / 2}px;width:${tam}px;height:${tam}px;border-radius:50%;background:${color};border:${ancho}px solid ${borde};box-shadow:${sombra};pointer-events:auto">${advertencia}</div>
+    </div>`,
+    iconSize: [boxW, boxH],
+    iconAnchor: [boxW / 2, LABEL_H + tam / 2],
   });
 }
 
@@ -135,15 +157,16 @@ function drawCarguePedidos(rows){
   cargueMarkersLayer = L.layerGroup();
   rows.forEach(d => {
     const color = colorParaVendedorCargue(d.vendedor);
+    const codigo = (typeof extraerCodigoVendedor === 'function' ? extraerCodigoVendedor(d.vendedor) : '') || '';
     const atipico = (typeof CARGUE_PEDIDOS_ATIPICOS !== 'undefined') && CARGUE_PEDIDOS_ATIPICOS.has(d.pedido);
     const alerta = atipico && cargueMostrarFueraDeRuta;
-    const marker = L.marker([d.lat, d.lng], { icon: makeCargueIcon(color, false, alerta) })
+    const marker = L.marker([d.lat, d.lng], { icon: makeCargueIcon(color, false, alerta, codigo) })
       .bindTooltip(buildCarguePopup(d, alerta), { className: 'cargue-tooltip', direction: 'top', opacity: 0.97 });
     // Clic en el punto lo selecciona/deselecciona directo -- el detalle se
     // ve al pasar el mouse (tooltip), no hace falta clickear para verlo.
     marker.on('click', () => { if (typeof alternarClienteEnSeleccion === 'function') alternarClienteEnSeleccion(d.pedido); });
     cargueMarkersLayer.addLayer(marker);
-    CARGUE_MARKERS.push({ data: d, marker, color, atipico });
+    CARGUE_MARKERS.push({ data: d, marker, color, atipico, codigo });
   });
   cargueMap.addLayer(cargueMarkersLayer);
 
@@ -157,7 +180,7 @@ function drawCarguePedidos(rows){
 // zIndexOffset para que un punto seleccionado siempre se vea por encima de
 // los que tiene cerca, aunque se solapen.
 function setMarcadorSeleccionado(item, seleccionado){
-  item.marker.setIcon(makeCargueIcon(item.color, seleccionado, item.atipico && cargueMostrarFueraDeRuta));
+  item.marker.setIcon(makeCargueIcon(item.color, seleccionado, item.atipico && cargueMostrarFueraDeRuta, item.codigo));
   item.marker.setZIndexOffset(seleccionado ? 1000 : 0);
 }
 
@@ -172,7 +195,7 @@ function alternarCargueFueraDeRuta(){
   CARGUE_MARKERS.forEach(item => {
     const seleccionado = (typeof estaSeleccionado === 'function') && estaSeleccionado(item.data.pedido);
     const alerta = item.atipico && cargueMostrarFueraDeRuta;
-    item.marker.setIcon(makeCargueIcon(item.color, seleccionado, alerta));
+    item.marker.setIcon(makeCargueIcon(item.color, seleccionado, alerta, item.codigo));
     item.marker.setTooltipContent(buildCarguePopup(item.data, alerta));
   });
 }
