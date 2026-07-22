@@ -134,6 +134,21 @@ async function fetchCargueAsignacionesRango(desde, hasta) {
   return Array.isArray(raw) ? raw.map(_mapCargueAsignacionRow) : [];
 }
 
+// TODAS las asignaciones guardadas, sin límite de fecha -- para saber qué
+// pedidos ya están asignados a algún camión (pedidosAsignados(), ver
+// cargue-historial.js) y para la lista "Camiones armados". A propósito NO
+// se filtra por el rango Desde/Hasta que se está viendo: la columna Fecha
+// de un cargue es la del RANGO que se veía al armarlo, no necesariamente la
+// de cada pedido adentro (un cargue armado viendo "20/07 al 21/07" puede
+// tener pedidos de ambos días bajo Fecha=20/07) -- filtrar por rango hacía
+// que esos pedidos parecieran "sin asignar" en cuanto se mira solo el
+// 21/07, y que camiones "acumulado" (que juntan pedidos de fechas
+// distintas a lo largo del tiempo, ver hoja "Cod Camión") desaparecieran
+// de la lista de armados según qué rango se estuviera mirando.
+async function fetchCargueAsignacionesTodas() {
+  return fetchCargueAsignacionesRango('', '');
+}
+
 // Eliminar un cargue guardado DE VERDAD (botón 🗑️, o al confirmar una
 // edición) -- se borra la fila del Sheet, no se marca. Se identifica por
 // Timestamp. A diferencia de guardar/plantillas, esto SÍ va por JSONP (no

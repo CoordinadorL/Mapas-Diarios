@@ -306,9 +306,10 @@ async function _actualizarCargueClientesInterno(){
   // reintenta acá -- así el botón Actualizar también "revive" el dropdown.
   if (!Object.keys(cargueLineasMap).length) await cargarCatalogoLineas();
 
-  const [pedidosCrudos, asignaciones] = await Promise.all([
+  const [pedidosCrudos, asignacionesRango, asignacionesTodas] = await Promise.all([
     fetchCarguePedidosRango(desde, hasta),
     fetchCargueAsignacionesRango(desde, hasta),
+    fetchCargueAsignacionesTodas(),
   ]);
   CARGUE_PEDIDOS_TODOS = aplicarLineaVendedor(pedidosCrudos, cargueLineasMap);
 
@@ -334,11 +335,17 @@ async function _actualizarCargueClientesInterno(){
 
   // Se calcula ANTES de pintar: aplicarFiltrosYPintar() necesita saber qué
   // pedidos ya están asignados a algún camión para no volver a mostrarlos.
-  cargueCamionesArmadosHoy = computarCamionesArmados(asignaciones);
+  // Con TODAS las asignaciones (sin límite de fecha) -- ver
+  // fetchCargueAsignacionesTodas().
+  cargueCamionesArmadosHoy = computarCamionesArmados(asignacionesTodas);
   renderCamionesArmadosHoy();
 
   aplicarFiltrosYPintar();
-  dibujarAsignacionesGuardadas(asignaciones);
+  // Las geocercas dibujadas sobre el mapa sí quedan acotadas al rango
+  // Desde/Hasta que se está viendo -- mostrar TODAS las de siempre sería
+  // puro ruido visual (a diferencia de "qué pedidos ya están asignados",
+  // que si necesita ser sin límite de fecha, ver arriba).
+  dibujarAsignacionesGuardadas(asignacionesRango);
   activarModoEdicion(!soloLectura);
 
   const aviso = document.getElementById('cargue-modo-aviso');
@@ -346,9 +353,11 @@ async function _actualizarCargueClientesInterno(){
 }
 
 // Arma la lista "camiones armados" a partir de las asignaciones crudas del
-// backend, cruzando con CARGUE_PEDIDOS_TODOS para sacar kilos/vendedores.
-// Separado de _actualizarCargueClientesInterno para poder reusarlo en
-// refrescarSoloAsignaciones() sin tener que volver a pedir los pedidos.
+// backend (SIEMPRE todas, sin límite de fecha -- ver
+// fetchCargueAsignacionesTodas), cruzando con CARGUE_PEDIDOS_TODOS para
+// sacar kilos/vendedores. Separado de _actualizarCargueClientesInterno para
+// poder reusarlo en refrescarSoloAsignaciones() sin tener que volver a
+// pedir los pedidos.
 //
 // El cruce en vivo se queda corto en cuanto el archivado diario
 // (CargueArchivado.gs) mueve los pedidos RESUELTOS de un cargue a el
@@ -389,9 +398,12 @@ function computarCamionesArmados(asignaciones){
 async function refrescarSoloAsignaciones(){
   try {
     const { desde, hasta } = obtenerRangoFechas();
-    const asignaciones = await fetchCargueAsignacionesRango(desde, hasta);
-    dibujarAsignacionesGuardadas(asignaciones);
-    cargueCamionesArmadosHoy = computarCamionesArmados(asignaciones);
+    const [asignacionesRango, asignacionesTodas] = await Promise.all([
+      fetchCargueAsignacionesRango(desde, hasta),
+      fetchCargueAsignacionesTodas(),
+    ]);
+    dibujarAsignacionesGuardadas(asignacionesRango);
+    cargueCamionesArmadosHoy = computarCamionesArmados(asignacionesTodas);
     renderCamionesArmadosHoy();
     repintarConservandoSeleccion();
   } catch (e) {
