@@ -180,6 +180,24 @@ function renderAvisoVendedoresSinLinea(){
   badge.title = 'No están en el catálogo "Cod Camión" -- sus pedidos no aparecen en ninguna línea:\n' + sinLinea.join(', ');
 }
 
+// Aviso silencioso de que CARGUE_ASIGNACION está creciendo -- a propósito
+// NUNCA se archiva sola (ver comentario de cabecera de CargueArchivado.gs:
+// "la lista de camiones armados que el Mapa de Cargue todavía necesita
+// poder editar/eliminar"), y ahora se lee ENTERA sin límite de fecha en
+// cada refresco (fetchCargueAsignacionesTodas). Con pocas filas no se nota,
+// pero con meses de uso esa consulta se va a poner más lenta -- este aviso
+// no es un error, solo un heads-up para saber cuándo conviene empezar a
+// eliminar cargues viejos que ya no hagan falta.
+const UMBRAL_AVISO_ASIGNACIONES = 300;
+function renderAvisoAsignacionesTotales(total){
+  const badge = document.getElementById('cargue-aviso-muchas-asignaciones');
+  if (!badge) return;
+  if (total < UMBRAL_AVISO_ASIGNACIONES) { badge.style.display = 'none'; return; }
+  badge.style.display = 'flex';
+  badge.textContent = `⚠️ ${total} cargues guardados`;
+  badge.title = `CARGUE_ASIGNACION nunca se archiva sola -- con ${total} filas guardadas, es buen momento para eliminar (🗑️) cargues viejos que ya no hagan falta, o avisale al desarrollador si conviene armar un archivado automático.`;
+}
+
 function renderVendedorChips(){
   const cont = document.getElementById('cargue-chips-vendedor');
   const contador = document.getElementById('cargue-vendedor-contador');
@@ -339,6 +357,7 @@ async function _actualizarCargueClientesInterno(){
   // fetchCargueAsignacionesTodas().
   cargueCamionesArmadosHoy = computarCamionesArmados(asignacionesTodas);
   renderCamionesArmadosHoy();
+  renderAvisoAsignacionesTotales(asignacionesTodas.length);
 
   aplicarFiltrosYPintar();
   // Las geocercas dibujadas sobre el mapa sí quedan acotadas al rango
@@ -435,6 +454,7 @@ async function refrescarSoloAsignaciones(){
     dibujarAsignacionesGuardadas(asignacionesRango);
     cargueCamionesArmadosHoy = computarCamionesArmados(asignacionesTodas);
     renderCamionesArmadosHoy();
+    renderAvisoAsignacionesTotales(asignacionesTodas.length);
     repintarConservandoSeleccion();
   } catch (e) {
     console.error('No se pudieron refrescar los cargues guardados:', e);

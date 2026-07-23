@@ -361,12 +361,28 @@ async function agregarSeleccionACamionArmado(){
   if (typeof refrescarSoloAsignaciones === 'function') refrescarSoloAsignaciones();
 }
 
+// Solo texto (title/option de <select> no soportan HTML) -- se usa donde
+// no se puede meter el badge con clase, ver _badgeAcumulador() para el caso
+// con HTML real.
+function _esAcumulador(camion){
+  return (typeof esCamionAcumulador === 'function') && esCamionAcumulador(camion);
+}
+// Badge chico junto al nombre -- a propósito bien distinto del resto (los
+// acumulador se comportan distinto: quedan siempre visibles acá sin
+// importar la fecha, ver computarCamionesArmados en cargue-historial.js),
+// para que se note de un vistazo cuál es cuál.
+function _badgeAcumulador(camion){
+  return _esAcumulador(camion)
+    ? '<span class="armado-acumulador" title="Acumulador: junta pedidos de varios días hasta salir con un transportista real -- por eso queda siempre visible acá, sin importar el rango de fecha">🔁 ACUMULADOR</span>'
+    : '';
+}
+
 function renderCamionesArmadosHoy(){
   const cont = document.getElementById('cargue-armados');
   const selAgregar = document.getElementById('cargue-sel-camion-agregar');
   if (selAgregar) {
     selAgregar.innerHTML = '<option value="">— Agregar a camión armado —</option>' +
-      cargueCamionesArmadosHoy.map((c, i) => `<option value="${i}">${c.camion} (${c.pedidos.length})</option>`).join('');
+      cargueCamionesArmadosHoy.map((c, i) => `<option value="${i}">${c.camion}${_esAcumulador(c.camion) ? ' 🔁' : ''} (${c.pedidos.length})</option>`).join('');
   }
   if (!cont) return;
   if (!cargueCamionesArmadosHoy.length) { cont.innerHTML = '<li class="vacio">Ningún camión armado todavía.</li>'; return; }
@@ -375,7 +391,7 @@ function renderCamionesArmadosHoy(){
     <li>
       <div class="armado-fila">
         <div>
-          <b>${c.camion}</b> — ${c.pedidos.length} pedidos — ${c.kilos.toFixed(1)}kg — $${c.total.toFixed(2)}
+          <b>${c.camion}</b>${_badgeAcumulador(c.camion)} — ${c.pedidos.length} pedidos — ${c.kilos.toFixed(1)}kg — $${c.total.toFixed(2)}
           ${c.usuario ? `<span class="armado-usuario">· ${c.usuario}</span>` : ''}
         </div>
         <div class="armado-acciones">

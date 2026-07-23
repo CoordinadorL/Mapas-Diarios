@@ -173,7 +173,7 @@ function renderResumenCamiones(){
         <details class="rc-fila-detalle">
           <summary class="rc-fila">
             <span class="rc-caret"></span>
-            <span>${c.camion}${c.usuario ? `<br><small class="rc-usuario">armado por ${c.usuario}</small>` : ''}</span>
+            <span>${c.camion}${(typeof _badgeAcumulador === 'function') ? _badgeAcumulador(c.camion) : ''}${c.usuario ? `<br><small class="rc-usuario">armado por ${c.usuario}</small>` : ''}</span>
             <span class="rc-vend">${(c.vendedores || []).map(v => (typeof extraerCodigoVendedor === 'function' ? extraerCodigoVendedor(v) : '') || v).join(', ')}</span>
             <span class="rc-num">${c.pedidos.length}</span>
             <span class="rc-num">${(c.kilos || 0).toFixed(2)}</span>
