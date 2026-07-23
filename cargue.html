@@ -340,12 +340,21 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   initCargueListaBusqueda();
   initCargueResumen();
 
-  // Los 3 catálogos (camiones, plantillas, líneas+pedidos) se cargan EN
-  // PARALELO -- en serie, cada viaje a Apps Script sumaba varios segundos y
-  // la página tardaba demasiado en estar lista. Si uno falla, los otros dos
-  // siguen funcionando igual (cada init maneja su propio error).
+  // El catálogo de camiones va PRIMERO (a propósito, ya no en paralelo con
+  // el resto): computarCamionesArmados (cargue-historial.js) necesita saber
+  // qué camiones son "acumulador" (CARGUE_CAMIONES) para decidir si se
+  // muestran sin importar la fecha -- si corriera en paralelo, la primera
+  // carga de la página podría calcular "camiones armados" ANTES de que el
+  // catálogo llegue, y un camión acumulador sin facturas en el rango de hoy
+  // quedaría afuera hasta el próximo refresco manual. Es un catálogo chico
+  // (misma razón que Canales.gs), así que el viaje de más no se nota.
+  await initCarguePanelAsignacion().catch(e => console.error('camiones:', e));
+
+  // Plantillas e historial (líneas+pedidos) sí siguen en paralelo -- en
+  // serie, cada viaje a Apps Script sumaba varios segundos y la página
+  // tardaba demasiado en estar lista. Si uno falla, el otro sigue
+  // funcionando igual (cada init maneja su propio error).
   await Promise.all([
-    initCarguePanelAsignacion().catch(e => console.error('camiones:', e)),
     initCarguePlantillas().catch(e => console.error('plantillas:', e)),
     initCargueHistorial().catch(e => alert('No se pudieron cargar los pedidos: ' + (e.message || e))),
   ]);

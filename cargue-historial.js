@@ -352,12 +352,39 @@ async function _actualizarCargueClientesInterno(){
   if (aviso) aviso.style.display = soloLectura ? 'block' : 'none';
 }
 
+// Camión "acumulador" (columna Acumulador de la hoja "Cod Camión", ver
+// CargueCamiones.gs) -- junta pedidos de varios días (ej. lunes+martes+
+// miércoles) hasta que salen juntos con un transportista real, a diferencia
+// de un camión de ruta normal (un solo día). Por eso NO le aplica el
+// filtro-por-fecha de computarCamionesArmados: tiene que seguir viéndose en
+// "Camiones armados" sin importar qué rango se esté mirando, mientras
+// todavía tenga pedidos adentro -- deja de aparecer solo cuando se sacan
+// esos pedidos (se mueven a un camión real) o se elimina el cargue.
+// CARGUE_CAMIONES (catálogo, ver cargue-panel-asignacion.js) se busca por
+// NOMBRE (no por código): la asignación guarda el nombre completo del
+// camión, no su código.
+function esCamionAcumulador(nombreCamion){
+  if (typeof CARGUE_CAMIONES === 'undefined') return false;
+  const entrada = CARGUE_CAMIONES.find(c => c.camion === nombreCamion);
+  return !!(entrada && entrada.acumulador);
+}
+
 // Arma la lista "camiones armados" a partir de las asignaciones crudas del
 // backend (SIEMPRE todas, sin límite de fecha -- ver
 // fetchCargueAsignacionesTodas), cruzando con CARGUE_PEDIDOS_TODOS para
 // sacar kilos/vendedores. Separado de _actualizarCargueClientesInterno para
 // poder reusarlo en refrescarSoloAsignaciones() sin tener que volver a
 // pedir los pedidos.
+//
+// Un cargue normal solo queda en la lista si AL MENOS UNA de sus facturas
+// cae en el rango Desde/Hasta que se está mirando ahora mismo (cruzando
+// contra CARGUE_PEDIDOS_TODOS, que ya viene acotado a ese rango) -- no por
+// la fecha que quedó guardada en el cargue en sí (esa era la fecha del
+// rango que se estaba viendo AL ARMARLO, no necesariamente la de cada
+// factura adentro: un cargue armado viendo "20/07 al 21/07" puede tener
+// facturas de ambos días). Los camiones "acumulador" (ver arriba) se salen
+// de esta regla: esos SIEMPRE quedan, tengan o no alguna factura en el
+// rango actual.
 //
 // El cruce en vivo se queda corto en cuanto el archivado diario
 // (CargueArchivado.gs) mueve los pedidos RESUELTOS de un cargue a el
@@ -370,22 +397,25 @@ async function _actualizarCargueClientesInterno(){
 // hay forma de reconstruirlo sin ir al histórico anual (ver
 // historial-cargues.html para el reporte que si contempla eso).
 function computarCamionesArmados(asignaciones){
-  return asignaciones.map(a => {
-    const pedidosDelCamion = CARGUE_PEDIDOS_TODOS.filter(p => a.pedidos.includes(p.pedido));
-    const detalleCompleto = pedidosDelCamion.length === a.pedidos.length;
-    return {
-      camion: a.camion, pedidos: a.pedidos, fecha: a.fecha, timestamp: a.timestamp, geojson: a.geojson,
-      usuario: a.usuario || '',
-      kilos: detalleCompleto ? pedidosDelCamion.reduce((s, p) => s + p.kilos, 0) : (a.kilos || 0),
-      total: detalleCompleto ? pedidosDelCamion.reduce((s, p) => s + p.ventasTotal, 0) : (a.monto || 0),
-      vendedores: detalleCompleto ? [...new Set(pedidosDelCamion.map(p => p.vendedor))].sort() : (a.vendedores || []),
-      // Objetos completos (cliente, dirección, monto...), no solo los IDs --
-      // para que el resumen (cargue-resumen.js) pueda desplegar el detalle
-      // pedido por pedido de cualquier camión sin tener que refiltrar. Queda
-      // vacío si ya se archivó (ver comentario arriba).
-      pedidosDetalle: pedidosDelCamion,
-    };
-  });
+  return asignaciones
+    .map(a => {
+      const pedidosDelCamion = CARGUE_PEDIDOS_TODOS.filter(p => a.pedidos.includes(p.pedido));
+      const detalleCompleto = pedidosDelCamion.length === a.pedidos.length;
+      return {
+        camion: a.camion, pedidos: a.pedidos, fecha: a.fecha, timestamp: a.timestamp, geojson: a.geojson,
+        usuario: a.usuario || '',
+        kilos: detalleCompleto ? pedidosDelCamion.reduce((s, p) => s + p.kilos, 0) : (a.kilos || 0),
+        total: detalleCompleto ? pedidosDelCamion.reduce((s, p) => s + p.ventasTotal, 0) : (a.monto || 0),
+        vendedores: detalleCompleto ? [...new Set(pedidosDelCamion.map(p => p.vendedor))].sort() : (a.vendedores || []),
+        // Objetos completos (cliente, dirección, monto...), no solo los IDs --
+        // para que el resumen (cargue-resumen.js) pueda desplegar el detalle
+        // pedido por pedido de cualquier camión sin tener que refiltrar. Queda
+        // vacío si ya se archivó (ver comentario arriba).
+        pedidosDetalle: pedidosDelCamion,
+        _tieneFacturaEnRango: pedidosDelCamion.length > 0,
+      };
+    })
+    .filter(c => c._tieneFacturaEnRango || esCamionAcumulador(c.camion));
 }
 
 // Refresco liviano: solo vuelve a pedir las ASIGNACIONES (no los pedidos ni
