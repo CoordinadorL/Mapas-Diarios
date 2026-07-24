@@ -387,7 +387,14 @@ function renderCamionesArmadosHoy(){
   if (!cont) return;
   if (!cargueCamionesArmadosHoy.length) { cont.innerHTML = '<li class="vacio">Ningún camión armado todavía.</li>'; return; }
 
-  cont.innerHTML = cargueCamionesArmadosHoy.map((c, i) => `
+  cont.innerHTML = cargueCamionesArmadosHoy.map((c, i) => {
+    // Sin pedidosDetalle (ya se archivaron -- normal en un acumulador que
+    // lleva más de un día armándose) "✏️ Editar" no tiene nada que cargar en
+    // la selección (los pedidos no se pueden volver a dibujar en el mapa) --
+    // se deshabilita con una pista clara en vez de dejarlo fallar en
+    // silencio, y "🔀 Cambiar camión" queda como la vía real para sacarlo.
+    const puedeEditar = (c.pedidosDetalle || []).length > 0;
+    return `
     <li>
       <div class="armado-fila">
         <div>
@@ -395,18 +402,85 @@ function renderCamionesArmadosHoy(){
           ${c.usuario ? `<span class="armado-usuario">· ${c.usuario}</span>` : ''}
         </div>
         <div class="armado-acciones">
-          <button type="button" class="armado-btn" data-idx="${i}" data-accion="editar" title="Editar: carga estos pedidos en la selección para ajustarlos">✏️</button>
+          <button type="button" class="armado-btn" data-idx="${i}" data-accion="cambiar" title="Cambiar de camión: mueve TODOS estos pedidos a otro camión sin tener que verlos en el mapa">🔀</button>
+          <button type="button" class="armado-btn" data-idx="${i}" data-accion="editar" ${puedeEditar ? '' : 'disabled'} title="${puedeEditar ? 'Editar: carga estos pedidos en la selección para ajustarlos' : 'No se puede editar: estos pedidos ya se archivaron y no se pueden volver a ver en el mapa -- usá 🔀 Cambiar camión'}">✏️</button>
           <button type="button" class="armado-btn" data-idx="${i}" data-accion="eliminar" title="Eliminar este cargue">🗑️</button>
         </div>
       </div>
+      <div class="armado-cambiar-camion" data-idx="${i}" style="display:none">
+        <select class="armado-cambiar-select"></select>
+        <button type="button" class="armado-cambiar-confirmar" data-idx="${i}">✓ Mover</button>
+        <button type="button" class="armado-cambiar-cancelar" data-idx="${i}">✖</button>
+      </div>
     </li>
-  `).join('');
+  `;
+  }).join('');
 
   cont.querySelectorAll('.armado-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const c = cargueCamionesArmadosHoy[Number(btn.dataset.idx)];
       if (!c) return;
-      if (btn.dataset.accion === 'editar') editarCargueArmado(c); else eliminarCargueArmado(c);
+      if (btn.dataset.accion === 'editar') editarCargueArmado(c);
+      else if (btn.dataset.accion === 'eliminar') eliminarCargueArmado(c);
+      else if (btn.dataset.accion === 'cambiar') abrirCambiarCamionArmado(Number(btn.dataset.idx));
     });
   });
+  cont.querySelectorAll('.armado-cambiar-confirmar').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.idx);
+      const c = cargueCamionesArmadosHoy[idx];
+      const div = btn.closest('.armado-cambiar-camion');
+      const select = div ? div.querySelector('.armado-cambiar-select') : null;
+      const nuevoCamion = select ? select.value : '';
+      if (!c || !nuevoCamion) { alert('Elegí un camión primero.'); return; }
+      cambiarCamionCargueArmado(c, nuevoCamion);
+    });
+  });
+  cont.querySelectorAll('.armado-cambiar-cancelar').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const div = btn.closest('.armado-cambiar-camion');
+      if (div) div.style.display = 'none';
+    });
+  });
+}
+
+// Abre el selector inline de "🔀 Cambiar camión" para un cargue armado --
+// lista todos los camiones del catálogo MENOS el actual.
+function abrirCambiarCamionArmado(idx){
+  const cont = document.getElementById('cargue-armados');
+  const div = cont ? cont.querySelector(`.armado-cambiar-camion[data-idx="${idx}"]`) : null;
+  const c = cargueCamionesArmadosHoy[idx];
+  if (!div || !c) return;
+  const select = div.querySelector('.armado-cambiar-select');
+  select.innerHTML = '<option value="">— Elegí un camión —</option>' +
+    CARGUE_CAMIONES.filter(cc => cc.camion !== c.camion)
+      .map(cc => `<option value="${cc.camion}">${cc.camion}${cc.acumulador ? ' 🔁' : ''}</option>`).join('');
+  div.style.display = 'flex';
+}
+
+// "🔀 Cambiar camión": mueve TODOS los pedidos de este cargue a otro camión
+// SIN pasar por la selección del mapa -- a diferencia de "✏️ Editar" (que
+// necesita volver a ver los pedidos puntillados), acá no hace falta: sirve
+// sobre todo para sacar un cargue "acumulador" (sus pedidos ya se
+// archivaron, no se pueden re-seleccionar en el mapa) y pasarlo a un camión
+// real de transportista. Mismo patrón de siempre: guardar el nuevo PRIMERO,
+// eliminar el viejo DESPUÉS -- si falla el guardado, no se toca nada más.
+async function cambiarCamionCargueArmado(c, nuevoCamion){
+  if (!c.timestamp) { alert('Este cargue todavía no terminó de guardarse -- esperá unos segundos y reintentá.'); return; }
+
+  const resultadoGuardar = await guardarCargueAsignacion({
+    fecha: c.fecha, camion: nuevoCamion, pedidos: c.pedidos, geojson: c.geojson,
+    kilos: c.kilos, monto: c.total, vendedores: c.vendedores,
+  });
+  if (!resultadoGuardar.ok) {
+    alert('No se pudo cambiar de camión: ' + (resultadoGuardar.error || 'error desconocido') + '\n\nEl cargue sigue igual que antes -- podés reintentar.');
+    return;
+  }
+
+  const resultadoEliminar = await eliminarCargueAsignacion({ fecha: c.fecha, timestamp: c.timestamp, camion: c.camion });
+  if (!resultadoEliminar.ok) {
+    alert('Se guardó en "' + nuevoCamion + '", pero quedó un cargue viejo duplicado de "' + c.camion + '" que no se pudo borrar automáticamente (' + (resultadoEliminar.error || 'error desconocido') + '). Eliminalo a mano de la lista para no contar los pedidos dos veces.');
+  }
+
+  if (typeof refrescarSoloAsignaciones === 'function') await refrescarSoloAsignaciones();
 }
