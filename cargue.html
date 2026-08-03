@@ -318,6 +318,33 @@ button.accion{width:100%;padding:6px;border-radius:8px;border:none;font-weight:7
 </div>
 
 <script>
+// Registro del Service Worker + aviso de nueva versión (igual que
+// resumen.html/historial-cargues.html) -- cargue.html no lo tenía, así que
+// quien lo deja instalado como app de escritorio (el uso más común de esta
+// herramienta) podía quedar con una copia vieja cacheada para siempre, sin
+// ningún aviso ni forma de refrescarla sola.
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').then(reg=>{
+      setInterval(()=>reg.update().catch(()=>{}), 5*60*1000);
+    }).catch(()=>{});
+  });
+  let controllerYaExistia = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(!controllerYaExistia){ controllerYaExistia = true; return; }
+    avisarNuevaVersion();
+  });
+}
+function avisarNuevaVersion(){
+  if(document.getElementById('nueva-version-toast')) return;
+  const div = document.createElement('div');
+  div.id = 'nueva-version-toast';
+  div.style.cssText = 'position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:99999;background:#1d4ed8;color:#fff;padding:9px 16px;border-radius:24px;font-size:.75rem;font-weight:700;box-shadow:0 4px 16px rgba(0,0,0,.5);cursor:pointer;display:flex;align-items:center;gap:8px;white-space:nowrap';
+  div.textContent = '🔄 Nueva versión disponible — toca para actualizar';
+  div.onclick = ()=> window.location.reload();
+  document.body.appendChild(div);
+}
+
 // ── SESIÓN — solo admin/bodega/coordinador (mismo criterio que resumen.html
 // para "ver todo", pero SIN cartera: esta herramienta arma cargues, cartera
 // no participa de esa decisión) ──────────────────────────────
