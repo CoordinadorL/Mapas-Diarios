@@ -182,7 +182,8 @@ async function intentarLogin(){
 function redirigir(rol){
   const rolesResumen=['admin','bodega','coordinador','cartera'];
   const rolesMapa=['transportista','reparto'];
-  if(rolesMapa.includes(rol)) window.location.href='mapa_live_F150.html';
+  if(rol==='facturador') window.location.href='historial-cargues.html';
+  else if(rolesMapa.includes(rol)) window.location.href='mapa_live_F150.html';
   else if(rolesResumen.includes(rol)) window.location.href='resumen.html';
   else window.location.href='mapa_live_F150.html';
 }
