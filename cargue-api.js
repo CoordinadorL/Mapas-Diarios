@@ -55,9 +55,11 @@ function jsonpCargue(qs, ms) {
 //    número de ingreso al sistema, no un dato de negocio.
 //  - Cliente viene como "Código + Sucursal + Razón social" (mismo código
 //    puede repetirse en más de una sucursal) -- se deja tal cual llega.
-//  - Litros, Ventas Netas y Status ya no se leen: no se usan en ningún
-//    lado más que el resumen, así que se sacan del todo en vez de traerlos
-//    sin usarlos.
+//  - Ventas Netas y Status no se leen: no se usan en ningún lado, así que
+//    se sacan del todo en vez de traerlos sin usarlos.
+//  - Litros SÍ se lee (historial-cargues.html lo usa para los vendedores de
+//    línea ICE, que venden por litros y no solo por kilos) -- ver
+//    _detalleVendedoresHtml en historial-cargues.js.
 function _mapCarguePedidoRow(row) {
   return {
     fecha: ffCargue(gfCargue(row, 'Fecha', 'fecha')),
@@ -66,6 +68,7 @@ function _mapCarguePedidoRow(row) {
     cliente: String(gfCargue(row, 'Cliente', 'cliente')).trim(),
     direccion: String(gfCargue(row, 'Direccion', 'direccion', 'Dirección')).trim(),
     kilos: pnCargue(gfCargue(row, 'Kilos', 'kilos')),
+    litros: pnCargue(gfCargue(row, 'Litros', 'litros')),
     ventasTotal: pnCargue(gfCargue(row, 'Ventas Total', 'ventas_total')),
     lat: pnCargue(gfCargue(row, 'latitud_y', 'Latitud', 'latitud', 'lat')),
     lng: pnCargue(gfCargue(row, 'longitud_x', 'Longitud', 'longitud', 'lng')),

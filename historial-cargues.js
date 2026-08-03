@@ -15,6 +15,7 @@ let HIST_MAPA = null;
 let HIST_CAPA_GEOJSON = null;
 let HIST_CARGUES = [];
 let HIST_PEDIDOS_TODOS = []; // pedidos vivos del rango buscado -- para recalcular kilos/monto reales y el desglose por vendedor (ver _detalleDeCargue)
+let HIST_LINEAS_MAP = {}; // código de vendedor -> línea (catálogo de "Cod Camión"), para saber quién es ICE (ver _esVendedorIce)
 
 function initHistCarguesMapa(contenedorId){
   HIST_MAPA = L.map(contenedorId, { zoomControl: true }).setView([-1.6, -78.6], 6);
@@ -73,6 +74,15 @@ function _agruparPorVendedor(pedidosDetalle){
   return porVendedor;
 }
 
+// Los vendedores de la línea ICE venden por litros, no por kilos -- se
+// clasifican por HIST_LINEAS_MAP (catálogo de "Cod Camión", columnas E-F-G,
+// ver CargueCamiones.gs). Comparación sin mayúsculas/espacios por las dudas
+// de cómo se haya tipeado en la hoja.
+function _esVendedorIce(vendedorCompleto){
+  const codigo = (typeof extraerCodigoVendedor === 'function' ? extraerCodigoVendedor(vendedorCompleto) : '') || vendedorCompleto;
+  return String(HIST_LINEAS_MAP[codigo] || '').trim().toUpperCase() === 'ICE';
+}
+
 // HTML del desplegable de un cargue: un <details> por vendedor con sus
 // pedidos, o un aviso si el cargue ya se archivó y no hay forma de
 // reconstruir el detalle pedido por pedido sin ir al histórico anual.
@@ -86,15 +96,17 @@ function _detalleVendedoresHtml(c, detalle){
     const pedidosDelVendedor = porVendedor[v];
     const totalVendedor = pedidosDelVendedor.reduce((s, p) => s + p.ventasTotal, 0);
     const codigo = (typeof extraerCodigoVendedor === 'function' ? extraerCodigoVendedor(v) : '') || v;
+    const esIce = _esVendedorIce(v);
+    const totalLitros = esIce ? pedidosDelVendedor.reduce((s, p) => s + (p.litros || 0), 0) : 0;
     return `
     <details class="rcd-vendedor">
       <summary>
         <span class="rcd-caret"></span>
         <b>${codigo}</b>
-        <span class="rcd-vendedor-total">${pedidosDelVendedor.length} pedido${pedidosDelVendedor.length === 1 ? '' : 's'} — $${totalVendedor.toFixed(2)}</span>
+        <span class="rcd-vendedor-total">${pedidosDelVendedor.length} pedido${pedidosDelVendedor.length === 1 ? '' : 's'} — $${totalVendedor.toFixed(2)}${esIce ? ` — ${totalLitros.toFixed(1)}L` : ''}</span>
       </summary>
       <ul>
-        ${pedidosDelVendedor.map(p => `<li>${p.cliente || '(sin nombre)'} — ${p.direccion || '—'} — $${p.ventasTotal.toFixed(2)} · ${p.kilos.toFixed(1)}kg</li>`).join('')}
+        ${pedidosDelVendedor.map(p => `<li>${p.cliente || '(sin nombre)'} — ${p.direccion || '—'} — $${p.ventasTotal.toFixed(2)} · ${p.kilos.toFixed(1)}kg${esIce ? ' · ' + (p.litros || 0).toFixed(1) + 'L' : ''}</li>`).join('')}
       </ul>
     </details>`;
   }).join('');
@@ -169,6 +181,12 @@ async function buscarHistCargues(){
   if (cont) cont.innerHTML = '<p style="color:#64748b;font-size:.8rem;padding:10px">Cargando...</p>';
   _pintarGeojsonCargue(null);
   try {
+    // El catálogo de líneas (para saber quién es ICE) es chico y no depende
+    // del rango de fechas -- se trae una sola vez y se reusa en cada Buscar.
+    if (!Object.keys(HIST_LINEAS_MAP).length) {
+      const lineasRows = await fetchCargueLineas();
+      HIST_LINEAS_MAP = construirLineasMap(lineasRows);
+    }
     const [asignaciones, pedidos] = await Promise.all([
       fetchCargueAsignacionesRango(desde, hasta),
       fetchCarguePedidosRango(desde, hasta),
