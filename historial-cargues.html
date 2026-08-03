@@ -35,22 +35,45 @@ aside.hist-mapa-aside h3{font-size:.62rem;text-transform:uppercase;letter-spacin
 .hist-dia-header{display:flex;justify-content:space-between;align-items:baseline;padding:6px 10px;background:#1e293b;gap:8px;flex-wrap:wrap}
 .hist-dia-header b{color:#f1f5f9;font-size:.8rem}
 .hist-dia-header span{color:#94a3b8;font-size:.68rem}
-.hist-fila{display:grid;grid-template-columns:1.3fr 1fr 1.6fr .7fr .7fr .9fr 30px;gap:6px;align-items:center;padding:5px 10px;font-size:.74rem;border-bottom:1px solid #1e293b}
-.hist-fila:last-child{border-bottom:none}
+.hist-fila{display:grid;grid-template-columns:14px 1.3fr 1.6fr .7fr .7fr .9fr 30px;gap:6px;align-items:center;padding:5px 10px;font-size:.74rem}
 .hist-fila-header{color:#94a3b8;font-size:.6rem;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid #334155}
 .hist-num{text-align:right}
 .hist-monto{font-weight:700;color:#fff}
-.hist-usuario{color:#94a3b8}
+.hist-usuario{color:#94a3b8;font-weight:400}
 .hist-vend{color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .hist-btn-mapa{background:none;border:none;cursor:pointer;color:#94a3b8;font-size:.8rem;padding:2px 4px;border-radius:4px;font-family:inherit}
 .hist-btn-mapa:hover{background:#334155;color:#fff}
 .hist-btn-mapa:disabled{opacity:.25;cursor:default}
-.hist-fila-activa{background:#1e3a5f}
+
+/* Fila de cargue desplegable (▸/▾) con detalle pedido por pedido agrupado
+   por vendedor -- mismo patrón que .rc-fila-detalle en cargue.html
+   (cargue-resumen.js), adaptado acá para el reporte de solo lectura. */
+.hist-fila-detalle{border-bottom:1px solid #1e293b}
+.hist-fila-detalle:last-child{border-bottom:none}
+.hist-fila-detalle summary{list-style:none;cursor:pointer}
+.hist-fila-detalle summary::-webkit-details-marker{display:none}
+.hist-fila-detalle summary::marker{content:''}
+.hist-fila-detalle:hover summary{background:#1e293b}
+.hist-fila-detalle.hist-fila-activa summary{background:#1e3a5f}
+.hist-caret::before{content:'▸';color:#64748b;display:inline-block}
+.hist-fila-detalle[open] .hist-caret::before{content:'▾';color:#93c5fd}
+.hist-detalle{padding:2px 10px 10px 26px;display:flex;flex-direction:column;gap:8px}
+.hist-sin-detalle{color:#64748b;font-size:.72rem;padding:4px 0}
+.rcd-vendedor summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:5px}
+.rcd-vendedor summary::-webkit-details-marker{display:none}
+.rcd-vendedor summary::marker{content:''}
+.rcd-vendedor:hover summary{opacity:.85}
+.rcd-caret::before{content:'▸';color:#64748b;display:inline-block;font-size:.65rem}
+.rcd-vendedor[open] .rcd-caret::before{content:'▾';color:#93c5fd}
+.rcd-vendedor b{color:#93c5fd;font-size:.72rem}
+.rcd-vendedor-total{color:#94a3b8;font-weight:400;font-size:.68rem}
+.rcd-vendedor ul{list-style:none;margin-top:3px;padding-left:14px;display:flex;flex-direction:column;gap:2px}
+.rcd-vendedor li{font-size:.7rem;color:#cbd5e1;padding-left:6px;border-left:2px solid #334155}
 
 @media (max-width:760px){
   .main{flex-direction:column}
   aside.hist-mapa-aside{width:100%;height:34vh;border-left:none;border-top:1px solid #1e293b}
-  .hist-fila{grid-template-columns:1.2fr .9fr 1fr .6fr .6fr .8fr 24px;font-size:.68rem}
+  .hist-fila{grid-template-columns:12px 1.2fr 1fr .6fr .6fr .8fr 24px;font-size:.68rem}
 }
 </style>
 </head>
