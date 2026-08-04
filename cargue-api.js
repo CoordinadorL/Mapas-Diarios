@@ -201,7 +201,13 @@ async function guardarCargueAsignacion({ fecha, camion, pedidos, geojson, kilos,
   }
 
   try {
-    return await jsonpCargue(qs, 20000);
+    // 30s (no 20s como el resto) -- guardar hace más trabajo del lado del
+    // servidor que una simple lectura (appendRow + registrarReporteCargue +
+    // autocuración de columnas), y un cargue con muchos pedidos de una sola
+    // vez tarda más en procesarse; con 20s aparecían "Tiempo agotado" en
+    // guardados grandes que probablemente sí habían terminado del lado de
+    // Google, solo que la respuesta llegaba tarde.
+    return await jsonpCargue(qs, 30000);
   } catch (e) {
     return { ok: false, error: e.message || 'Sin respuesta del servidor.' };
   }
