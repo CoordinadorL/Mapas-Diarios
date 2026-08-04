@@ -301,6 +301,21 @@ function aplicarSeleccionLineas(){
   aplicarFiltrosYPintar();
 }
 
+// Reintenta una vez más si falla, con una pausa corta -- pensado para los 3
+// fetch en paralelo de _actualizarCargueClientesInterno: un bache breve de
+// señal (wifi que titila un instante, Apps Script momentáneamente ocupado)
+// tumbaba TODO el refresco con "Error de red" a la primera, aunque medio
+// segundo después la misma consulta funcionaba perfecto. Solo tiene sentido
+// para lecturas (idempotentes) -- guardar/eliminar NO pasan por acá.
+async function _conReintento(fn){
+  try {
+    return await fn();
+  } catch (e) {
+    await new Promise(r => setTimeout(r, 1500));
+    return await fn();
+  }
+}
+
 // Vuelve a consultar el Sheet para el rango de fechas activo (botón
 // "Actualizar clientes", cambio de Desde/Hasta). Si el Sheet no responde
 // (sin señal, token vencido, etc.) avisa con alert() en vez de fallar en
@@ -324,11 +339,11 @@ async function _actualizarCargueClientesInterno(){
   // reintenta acá -- así el botón Actualizar también "revive" el dropdown.
   if (!Object.keys(cargueLineasMap).length) await cargarCatalogoLineas();
 
-  const [pedidosCrudos, asignacionesRango, asignacionesTodas] = await Promise.all([
+  const [pedidosCrudos, asignacionesRango, asignacionesTodas] = await _conReintento(() => Promise.all([
     fetchCarguePedidosRango(desde, hasta),
     fetchCargueAsignacionesRango(desde, hasta),
     fetchCargueAsignacionesTodas(),
-  ]);
+  ]));
   CARGUE_PEDIDOS_TODOS = aplicarLineaVendedor(pedidosCrudos, cargueLineasMap);
 
   // Independiente del filtro de vendedores activos -- se recalcula solo
@@ -447,10 +462,10 @@ function computarCamionesArmados(asignaciones){
 async function refrescarSoloAsignaciones(){
   try {
     const { desde, hasta } = obtenerRangoFechas();
-    const [asignacionesRango, asignacionesTodas] = await Promise.all([
+    const [asignacionesRango, asignacionesTodas] = await _conReintento(() => Promise.all([
       fetchCargueAsignacionesRango(desde, hasta),
       fetchCargueAsignacionesTodas(),
-    ]);
+    ]));
     dibujarAsignacionesGuardadas(asignacionesRango);
     cargueCamionesArmadosHoy = computarCamionesArmados(asignacionesTodas);
     renderCamionesArmadosHoy();
