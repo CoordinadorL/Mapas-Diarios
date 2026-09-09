@@ -146,11 +146,19 @@ function jsonpLogin(qs, ms){
   });
 }
 
-// Intenta JSONP (directo) y, si falla, prueba con 2 proxies CORS de respaldo distintos.
+// Solo JSONP directo (sin proxies de terceros, que verían el PIN). Si falla
+// (bache breve de señal, Apps Script momentáneamente ocupado), reintenta una
+// vez más con una pausa corta antes de darlo por perdido -- mismo patrón que
+// _conReintento en cargue-historial.js: sin esto, un titileo de wifi de un
+// instante te dejaba afuera aunque la conexión ya hubiera vuelto.
 async function loginRequest(pin){
-  // Solo JSONP directo (sin proxies de terceros, que verían el PIN).
   const qs='tipo=login&pin='+encodeURIComponent(pin);
-  return await jsonpLogin(qs, 12000);
+  try{
+    return await jsonpLogin(qs, 12000);
+  }catch(e){
+    await new Promise(r=>setTimeout(r,1500));
+    return await jsonpLogin(qs, 12000);
+  }
 }
 
 async function intentarLogin(){
