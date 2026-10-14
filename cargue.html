@@ -19,6 +19,9 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#0f172a;color:#fff;heigh
 .topbar{background:linear-gradient(90deg,#1e293b,#0f172a);padding:6px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #a855f7;flex-shrink:0;gap:8px;flex-wrap:wrap}
 .topbar h1{font-size:.82rem;font-weight:700;letter-spacing:.3px;color:#f1f5f9}
 .topbar-right{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.topbar-left{display:flex;align-items:center;gap:10px}
+.btn-menu{background:#0b4f7a;border:1px solid #38bdf8;color:#fff;border-radius:8px;padding:4px 11px;font-size:.68rem;font-weight:800;text-decoration:none;white-space:nowrap}
+.btn-menu:hover{background:#0e7ab8}
 select{background:#1e293b;color:#fff;border:1px solid #334155;border-radius:6px;padding:4px 8px;font-size:.72rem}
 .badge{display:flex;align-items:center;gap:4px;background:#1e293b;border:1px solid #475569;border-radius:18px;padding:2px 8px;font-size:.6rem;color:#cbd5e1;font-weight:700;text-decoration:none;cursor:pointer}
 button.badge{font-family:inherit}
@@ -197,12 +200,11 @@ button.accion{width:100%;padding:6px;border-radius:8px;border:none;font-weight:7
 
 <div class="col-izquierda">
   <div class="topbar">
-    <h1>📍 MAPA DE CARGUE</h1>
+    <div class="topbar-left"><a class="btn-menu" href="inicio.html" title="Volver al menú de Inicio">← Menú</a><h1>📍 MAPA DE CARGUE</h1></div>
     <div class="topbar-right">
       <button class="badge" id="cargue-btn-actualizar" title="Volver a consultar el Sheet">🔄 Actualizar</button>
       <button class="badge" id="cargue-btn-resumen-vendedores" title="Ver reporte de pedidos por vendedor">📊 Ver resumen</button>
       <a class="badge" href="historial-cargues.html" title="Historial de cargues armados día por día">🗓️ Historial</a>
-      <a class="badge" href="inicio.html" title="Volver al menú de Inicio">🏠 Inicio</a>
       <div class="badge" onclick="logout()" title="Cerrar sesión">👤 <span id="user-name">—</span> · <span id="user-rol">—</span> ⏻</div>
     </div>
   </div>
