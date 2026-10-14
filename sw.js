@@ -1,28 +1,17 @@
 // ═══════════════════════════════════════════════════════════
-// Service Worker — Mapas Diarios PWA
+// Service Worker — OPAUSTRO (login, menú de Inicio y Cargues)
 // Permite instalación en pantalla de inicio y caché básico
 // ═══════════════════════════════════════════════════════════
-const CACHE_NAME = 'mapas-diarios-v48';
-// Caché separada para las imágenes del mapa (calles) -- ruta-dinamica.js la
-// llena por adelantado con la zona de la ruta del día. Aparte de CACHE_NAME
-// para que actualizar la app (subir CACHE_NAME) no borre el mapa ya descargado.
+const CACHE_NAME = 'mapas-diarios-v50';
+// Caché separada para las imágenes del mapa (calles) que usan los mapas de
+// Cargue. Aparte de CACHE_NAME para que actualizar la app no la borre.
 const TILES_CACHE_NAME = 'mapas-diarios-tiles-v1';
 
 // Recursos a cachear para uso offline básico
 const CACHE_ASSETS = [
   './login.html',
-  './resumen.html',
-  './mapa_live_F150.html',
-  './mapa-utils.js',
-  './mapa-auth-sync.js',
-  './mapa-api.js',
-  './mapa-render.js',
-  './mapa-panel-stats.js',
-  './mapa-cuadre-fotos.js',
-  './mapa-jornada-gps-reportes.js',
-  './mapa-popups-estado.js',
-  './mapa-barra-accion.js',
-  './ruta-dinamica.js',
+  './inicio.html',
+  './menu-config.js',
   './manifest.json',
   './logo-wordmark.png',
   './icon-192.png',
@@ -45,7 +34,7 @@ self.addEventListener('install', event => {
 });
 
 // Activar: limpiar cachés viejos (conserva la de tiles -- no es "de la app",
-// es la descarga de mapas offline que ruta-dinamica.js va llenando)
+// son las imágenes de calles ya vistas en los mapas de Cargue)
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys =>
@@ -78,8 +67,8 @@ self.addEventListener('fetch', event => {
   }
 
   // Imágenes del mapa (calles) → red primero (siempre lo más fresco posible),
-  // pero si no hay señal se sirve lo que ruta-dinamica.js precargó para la
-  // zona de la ruta del día -- así el mapa no se queda en blanco.
+  // pero si no hay señal se sirve lo que ya se había visto antes -- así el
+  // mapa no se queda en blanco.
   if (url.hostname.includes('tile.openstreetmap.org') || url.hostname.includes('basemaps.cartocdn.com')) {
     event.respondWith(
       fetch(event.request).then(response => {

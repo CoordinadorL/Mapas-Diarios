@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0f172a">
 <link rel="icon" href="icon-192.png">
-<title>Mapas Diarios — Historial de Cargues</title>
+<title>OPAUSTRO — Historial de Cargues</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <style>
@@ -82,8 +82,8 @@ aside.hist-mapa-aside h3{font-size:.62rem;text-transform:uppercase;letter-spacin
 <div class="topbar">
   <h1>🗓️ HISTORIAL DE CARGUES</h1>
   <div class="topbar-right">
-    <a class="badge" id="nav-resumen-rutas" href="resumen.html" title="Volver al resumen">📈 Resumen rutas</a>
     <a class="badge" id="nav-mapa-cargue" href="cargue.html" title="Ir al Mapa de Cargue">📍 Mapa de Cargue</a>
+    <a class="badge" href="inicio.html" title="Volver al menú de Inicio">🏠 Inicio</a>
     <div class="badge" onclick="logout()" title="Cerrar sesión">👤 <span id="user-name">—</span> · <span id="user-rol">—</span> ⏻</div>
   </div>
 </div>
@@ -106,11 +106,9 @@ aside.hist-mapa-aside h3{font-size:.62rem;text-transform:uppercase;letter-spacin
 </div>
 
 <script>
-// Registro del Service Worker + aviso de nueva versión (igual que
-// resumen.html) -- historial-cargues.html no lo tenía, así que quien entra
-// directo acá (rol facturador, que no pasa por login/resumen) podía quedar
-// con una copia vieja cacheada para siempre sin ningún aviso ni forma de
-// refrescarla sola.
+// Registro del Service Worker + aviso de nueva versión -- sin esto, quien
+// deja esta página abierta o instalada podía quedar con una copia vieja
+// cacheada para siempre sin ningún aviso ni forma de refrescarla sola.
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
     navigator.serviceWorker.register('sw.js').then(reg=>{
@@ -148,18 +146,15 @@ function logout(){ if(!confirm('¿Cerrar sesión?'))return; localStorage.removeI
 const ROLES_CARGUE=['admin','bodega','coordinador','facturador'];
 const sesion=getSesion();
 if(!sesion || !sesion.rol){ window.location.href='login.html'; }
-else if(!ROLES_CARGUE.includes(sesion.rol)){ window.location.href='mapa_live_F150.html'; }
+else if(!ROLES_CARGUE.includes(sesion.rol)){ window.location.href='inicio.html?aviso=sin-permiso'; }
 
 document.addEventListener('DOMContentLoaded', ()=>{
   document.getElementById('user-name').textContent = sesion ? sesion.usuario : '—';
   document.getElementById('user-rol').textContent = sesion ? sesion.rol.toUpperCase() : '—';
-  // Facturación es de solo lectura acá: los otros 2 links llevan a paneles
-  // a los que no tiene acceso (rebotaría al mapa en vivo, sin utilidad para
-  // este rol), así que se ocultan en vez de dejar un enlace muerto.
+  // Facturación es de solo lectura acá: el Mapa de Cargue lo rebotaría de
+  // vuelta (no tiene acceso), así que se oculta en vez de dejar un enlace muerto.
   if(sesion && sesion.rol==='facturador'){
-    const navResumen=document.getElementById('nav-resumen-rutas');
     const navMapa=document.getElementById('nav-mapa-cargue');
-    if(navResumen) navResumen.style.display='none';
     if(navMapa) navMapa.style.display='none';
   }
 

@@ -1,11 +1,11 @@
 {
-  "name": "Mapas Diarios — Rutas en Vivo",
-  "short_name": "Mapas Diarios",
-  "description": "Gestión de rutas de entrega en tiempo real",
+  "name": "OPAUSTRO — Logística",
+  "short_name": "OPAUSTRO",
+  "description": "Cargues, mapas de ruta y pedidos a proveedores en un solo lugar",
   "start_url": "./login.html",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "background_color": "#0b4f7a",
+  "theme_color": "#0b4f7a",
   "orientation": "any",
   "lang": "es",
   "icons": [
@@ -22,22 +22,17 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["navigation", "utilities"],
+  "categories": ["business", "utilities"],
   "shortcuts": [
     {
-      "name": "Ingresar",
-      "url": "./login.html",
-      "description": "Iniciar sesión"
+      "name": "Inicio",
+      "url": "./inicio.html",
+      "description": "Menú principal"
     },
     {
-      "name": "Abrir Mapa",
-      "url": "./mapa_live_F150.html",
-      "description": "Ver ruta del día"
-    },
-    {
-      "name": "Resumen",
-      "url": "./resumen.html",
-      "description": "Resumen por camiones"
+      "name": "Generar cargues",
+      "url": "./cargue.html",
+      "description": "Mapa de Cargue"
     }
   ]
 }

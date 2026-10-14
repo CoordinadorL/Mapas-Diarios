@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b4f7a">
+<title>OPAUSTRO — Inicio</title>
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#eef3f8;color:#0f172a;display:flex;flex-direction:column}
+.topbar{background:linear-gradient(135deg,#06324f 0%,#0b4f7a 50%,#0e7ab8 100%);color:#fff;
+  display:flex;align-items:center;gap:14px;padding:12px 20px;padding-top:max(12px,env(safe-area-inset-top));box-shadow:0 2px 12px rgba(0,0,0,.18)}
+.topbar .logo{background:#fff;border-radius:12px;padding:7px 12px;display:flex;align-items:center}
+.topbar .logo img{height:30px;display:block}
+.topbar h1{font-size:1.15rem;font-weight:800;flex:1;min-width:0}
+.usuario{display:flex;align-items:center;gap:10px;font-size:.85rem;font-weight:700}
+.usuario .nombre{max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.salir{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:10px;padding:7px 12px;font-weight:700;font-size:.8rem;cursor:pointer;white-space:nowrap}
+.salir:hover{background:rgba(255,255,255,.24)}
+main{flex:1;overflow-y:auto;padding:26px 16px 30px}
+.contenido{max-width:760px;margin:0 auto}
+.saludo{font-size:1.35rem;font-weight:800}
+.saludo-sub{font-size:.92rem;color:#64748b;margin-top:4px;margin-bottom:20px}
+.lista{list-style:none;display:flex;flex-direction:column;gap:12px}
+.item{width:100%;display:flex;align-items:center;gap:16px;background:#fff;border:1.5px solid #dbe5ee;border-radius:16px;
+  padding:16px 18px;cursor:pointer;text-align:left;font-family:inherit;color:inherit;box-shadow:0 2px 8px rgba(15,23,42,.05);
+  transition:transform .12s,box-shadow .15s,border-color .15s}
+.item:hover{border-color:#0e7ab8;box-shadow:0 6px 18px rgba(14,122,184,.15)}
+.item:active{transform:scale(.99)}
+.item .icono{width:52px;height:52px;border-radius:14px;background:linear-gradient(135deg,#e0f0fa,#cfe6f5);display:flex;align-items:center;justify-content:center;font-size:1.6rem;flex-shrink:0}
+.item .textos{flex:1;min-width:0}
+.item .titulo{font-size:1rem;font-weight:800;letter-spacing:.3px}
+.item .desc{font-size:.82rem;color:#64748b;margin-top:3px}
+.item .flecha{font-size:1.3rem;color:#94a3b8;flex-shrink:0}
+.etiqueta{display:inline-block;font-size:.66rem;font-weight:800;padding:2px 8px;border-radius:20px;margin-left:8px;vertical-align:2px;letter-spacing:.3px}
+.etiqueta.pc{background:#fef3c7;color:#92400e}
+.etiqueta.pronto{background:#e2e8f0;color:#475569}
+.item.pronto{cursor:default;opacity:.75}
+.item.pronto:hover{border-color:#dbe5ee;box-shadow:0 2px 8px rgba(15,23,42,.05)}
+.item.pronto .icono{filter:grayscale(.6)}
+.barra-inferior{background:#eaf4fb;border-top:1.5px solid #c9dfee;display:flex;justify-content:center;padding-bottom:env(safe-area-inset-bottom)}
+.tab{flex:0 1 220px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:10px 0 9px;font-size:.78rem;font-weight:800;color:#0b4f7a;border:none;background:none;cursor:pointer;border-top:3px solid transparent}
+.tab .ti{font-size:1.25rem}
+.tab.activa{border-top-color:#0b4f7a}
+#toast{position:fixed;left:50%;bottom:86px;transform:translateX(-50%) translateY(20px);opacity:0;pointer-events:none;
+  background:#0f172a;color:#fff;padding:12px 18px;border-radius:12px;font-size:.85rem;font-weight:600;max-width:min(92vw,520px);text-align:center;
+  box-shadow:0 8px 24px rgba(0,0,0,.3);transition:opacity .2s,transform .2s;z-index:50}
+#toast.visible{opacity:1;transform:translateX(-50%) translateY(0)}
+@media (max-width:600px){
+  .topbar{padding:10px 14px;gap:10px}
+  .topbar .logo img{height:22px}
+  .topbar h1{font-size:1rem}
+  .usuario .nombre{display:none}
+  .saludo{font-size:1.15rem}
+  .item{padding:14px;gap:12px}
+  .item .icono{width:46px;height:46px;font-size:1.4rem}
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="logo"><img src="logo-wordmark.png" alt="OPAUSTRO Logística"></div>
+  <h1>Inicio</h1>
+  <div class="usuario">
+    <span class="nombre" id="usuario-nombre"></span>
+    <button class="salir" id="btn-salir" type="button">Cerrar sesión</button>
+  </div>
+</header>
+
+<main>
+  <div class="contenido">
+    <div class="saludo" id="saludo">Hola</div>
+    <div class="saludo-sub">¿Qué quieres hacer hoy?</div>
+    <ul class="lista" id="lista-menu"></ul>
+  </div>
+</main>
+
+<nav class="barra-inferior">
+  <button class="tab activa" type="button"><span class="ti">🏠</span>Inicio</button>
+</nav>
+
+<div id="toast"></div>
+
+<script src="menu-config.js"></script>
+<script>
+if('serviceWorker' in navigator){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').then(reg=>{
+      setInterval(()=>reg.update().catch(()=>{}), 5*60*1000);
+    }).catch(()=>{});
+  });
+  let controllerYaExistia = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(!controllerYaExistia){ controllerYaExistia = true; return; }
+    window.location.reload(); // el menú no tiene nada a medio llenar
+  });
+}
+
+const DURACION_SESION_MS = 16*60*60*1000; // igual que TOKEN_TTL_MS del backend
+function getSesion(){ try{ return JSON.parse(localStorage.getItem('sesionActiva')||'null'); }catch(e){ return null; } }
+const sesion=getSesion();
+if(!sesion || !sesion.token || (sesion.ts && Date.now()-sesion.ts >= DURACION_SESION_MS)){
+  try{ localStorage.removeItem('sesionActiva'); }catch(e){}
+  window.location.replace('login.html');
+}
+
+let toastTimer=null;
+function mostrarToast(texto, ms){
+  const t=document.getElementById('toast');
+  t.textContent=texto;
+  t.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('visible'), ms||3000);
+}
+
+function abrirOpcion(op){
+  if(!op.destino){ mostrarToast('🛠️ '+op.titulo+' estará disponible próximamente.'); return; }
+  if(op.nuevaPestana){
+    window.open(op.destino, '_blank', 'noopener');
+    if(op.nota) mostrarToast('ℹ️ '+op.nota, 7000);
+    return;
+  }
+  window.location.href=op.destino;
+}
+
+function construirMenu(){
+  const lista=document.getElementById('lista-menu');
+  lista.innerHTML='';
+  const rol=sesion && sesion.rol;
+  (typeof MENU_INICIO!=='undefined'?MENU_INICIO:[])
+    .filter(op=>!op.roles || op.roles.includes(rol))
+    .forEach(op=>{
+      const li=document.createElement('li');
+      const b=document.createElement('button');
+      b.type='button';
+      b.className='item'+(op.destino?'':' pronto');
+      const icono=document.createElement('div'); icono.className='icono'; icono.textContent=op.icono||'📌';
+      const textos=document.createElement('div'); textos.className='textos';
+      const titulo=document.createElement('div'); titulo.className='titulo'; titulo.textContent=op.titulo;
+      if(op.soloPC){ const e=document.createElement('span'); e.className='etiqueta pc'; e.textContent='SOLO EN LA PC'; titulo.appendChild(e); }
+      if(!op.destino){ const e=document.createElement('span'); e.className='etiqueta pronto'; e.textContent='PRÓXIMAMENTE'; titulo.appendChild(e); }
+      const desc=document.createElement('div'); desc.className='desc'; desc.textContent=op.descripcion||'';
+      textos.appendChild(titulo); textos.appendChild(desc);
+      const flecha=document.createElement('div'); flecha.className='flecha'; flecha.textContent=op.destino?'›':'';
+      b.appendChild(icono); b.appendChild(textos); b.appendChild(flecha);
+      b.onclick=()=>abrirOpcion(op);
+      li.appendChild(b);
+      lista.appendChild(li);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  if(!sesion) return;
+  document.getElementById('usuario-nombre').textContent=sesion.usuario||'';
+  document.getElementById('saludo').textContent='Hola, '+(sesion.usuario||'');
+  document.getElementById('btn-salir').onclick=()=>{
+    if(!confirm('¿Cerrar sesión?')) return;
+    localStorage.removeItem('sesionActiva');
+    window.location.replace('login.html');
+  };
+  construirMenu();
+  // Aviso cuando otra página rebota acá por falta de permiso (ej. cargue.html).
+  const aviso=new URLSearchParams(location.search).get('aviso');
+  if(aviso==='sin-permiso') mostrarToast('⛔ Tu usuario no tiene permiso para entrar a esa opción.', 5000);
+});
+</script>
+</body>
+</html>

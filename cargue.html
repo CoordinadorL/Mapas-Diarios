@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0f172a">
 <link rel="icon" href="icon-192.png">
-<title>Mapas Diarios — Mapa de Cargue</title>
+<title>OPAUSTRO — Mapa de Cargue</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
@@ -201,9 +201,8 @@ button.accion{width:100%;padding:6px;border-radius:8px;border:none;font-weight:7
     <div class="topbar-right">
       <button class="badge" id="cargue-btn-actualizar" title="Volver a consultar el Sheet">🔄 Actualizar</button>
       <button class="badge" id="cargue-btn-resumen-vendedores" title="Ver reporte de pedidos por vendedor">📊 Ver resumen</button>
-      <a class="badge" href="resumen.html" title="Volver al resumen">📈 Resumen rutas</a>
       <a class="badge" href="historial-cargues.html" title="Historial de cargues armados día por día">🗓️ Historial</a>
-      <a class="badge" href="mapa_live_F150.html" title="Volver al mapa de entrega">🗺️ Mapa de entrega</a>
+      <a class="badge" href="inicio.html" title="Volver al menú de Inicio">🏠 Inicio</a>
       <div class="badge" onclick="logout()" title="Cerrar sesión">👤 <span id="user-name">—</span> · <span id="user-rol">—</span> ⏻</div>
     </div>
   </div>
@@ -318,9 +317,8 @@ button.accion{width:100%;padding:6px;border-radius:8px;border:none;font-weight:7
 </div>
 
 <script>
-// Registro del Service Worker + aviso de nueva versión (igual que
-// resumen.html/historial-cargues.html) -- cargue.html no lo tenía, así que
-// quien lo deja instalado como app de escritorio (el uso más común de esta
+// Registro del Service Worker + aviso de nueva versión -- sin esto, quien
+// lo deja instalado como app de escritorio (el uso más común de esta
 // herramienta) podía quedar con una copia vieja cacheada para siempre, sin
 // ningún aviso ni forma de refrescarla sola.
 if('serviceWorker' in navigator){
@@ -345,9 +343,9 @@ function avisarNuevaVersion(){
   document.body.appendChild(div);
 }
 
-// ── SESIÓN — solo admin/bodega/coordinador (mismo criterio que resumen.html
-// para "ver todo", pero SIN cartera: esta herramienta arma cargues, cartera
-// no participa de esa decisión) ──────────────────────────────
+// ── SESIÓN — solo admin/bodega/coordinador (SIN cartera: esta herramienta
+// arma cargues, cartera no participa de esa decisión). Facturación entra
+// al Historial (solo lectura); el resto vuelve al Inicio con un aviso. ──
 const API_URL="https://script.google.com/macros/s/AKfycbwzQRnCJHFXni_9Qvs9kh_6BoikPDtb2sAMNChS3gSk9gAn5e31z5PFvKRGRzeoFqK5og/exec";
 function getSesion(){ try{ return JSON.parse(localStorage.getItem('sesionActiva')||'null'); }catch(e){ return null; } }
 function getToken(){ const s=getSesion(); return (s&&s.token)||''; }
@@ -364,7 +362,8 @@ function logout(){ if(!confirm('¿Cerrar sesión?'))return; localStorage.removeI
 const ROLES_CARGUE=['admin','bodega','coordinador'];
 const sesion=getSesion();
 if(!sesion || !sesion.rol){ window.location.href='login.html'; }
-else if(!ROLES_CARGUE.includes(sesion.rol)){ window.location.href='mapa_live_F150.html'; }
+else if(sesion.rol==='facturador'){ window.location.href='historial-cargues.html'; }
+else if(!ROLES_CARGUE.includes(sesion.rol)){ window.location.href='inicio.html?aviso=sin-permiso'; }
 
 document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('user-name').textContent = sesion ? sesion.usuario : '—';
