@@ -38,7 +38,9 @@ async function llamarServicio(metodo, ruta, cuerpo, ms){
   const ctrl=new AbortController();
   const timer=setTimeout(()=>ctrl.abort(), ms||15000);
   try{
-    const opciones={ method:metodo, headers:{'X-Opaustro':'1'}, signal:ctrl.signal, cache:'no-store' };
+    // targetAddressSpace: le dice a Chrome que es un pedido a esta misma PC
+    // (pide permiso "acceso a la red local" una vez); otros navegadores lo ignoran.
+    const opciones={ method:metodo, headers:{'X-Opaustro':'1'}, signal:ctrl.signal, cache:'no-store', targetAddressSpace:'loopback' };
     if(metodo==='POST'){ opciones.headers['Content-Type']='application/json'; opciones.body=JSON.stringify(cuerpo||{}); }
     const r=await fetch(SERVICIO_URL+ruta, opciones);
     return await r.json();
