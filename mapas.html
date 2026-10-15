@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b4f7a">
+<title>OPAUSTRO — Generar mapas</title>
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="herramientas.css">
+</head>
+<body>
+<header class="topbar">
+  <a class="btn-menu" href="inicio.html" title="Volver al menú de Inicio">← Menú</a>
+  <div class="logo"><img src="logo-wordmark.png" alt="OPAUSTRO"></div>
+  <h1>Generar mapas</h1>
+  <span class="pill" id="pill-servicio">● Conectando...</span>
+</header>
+<nav class="pestanas">
+  <button type="button" data-pestana="generar" class="activa">⚙️ Generar ruta</button>
+  <button type="button" data-pestana="ver">🗺️ Ver mapa</button>
+</nav>
+
+<main>
+  <!-- ─────────────── GENERAR RUTA ─────────────── -->
+  <div class="contenido" id="p-generar">
+    <div class="card aviso-servicio oculto" id="sin-servicio">
+      <h2>Esta parte funciona en la PC de logística</h2>
+      <p>Generar la ruta usa el archivo base y el programa que están en esa PC.</p>
+      <p>Si estás en esa PC: abre <code>SERVICIO MAPAS.bat</code> (carpeta <code>C:\MAPA-RUTAS</code>) y espera unos segundos.
+         Si Chrome pregunta por <b>acceso a la red local / a otras apps del dispositivo</b>, elige <b>Permitir</b>.</p>
+      <p>Desde cualquier equipo sí puedes ver el mapa publicado en la pestaña <b>🗺️ Ver mapa</b>.</p>
+      <div class="fila" style="margin-top:10px"><button class="btn btn-principal" type="button" onclick="refrescarYa()">Reintentar</button></div>
+    </div>
+
+    <div id="con-servicio" class="oculto" style="display:flex;flex-direction:column;gap:12px">
+      <div class="card">
+        <h2>1. Archivo base</h2>
+        <div class="fila entre">
+          <div style="min-width:0;flex:1">
+            <div class="titulo-base" id="base-nombre">—</div>
+            <div class="ayuda" id="base-info"></div>
+          </div>
+          <div class="fila">
+            <button class="btn" type="button" id="b-abrir-base">Abrir en Excel</button>
+            <button class="btn" type="button" id="b-cambiar">Cambiar archivo...</button>
+            <button class="btn" type="button" id="b-releer">Volver a leer</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2. Fecha de liquidación</h2>
+        <div class="fechas" id="fechas"></div>
+        <div class="ayuda" id="nota-fechas"></div>
+      </div>
+
+      <div class="card">
+        <h2>3. Camiones que van al mapa</h2>
+        <div class="fila entre">
+          <div class="fila">
+            <button class="btn" type="button" id="b-todos">Marcar todos</button>
+            <button class="btn" type="button" id="b-ninguno">Desmarcar todos</button>
+          </div>
+          <div class="resumen" id="resumen"></div>
+        </div>
+
+        <div class="alerta oculto" id="sin-georef">
+          <h3 id="sg-titulo"></h3>
+          <div class="ayuda" id="sg-aviso"></div>
+          <div class="tabla-wrap" style="max-height:200px">
+            <table><thead><tr><th>Transportista</th><th>Código</th><th>Cliente</th><th>Dirección</th><th>Vendedor</th><th>Motivo</th></tr></thead>
+            <tbody id="sg-filas"></tbody></table>
+          </div>
+          <div class="pegar">
+            <button class="btn" type="button" id="b-buscar-maps">1. Buscar en Google Maps</button>
+            <input type="text" id="inp-ubicacion" placeholder="Pega aquí la ubicación copiada (ej. -1.671234, -78.654321 o el link de Google Maps)">
+            <button class="btn btn-principal" type="button" id="b-guardar-ubic">2. Guardar ubicación</button>
+          </div>
+          <div class="fila" style="margin-top:8px">
+            <button class="btn" type="button" id="b-control-geo">Varios: Excel de control</button>
+            <button class="btn" type="button" id="b-copiar-lista">Copiar lista para vendedores</button>
+          </div>
+        </div>
+
+        <div class="tabla-wrap">
+          <table>
+            <thead><tr><th></th><th>Camión</th><th>Chofer</th><th>N° Liq.</th><th class="num">Clientes</th><th class="num">Total</th><th>Cargues</th></tr></thead>
+            <tbody id="camiones"></tbody>
+          </table>
+        </div>
+        <div class="ayuda">Toca un camión para marcarlo o desmarcarlo; lo que desmarques se recuerda para la próxima vez (los camiones nuevos salen en amarillo).
+Los que tienen 2 cargues (2 N° de liquidación) salen en celeste: toca su botón de "Cargues" para elegir unificado o separados.</div>
+      </div>
+
+      <div class="card">
+        <div class="fila entre">
+          <div class="fila">
+            <button class="btn" type="button" id="b-carpeta">Carpeta de los MAPA</button>
+            <button class="btn" type="button" id="b-control">Excel de control</button>
+            <button class="btn" type="button" id="b-aplicar-ubic">Aplicar ubicaciones</button>
+            <a class="btn" href="mymaps.html" id="b-mymaps" style="text-decoration:none">📍 My Maps</a>
+          </div>
+          <div class="fila">
+            <button class="btn" type="button" id="b-excel">Solo generar Excel</button>
+            <button class="btn btn-principal" type="button" id="b-publicar">Generar y publicar en el mapa</button>
+          </div>
+        </div>
+        <div class="estado" style="margin-top:12px"><div class="spin oculto" id="spin"></div><span id="mensaje"></span></div>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─────────────── VER MAPA ─────────────── -->
+  <div class="contenido visor oculto" id="p-ver">
+    <div class="card">
+      <div class="fila entre">
+        <div><b>Mapa de rutas diarias</b><div class="ayuda" style="margin-top:2px">El mismo mapa que ven los choferes. Si te pide el código, ingrésalo una vez.</div></div>
+        <div class="fila">
+          <button class="btn btn-principal" type="button" id="b-ir-mapa">🗺️ Ir al mapa</button>
+          <button class="btn" type="button" id="b-abrir-mapa">Abrir en el navegador</button>
+        </div>
+      </div>
+    </div>
+    <div class="visor-marco" id="visor">Toca "Ir al mapa" para cargarlo aquí.</div>
+  </div>
+</main>
+
+<script src="servicio-local.js"></script>
+<script>
+const URL_MAPA_PUBLICADO='https://coordinadorl.github.io/mapa-rutas-diarias/';
+let versionPintada=-1, codigoElegido=null, ocupado=true, iniciado=false;
+
+// ── Pestañas ──
+document.querySelectorAll('.pestanas button').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.pestanas button').forEach(x=>x.classList.toggle('activa', x===b));
+  document.getElementById('p-generar').classList.toggle('oculto', b.dataset.pestana!=='generar');
+  document.getElementById('p-ver').classList.toggle('oculto', b.dataset.pestana!=='ver');
+});
+document.getElementById('b-ir-mapa').onclick=()=>{
+  const v=document.getElementById('visor');
+  v.innerHTML=''; const f=document.createElement('iframe'); f.src=URL_MAPA_PUBLICADO; f.title='Mapa de rutas diarias'; v.appendChild(f);
+};
+document.getElementById('b-abrir-mapa').onclick=()=>window.open(URL_MAPA_PUBLICADO,'_blank','noopener');
+
+// ── Botones ──
+const $=id=>document.getElementById(id);
+$('b-abrir-base').onclick=()=>accion('/generador/abrir_base');
+$('b-cambiar').onclick=()=>{ mostrarToast('Se abrió el cuadro para elegir el archivo en la PC (puede quedar detrás del navegador).', 5000); accion('/generador/elegir_base', {}, 10*60*1000); };
+$('b-releer').onclick=()=>accion('/generador/releer');
+$('b-todos').onclick=()=>accion('/generador/todos', {valor:true});
+$('b-ninguno').onclick=()=>accion('/generador/todos', {valor:false});
+$('b-carpeta').onclick=()=>accion('/generador/carpeta');
+$('b-control').onclick=()=>accion('/generador/control');
+$('b-control-geo').onclick=()=>accion('/generador/control');
+$('b-aplicar-ubic').onclick=()=>accion('/generador/aplicar_ubicaciones');
+$('b-excel').onclick=()=>accion('/generador/generar', {publicar:false}, 60000);
+$('b-publicar').onclick=()=>accion('/generador/generar', {publicar:true}, 60000);
+$('b-copiar-lista').onclick=async()=>{
+  const r=await accion('/generador/lista_vendedores');
+  if(r && r.ok) copiarTexto(r.texto, `✅ Lista copiada (${r.cantidad} clientes, por vendedor): pégala en WhatsApp.`);
+};
+$('b-buscar-maps').onclick=()=>{
+  const c=clienteElegido(); if(!c) return;
+  const consulta=[c.nombre, c.direccion, 'Ecuador'].filter(Boolean).join(', ');
+  window.open('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(consulta),'_blank','noopener');
+  mostrarToast(`Buscando ${c.codigo}: en el local, clic derecho → clic en los números (se copian) → pégalos aquí.`, 6000);
+};
+$('b-guardar-ubic').onclick=async()=>{
+  const c=clienteElegido(); if(!c) return;
+  const texto=$('inp-ubicacion').value.trim();
+  if(!texto){ mostrarToast('Primero pega la ubicación copiada de Google Maps.'); $('inp-ubicacion').focus(); return; }
+  const r=await accion('/generador/ubicacion', {codigo:c.codigo, texto});
+  if(r && r.ok) $('inp-ubicacion').value='';
+};
+
+function clienteElegido(){
+  const sg=_ultimoEstado && _ultimoEstado.sin_georef;
+  const lista=sg?sg.clientes:[];
+  const c=lista.find(x=>x.codigo===codigoElegido) || (lista.length===1?lista[0]:null);
+  if(!c) mostrarModal({titulo:'Sin ubicación', texto:'Primero elige un cliente de la lista roja.', tipo:'aviso'});
+  return c;
+}
+
+// ── Dibujar lo que manda el servicio ──
+function sinServicio(){
+  $('sin-servicio').classList.remove('oculto');
+  $('con-servicio').classList.add('oculto');
+  versionPintada=-1;
+}
+
+function render(e){
+  $('sin-servicio').classList.add('oculto');
+  $('con-servicio').classList.remove('oculto');
+  if(!iniciado){ iniciado=true; llamarServicio('POST','/generador/iniciar',{}).then(refrescarYa).catch(()=>{}); }
+  ocupado=e.ocupado;
+  $('spin').classList.toggle('oculto', !e.ocupado);
+  $('mensaje').textContent=e.mensaje||'';
+  pintarLog(e.log||[]);
+  ['b-cambiar','b-releer','b-todos','b-ninguno','b-control','b-aplicar-ubic','b-control-geo','b-guardar-ubic'].forEach(id=>$(id).disabled=e.ocupado);
+  $('b-excel').disabled=e.ocupado||!e.botones.excel;
+  $('b-publicar').disabled=e.ocupado||!e.botones.publicar;
+
+  if(e.version!==versionPintada){
+    versionPintada=e.version;
+    $('base-nombre').textContent=e.base?e.base.nombre:'Buscando el archivo base...';
+    $('base-info').textContent=e.base?e.base.info:'';
+    pintarFechas(e);
+    pintarCamiones(e);
+    pintarSinGeoref(e.sin_georef);
+  }
+  atenderAvisosYPregunta('/generador', e, aviso=>aviso.mymaps?[{texto:'📍 Ir a My Maps', valor:'mymaps', accion:async()=>{
+    try{ await llamarServicio('POST','/generador/aviso_visto',{id:aviso.id}); }catch(x){}
+    const q=aviso.mymaps.carpeta?('?carpeta='+encodeURIComponent(aviso.mymaps.carpeta)):'?ofrecer=1';
+    window.location.href='mymaps.html'+q;
+  }}]:[]);
+}
+
+function pintarFechas(e){
+  const cont=$('fechas'); cont.innerHTML='';
+  e.fechas.forEach(f=>{
+    const l=el('label'); const c=el('input'); c.type='checkbox'; c.checked=f.marcada; c.disabled=e.ocupado;
+    c.onchange=()=>accion('/generador/fecha', {fecha:f.iso, marcada:c.checked});
+    l.appendChild(c); l.appendChild(el('span',null,f.texto)); cont.appendChild(l);
+  });
+  $('nota-fechas').textContent=e.nota_fechas||'';
+}
+
+function pintarCamiones(e){
+  const tb=$('camiones'); tb.innerHTML='';
+  $('resumen').textContent=e.resumen||'';
+  $('resumen').classList.toggle('alerta-txt', !!e.resumen_alerta);
+  e.camiones.forEach(c=>{
+    const tr=el('tr','clic'+(c.incluido?'':' fuera')+(c.nuevo?' nuevo':'')+(c.varios?' varios':'')+(c.sin_geo?' singeo':''));
+    tr.appendChild(el('td','chk',c.incluido?'☑':'☐'));
+    tr.appendChild(el('td',null,c.id));
+    const tdN=el('td',null,c.nombre);
+    if(c.nuevo) tdN.appendChild(el('span','etq nuevo','nuevo'));
+    if(c.movidos) tdN.appendChild(el('span','etq mov',`+${c.movidos} de otra ruta`));
+    if(c.sin_geo) tdN.appendChild(el('span','etq geo',`${c.sin_geo} SIN UBICACIÓN`));
+    tr.appendChild(tdN);
+    tr.appendChild(el('td',null,c.liq));
+    tr.appendChild(el('td','num',c.clientes));
+    tr.appendChild(el('td','num',c.total));
+    const tdC=el('td');
+    if(c.varios){
+      const b=el('button','btn btn-cargue',c.cargues); b.type='button';
+      b.onclick=ev=>{ ev.stopPropagation(); if(!ocupado) accion('/generador/camion',{id:c.id, campo:'separar'}); };
+      tdC.appendChild(b);
+    } else tdC.textContent=c.cargues;
+    tr.appendChild(tdC);
+    tr.onclick=()=>{ if(!ocupado) accion('/generador/camion',{id:c.id, campo:'incluir'}); };
+    tb.appendChild(tr);
+  });
+  if(!e.camiones.length){
+    const tr=el('tr'); const td=el('td',null,e.ocupado?'Leyendo...':'No hay camiones para la fecha marcada.'); td.colSpan=7; td.style.color='#64748b';
+    tr.appendChild(td); tb.appendChild(tr);
+  }
+}
+
+function pintarSinGeoref(sg){
+  const caja=$('sin-georef');
+  if(!sg){ caja.classList.add('oculto'); codigoElegido=null; return; }
+  caja.classList.remove('oculto');
+  $('sg-titulo').textContent=sg.titulo;
+  $('sg-aviso').textContent=sg.aviso;
+  if(!sg.clientes.some(c=>c.codigo===codigoElegido)) codigoElegido=sg.clientes.length===1?sg.clientes[0].codigo:null;
+  const tb=$('sg-filas'); tb.innerHTML='';
+  sg.clientes.forEach(c=>{
+    const tr=el('tr','clic'+(c.codigo===codigoElegido?' elegido':''));
+    [c.rutas,c.codigo,c.nombre,c.direccion,c.vendedores,c.motivo].forEach(v=>tr.appendChild(el('td',null,v)));
+    tr.onclick=()=>{ codigoElegido=c.codigo; [...tb.children].forEach(x=>x.classList.toggle('elegido', x===tr)); };
+    tr.ondblclick=()=>$('b-buscar-maps').click();
+    tb.appendChild(tr);
+  });
+}
+
+iniciarConsulta('/generador/estado', render, sinServicio);
+</script>
+</body>
+</html>

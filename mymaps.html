@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b4f7a">
+<title>OPAUSTRO — My Maps</title>
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="herramientas.css">
+<style>
+select{border:1.5px solid #cbd5e1;border-radius:10px;padding:7px 10px;font-size:.88rem;font-family:inherit;font-weight:600;min-width:260px;background:#fff}
+.campo{display:grid;grid-template-columns:150px 1fr;gap:8px;align-items:center;margin-bottom:8px}
+.georef{font-weight:800;font-size:.85rem;white-space:pre-line;flex:1}
+.georef.verde{color:#15803d}.georef.rojo{color:#b00020}.georef.gris{color:#64748b}
+.aviso-naranja{color:#a15c00;font-size:.82rem;font-weight:600;white-space:pre-line;margin-top:6px}
+.act{background:#fff4e0;border:1.5px solid #fed7aa;border-radius:12px;padding:10px 12px;margin-bottom:10px;color:#8a4b00;font-weight:700;font-size:.82rem;white-space:pre-line}
+details.dia{border:1px solid #e2e8f0;border-radius:10px;margin-top:8px;overflow:hidden}
+details.dia>summary{background:#eef3fb;padding:8px 12px;font-weight:800;font-size:.86rem;cursor:pointer;display:flex;align-items:center;gap:10px;list-style:none}
+details.dia>summary::-webkit-details-marker{display:none}
+details.dia>summary .cuantos{color:#64748b;font-weight:600;font-size:.78rem;flex:1}
+.mapa{display:flex;align-items:center;gap:10px;padding:8px 12px;border-top:1px solid #f1f5f9;flex-wrap:wrap}
+.mapa .t{flex:1;min-width:220px}
+.mapa .t b{font-size:.84rem}
+.mapa .t div{font-size:.76rem;color:#64748b}
+.visor-mm{height:min(70vh,640px)}
+@media (max-width:640px){ .campo{grid-template-columns:1fr} select{min-width:0;width:100%} }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="btn-menu" href="inicio.html" title="Volver al menú de Inicio">← Menú</a>
+  <div class="logo"><img src="logo-wordmark.png" alt="OPAUSTRO"></div>
+  <h1>My Maps</h1>
+  <span class="pill" id="pill-servicio">● Conectando...</span>
+</header>
+
+<main>
+  <div class="contenido">
+    <div class="card aviso-servicio oculto" id="sin-servicio">
+      <h2>Esta parte funciona en la PC de logística</h2>
+      <p>Subir a My Maps usa el robot y el Chrome que están en esa PC.</p>
+      <p>Si estás en esa PC: abre <code>SERVICIO MAPAS.bat</code> (carpeta <code>C:\MAPA-RUTAS</code>) y espera unos segundos.
+         Si Chrome pregunta por <b>acceso a la red local / a otras apps del dispositivo</b>, elige <b>Permitir</b>.</p>
+      <div class="fila" style="margin-top:10px">
+        <button class="btn btn-principal" type="button" onclick="refrescarYa()">Reintentar</button>
+        <a class="btn" href="https://www.google.com/maps/d/?hl=es" target="_blank" rel="noopener" style="text-decoration:none">Abrir Google My Maps</a>
+      </div>
+    </div>
+
+    <div class="card oculto" id="visor-card">
+      <div class="fila entre">
+        <b id="visor-titulo">Mapa</b>
+        <div class="fila">
+          <button class="btn" type="button" id="b-visor-abrir">Abrir en el navegador</button>
+          <button class="btn" type="button" id="b-visor-cerrar">✕ Cerrar mapa</button>
+        </div>
+      </div>
+      <div class="visor-marco visor-mm" id="visor" style="margin-top:10px"></div>
+    </div>
+
+    <div id="con-servicio" class="oculto" style="display:flex;flex-direction:column;gap:12px">
+      <div class="card">
+        <h2>1. Ruta que se sube</h2>
+        <div class="campo"><span>Ruta del día:</span><select id="sel-carpeta"></select></div>
+        <div class="campo"><span>Fecha de entrega:</span><select id="sel-entrega"></select></div>
+        <div class="ayuda" style="margin-top:0">Va en el título de cada mapa. Normalmente es el siguiente día hábil (viernes y sábado → lunes); cámbiala si ese día no se trabaja.</div>
+        <div class="tabla-wrap" style="max-height:220px">
+          <table><thead><tr><th>Mapa</th><th class="num">Capas</th><th>Transportistas</th></tr></thead><tbody id="planes"></tbody></table>
+        </div>
+        <div class="aviso-naranja" id="aviso-planes"></div>
+        <div class="fila" style="margin-top:8px;align-items:flex-start">
+          <div class="georef gris" id="georef"></div>
+          <button class="btn" type="button" id="b-revisar">Revisar de nuevo</button>
+        </div>
+        <div class="fila entre" style="margin-top:10px">
+          <span class="ayuda" style="margin:0" id="tiempo"></span>
+          <div class="fila">
+            <button class="btn btn-peligro" type="button" id="b-cancelar" disabled>Cancelar</button>
+            <button class="btn btn-principal" type="button" id="b-subir">Subir a My Maps</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="fila entre"><h2 style="margin:0" id="titulo-links">2. Links de My Maps</h2>
+          <button class="btn" type="button" id="b-limpiar">Limpiar mapas viejos</button></div>
+        <div class="act oculto" id="act" style="margin-top:10px">
+          <div id="act-texto"></div>
+          <div class="fila" style="margin-top:8px"><button class="btn btn-principal" type="button" id="b-actualizar">Actualizar My Maps (mismo link)</button></div>
+        </div>
+        <div id="links"></div>
+        <div class="ayuda" id="ayuda-links"></div>
+      </div>
+
+      <div class="card">
+        <div class="estado"><div class="spin oculto" id="spin"></div><span id="mensaje"></span></div>
+        <div id="log"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="servicio-local.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+let versionPintada=-1, iniciado=false, trabajando=false, linksFirma='';
+const diasAbiertos=new Set();
+let urlVisor='';
+
+// Lo que llega en el link (desde Generar mapas): carpeta recien publicada,
+// o "ofrecer" para preguntar si se actualizan los mapas ya subidos.
+const params=new URLSearchParams(location.search);
+const inicio={ carpeta:params.get('carpeta')||'', ofrecer:params.get('ofrecer')==='1' };
+if(location.search) history.replaceState(null,'',location.pathname);
+
+$('sel-carpeta').onchange=()=>accion('/mymaps/carpeta',{i:Number($('sel-carpeta').value)});
+$('sel-entrega').onchange=()=>accion('/mymaps/entrega',{i:Number($('sel-entrega').value)});
+$('b-revisar').onclick=()=>accion('/mymaps/revisar');
+$('b-subir').onclick=()=>accion('/mymaps/subir');
+$('b-actualizar').onclick=()=>accion('/mymaps/actualizar');
+$('b-limpiar').onclick=()=>accion('/mymaps/limpiar');
+$('b-cancelar').onclick=async()=>{
+  const e=_ultimoEstado; if(!e||!e.trabajando) return;
+  const si=await mostrarModal({titulo:'Cancelar', texto:e.pregunta_cancelar||'¿Cancelar?', tipo:'pregunta',
+    botones:[{texto:'No', valor:false},{texto:'Sí, cancelar', valor:true, principal:true}]});
+  if(si) accion('/mymaps/cancelar');
+};
+$('b-visor-cerrar').onclick=()=>{ $('visor-card').classList.add('oculto'); $('visor').innerHTML=''; };
+$('b-visor-abrir').onclick=()=>{ if(urlVisor) window.open(urlVisor,'_blank','noopener'); };
+
+function irAlMapa(m){
+  urlVisor=m.url;
+  $('visor-titulo').textContent=m.titulo;
+  const v=$('visor'); v.innerHTML='';
+  const f=document.createElement('iframe');
+  f.src='https://www.google.com/maps/d/embed?mid='+encodeURIComponent(m.mid);
+  f.title=m.titulo; v.appendChild(f);
+  $('visor-card').classList.remove('oculto');
+  document.querySelector('main').scrollTo({top:0, behavior:'smooth'});
+}
+
+function sinServicio(){
+  $('sin-servicio').classList.remove('oculto');
+  $('con-servicio').classList.add('oculto');
+  versionPintada=-1;
+}
+
+function render(e){
+  $('sin-servicio').classList.add('oculto');
+  $('con-servicio').classList.remove('oculto');
+  if(!iniciado){ iniciado=true; llamarServicio('POST','/mymaps/iniciar',inicio).then(refrescarYa).catch(()=>{}); }
+  trabajando=e.trabajando;
+  $('spin').classList.toggle('oculto', !e.trabajando);
+  $('mensaje').textContent=e.mensaje||'';
+  pintarLog(e.log||[]);
+  $('b-subir').disabled=!e.puede_subir;
+  $('b-cancelar').disabled=!e.trabajando;
+  ['b-revisar','b-limpiar','b-actualizar'].forEach(id=>$(id).disabled=e.trabajando);
+  $('sel-carpeta').disabled=$('sel-entrega').disabled=e.trabajando;
+
+  if(e.version!==versionPintada){
+    versionPintada=e.version;
+    llenarSelect($('sel-carpeta'), e.carpetas, e.carpeta_i);
+    llenarSelect($('sel-entrega'), e.entregas, e.entrega_i);
+    const tb=$('planes'); tb.innerHTML='';
+    e.planes.forEach(p=>{ const tr=el('tr'); tr.appendChild(el('td',null,p.titulo)); tr.appendChild(el('td','num',p.capas)); tr.appendChild(el('td',null,p.transportistas)); tb.appendChild(tr); });
+    if(!e.planes.length){ const tr=el('tr'); const td=el('td',null,'—'); td.colSpan=3; td.style.color='#64748b'; tr.appendChild(td); tb.appendChild(tr); }
+    $('aviso-planes').textContent=e.aviso_planes||'';
+    $('georef').textContent=e.georef.texto; $('georef').className='georef '+e.georef.color;
+    $('tiempo').textContent=e.tiempo||'';
+    $('titulo-links').textContent=`2. Links de My Maps (últimos ${e.dias_historial} días)`;
+    $('act').classList.toggle('oculto', !e.actualizables.texto);
+    $('act-texto').textContent=e.actualizables.texto;
+    $('b-actualizar').classList.toggle('oculto', !e.actualizables.hay);
+    $('ayuda-links').textContent=`"Copiar mensaje del día" copia título, transportistas y link de todos los mapas de esa entrega, listo para pegar en WhatsApp. "Limpiar mapas viejos" manda a la papelera los de entrega de hace más de ${e.dias_historial} días (también los hechos a mano); se hace solo en cada subida.`;
+  }
+  pintarLinks(e.links||[]);
+  atenderAvisosYPregunta('/mymaps', e, aviso=>{
+    const extra=[];
+    if(aviso.copiar) extra.push({texto:'📋 Copiar mensaje', valor:'copiar', seguirAbierto:true, accion:()=>copiarTexto(aviso.copiar,'✅ Mensaje copiado: pégalo en WhatsApp.')});
+    return extra;
+  });
+}
+
+function llenarSelect(sel, opciones, elegido){
+  sel.innerHTML='';
+  opciones.forEach(o=>{ const op=el('option',null,o.texto); op.value=o.i; sel.appendChild(op); });
+  if(!opciones.length){ const op=el('option',null,'—'); op.value=-1; sel.appendChild(op); }
+  sel.value=String(elegido);
+}
+
+function pintarLinks(dias){
+  const firma=JSON.stringify(dias);
+  if(firma===linksFirma) return;          // no redibujar (mantiene lo abierto/cerrado)
+  const primera=!linksFirma;
+  linksFirma=firma;
+  const cont=$('links'); cont.innerHTML='';
+  if(!dias.length){ cont.appendChild(el('div','ayuda','Todavía no hay mapas subidos con el robot.')); return; }
+  dias.forEach((d,i)=>{
+    if(primera && i<2) diasAbiertos.add(d.dia);
+    const det=el('details','dia'); det.open=diasAbiertos.has(d.dia);
+    det.ontoggle=()=>{ if(det.open) diasAbiertos.add(d.dia); else diasAbiertos.delete(d.dia); };
+    const sum=el('summary');
+    sum.appendChild(el('span',null,d.texto));
+    sum.appendChild(el('span','cuantos',`${d.mapas.length} mapas`));
+    const bDia=el('button','btn','📋 Copiar mensaje del día'); bDia.type='button';
+    bDia.onclick=async ev=>{ ev.preventDefault(); const r=await accion('/mymaps/mensaje_dia',{dia:d.dia}); if(r&&r.ok) copiarTexto(r.texto, `✅ Mensaje copiado: ${r.cantidad} mapas del ${d.texto}.`); };
+    sum.appendChild(bDia);
+    det.appendChild(sum);
+    d.mapas.forEach(m=>{
+      const fila=el('div','mapa');
+      const t=el('div','t'); t.appendChild(el('b',null,m.titulo)); t.appendChild(el('div',null,m.transportistas||''));
+      fila.appendChild(t);
+      const b1=el('button','btn btn-principal','🗺️ Ir al mapa'); b1.type='button'; b1.onclick=()=>irAlMapa(m);
+      const b2=el('button','btn','Abrir en el navegador'); b2.type='button'; b2.onclick=()=>window.open(m.url,'_blank','noopener');
+      const b3=el('button','btn','Copiar link'); b3.type='button'; b3.onclick=()=>copiarTexto(m.url, '✅ Link copiado: '+m.titulo);
+      fila.appendChild(b1); fila.appendChild(b2); fila.appendChild(b3);
+      det.appendChild(fila);
+    });
+    cont.appendChild(det);
+  });
+}
+
+iniciarConsulta('/mymaps/estado', render, sinServicio);
+</script>
+</body>
+</html>

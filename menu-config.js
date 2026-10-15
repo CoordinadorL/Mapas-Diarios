@@ -25,19 +25,15 @@ const MENU_INICIO = [
   },
   {
     titulo: 'GENERAR MAPAS',
-    descripcion: 'Mapa de rutas diarias publicado',
+    descripcion: 'Generar y publicar la ruta del día · ver el mapa',
     icono: '🗺️',
-    destino: 'https://coordinadorl.github.io/mapa-rutas-diarias/',
-    nuevaPestana: true,
-    nota: 'Para generar la ruta del día, en la PC abre "ACTUALIZAR RUTA.bat" (carpeta C:\\MAPA-RUTAS).',
+    destino: 'mapas.html',
   },
   {
     titulo: 'MY MAPS',
-    descripcion: 'Mapas de entrega en Google My Maps',
+    descripcion: 'Subir la ruta a Google My Maps · links de los mapas',
     icono: '📍',
-    destino: 'https://www.google.com/maps/d/?hl=es',
-    nuevaPestana: true,
-    nota: 'Para subir la ruta del día a My Maps, en la PC abre "MY MAPS.bat" (carpeta C:\\MAPA-RUTAS).',
+    destino: 'mymaps.html',
   },
   {
     titulo: 'PEDIDOS A PROVEEDORES',

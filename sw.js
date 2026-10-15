@@ -2,7 +2,7 @@
 // Service Worker — OPAUSTRO (login, menú de Inicio y Cargues)
 // Permite instalación en pantalla de inicio y caché básico
 // ═══════════════════════════════════════════════════════════
-const CACHE_NAME = 'mapas-diarios-v51';
+const CACHE_NAME = 'mapas-diarios-v52';
 // Caché separada para las imágenes del mapa (calles) que usan los mapas de
 // Cargue. Aparte de CACHE_NAME para que actualizar la app no la borre.
 const TILES_CACHE_NAME = 'mapas-diarios-tiles-v1';
@@ -12,6 +12,10 @@ const CACHE_ASSETS = [
   './login.html',
   './inicio.html',
   './menu-config.js',
+  './mapas.html',
+  './mymaps.html',
+  './servicio-local.js',
+  './herramientas.css',
   './manifest.json',
   './logo-wordmark.png',
   './icon-192.png',
@@ -52,6 +56,11 @@ self.addEventListener('activate', event => {
 // Fetch: Network-first para datos de Google Sheets, cache-first para estáticos
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
+
+  // Servicio de la PC (Generar mapas / My Maps): nunca pasa por la caché,
+  // siempre directo (es el estado en vivo del programa).
+  if ((url.hostname === '127.0.0.1' || url.hostname === 'localhost') && url.port === '5178') return;
+  if (event.request.method !== 'GET') return;
 
   // Google Sheets API y ORS → siempre network (datos en tiempo real, nunca servir algo viejo)
   if (
