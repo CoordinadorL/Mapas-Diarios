@@ -2,7 +2,7 @@
 // Service Worker — OPAUSTRO (login, menú de Inicio y Cargues)
 // Permite instalación en pantalla de inicio y caché básico
 // ═══════════════════════════════════════════════════════════
-const CACHE_NAME = 'mapas-diarios-v53';
+const CACHE_NAME = 'mapas-diarios-v54';
 // Caché separada para las imágenes del mapa (calles) que usan los mapas de
 // Cargue. Aparte de CACHE_NAME para que actualizar la app no la borre.
 const TILES_CACHE_NAME = 'mapas-diarios-tiles-v1';
@@ -29,7 +29,11 @@ self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME).then(cache => {
       console.log('[SW] Cacheando recursos...');
-      return cache.addAll(CACHE_ASSETS).catch(err => {
+      // cache:'reload': bajar SIEMPRE de la red. Sin esto, si la version nueva
+      // se instala a los pocos minutos de la anterior, el navegador puede dar
+      // las paginas viejas de su cache HTTP (GitHub Pages: max-age=600) y la
+      // app seguiria con el codigo anterior aunque CACHE_NAME sea nuevo.
+      return cache.addAll(CACHE_ASSETS.map(u => new Request(u, { cache: 'reload' }))).catch(err => {
         console.warn('[SW] Algunos recursos no se pudieron cachear:', err);
       });
     })

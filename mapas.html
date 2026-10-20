@@ -27,7 +27,8 @@
     <div class="card aviso-servicio oculto" id="sin-servicio">
       <h2>Esta parte funciona en la PC de logística</h2>
       <p>Generar la ruta usa el archivo base y el programa que están en esa PC.</p>
-      <p>Si estás en esa PC: abre <code>SERVICIO MAPAS.bat</code> (carpeta <code>C:\MAPA-RUTAS</code>) y espera unos segundos.
+      <p>Si estás en esa PC: abre <code>SERVICIO MAPAS.bat</code> (carpeta <code>C:\MAPA-RUTAS</code>). Tarda hasta unos 15 segundos en
+         arrancar; esta página <b>se conecta sola</b> (no hace falta tocar nada) y arriba a la derecha cambia a "● PC conectada".
          Si Chrome pregunta por <b>acceso a la red local / a otras apps del dispositivo</b>, elige <b>Permitir</b>.</p>
       <p>Desde cualquier equipo sí puedes ver el mapa publicado en la pestaña <b>🗺️ Ver mapa</b>.</p>
       <div class="fila" style="margin-top:10px"><button class="btn btn-principal" type="button" onclick="refrescarYa()">Reintentar</button></div>
@@ -183,6 +184,21 @@ function clienteElegido(){
   return c;
 }
 
+// A My Maps no se sale a mitad de una publicación o con una pregunta abierta:
+// si la publicación falla, el error se ve aquí (como en la ventana, que
+// apagaba el botón My Maps mientras trabajaba).
+$('b-mymaps').onclick=ev=>{
+  const e=_ultimoEstado;
+  if(e && (e.ocupado || e.pregunta)){
+    ev.preventDefault();
+    mostrarToast(e.pregunta?'Primero contesta la pregunta que está abierta.':'Espera a que termine lo que se está haciendo.', 4000);
+  }
+};
+
+// El servicio se reinició (por ejemplo, al prender la PC): la página vuelve
+// a "abrirse" como recién entrada.
+window.alReiniciarServicio=()=>{ iniciado=false; versionPintada=-1; };
+
 // ── Dibujar lo que manda el servicio ──
 function sinServicio(){
   $('sin-servicio').classList.remove('oculto');
@@ -196,11 +212,11 @@ function render(e){
   if(!iniciado){ iniciado=true; llamarServicio('POST','/generador/iniciar',{}).then(refrescarYa).catch(()=>{}); }
   ocupado=e.ocupado;
   $('spin').classList.toggle('oculto', !e.ocupado);
-  $('mensaje').textContent=e.mensaje||'';
+  $('mensaje').textContent=(e.mensaje||'')+(e.robot_trabajando?'  (El robot de My Maps está trabajando: para generar, espera a que termine.)':'');
   pintarLog(e.log||[]);
   ['b-cambiar','b-releer','b-todos','b-ninguno','b-control','b-aplicar-ubic','b-control-geo','b-guardar-ubic'].forEach(id=>$(id).disabled=e.ocupado);
-  $('b-excel').disabled=e.ocupado||!e.botones.excel;
-  $('b-publicar').disabled=e.ocupado||!e.botones.publicar;
+  $('b-excel').disabled=e.ocupado||e.robot_trabajando||!e.botones.excel;
+  $('b-publicar').disabled=e.ocupado||e.robot_trabajando||!e.botones.publicar;
 
   if(e.version!==versionPintada){
     versionPintada=e.version;
@@ -244,13 +260,17 @@ function pintarCamiones(e){
     tr.appendChild(el('td','num',c.clientes));
     tr.appendChild(el('td','num',c.total));
     const tdC=el('td');
+    // Se manda el valor que se quiere (no "alternar"), y del doble clic solo
+    // cuenta el primero (ev.detail>1 es el segundo clic, aunque la tabla ya se
+    // haya redibujado entre los dos): así no se marca y desmarca.
     if(c.varios){
+      const separado=c.cargues.includes('SEPARADOS');
       const b=el('button','btn btn-cargue',c.cargues); b.type='button';
-      b.onclick=ev=>{ ev.stopPropagation(); if(!ocupado) accion('/generador/camion',{id:c.id, campo:'separar'}); };
+      b.onclick=ev=>{ ev.stopPropagation(); if(ev.detail>1||ocupado) return; accion('/generador/camion',{id:c.id, campo:'separar', valor:!separado}); };
       tdC.appendChild(b);
     } else tdC.textContent=c.cargues;
     tr.appendChild(tdC);
-    tr.onclick=()=>{ if(!ocupado) accion('/generador/camion',{id:c.id, campo:'incluir'}); };
+    tr.onclick=ev=>{ if(ev.detail>1||ocupado) return; accion('/generador/camion',{id:c.id, campo:'incluir', valor:!c.incluido}); };
     tb.appendChild(tr);
   });
   if(!e.camiones.length){

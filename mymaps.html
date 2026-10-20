@@ -40,7 +40,8 @@ details.dia>summary .cuantos{color:#64748b;font-weight:600;font-size:.78rem;flex
     <div class="card aviso-servicio oculto" id="sin-servicio">
       <h2>Esta parte funciona en la PC de logística</h2>
       <p>Subir a My Maps usa el robot y el Chrome que están en esa PC.</p>
-      <p>Si estás en esa PC: abre <code>SERVICIO MAPAS.bat</code> (carpeta <code>C:\MAPA-RUTAS</code>) y espera unos segundos.
+      <p>Si estás en esa PC: abre <code>SERVICIO MAPAS.bat</code> (carpeta <code>C:\MAPA-RUTAS</code>). Tarda hasta unos 15 segundos en
+         arrancar; esta página <b>se conecta sola</b> (no hace falta tocar nada) y arriba a la derecha cambia a "● PC conectada".
          Si Chrome pregunta por <b>acceso a la red local / a otras apps del dispositivo</b>, elige <b>Permitir</b>.</p>
       <div class="fila" style="margin-top:10px">
         <button class="btn btn-principal" type="button" onclick="refrescarYa()">Reintentar</button>
@@ -60,6 +61,10 @@ details.dia>summary .cuantos{color:#64748b;font-weight:600;font-size:.78rem;flex
     </div>
 
     <div id="con-servicio" class="oculto" style="display:flex;flex-direction:column;gap:12px">
+      <div class="act oculto" id="otra-ocupada" style="margin:0">
+        <div id="otra-texto"></div>
+        <div class="fila" style="margin-top:8px"><a class="btn" href="mapas.html" style="text-decoration:none">Ir a Generar mapas</a></div>
+      </div>
       <div class="card">
         <h2>1. Ruta que se sube</h2>
         <div class="campo"><span>Ruta del día:</span><select id="sel-carpeta"></select></div>
@@ -111,8 +116,12 @@ let urlVisor='';
 // Lo que llega en el link (desde Generar mapas): carpeta recien publicada,
 // o "ofrecer" para preguntar si se actualizan los mapas ya subidos.
 const params=new URLSearchParams(location.search);
-const inicio={ carpeta:params.get('carpeta')||'', ofrecer:params.get('ofrecer')==='1' };
+let inicio={ carpeta:params.get('carpeta')||'', ofrecer:params.get('ofrecer')==='1' };
 if(location.search) history.replaceState(null,'',location.pathname);
+
+// El servicio se reinició (por ejemplo, al prender la PC): la página vuelve a
+// "abrirse", sin los datos viejos del link.
+window.alReiniciarServicio=()=>{ iniciado=false; versionPintada=-1; linksFirma=''; inicio={carpeta:'', ofrecer:false}; };
 
 $('sel-carpeta').onchange=()=>accion('/mymaps/carpeta',{i:Number($('sel-carpeta').value)});
 $('sel-entrega').onchange=()=>accion('/mymaps/entrega',{i:Number($('sel-entrega').value)});
@@ -154,9 +163,15 @@ function render(e){
   $('spin').classList.toggle('oculto', !e.trabajando);
   $('mensaje').textContent=e.mensaje||'';
   pintarLog(e.log||[]);
-  $('b-subir').disabled=!e.puede_subir;
+  $('b-subir').disabled=!e.puede_subir||e.otra_ocupada;
   $('b-cancelar').disabled=!e.trabajando;
-  ['b-revisar','b-limpiar','b-actualizar'].forEach(id=>$(id).disabled=e.trabajando);
+  $('b-revisar').disabled=e.trabajando;
+  ['b-limpiar','b-actualizar'].forEach(id=>$(id).disabled=e.trabajando||e.otra_ocupada);
+  // Lo que en la ventana era "Actualizar ruta ocupada": en Generar mapas se
+  // está trabajando, hay una pregunta o un mensaje sin ver (p.ej. el error de
+  // una publicación). Mientras tanto no se sube.
+  $('otra-ocupada').classList.toggle('oculto', !e.otra_ocupada || e.trabajando);
+  $('otra-texto').textContent=(e.otra_motivo||'')+' Mientras tanto no se puede subir ni actualizar My Maps.';
   $('sel-carpeta').disabled=$('sel-entrega').disabled=e.trabajando;
 
   if(e.version!==versionPintada){

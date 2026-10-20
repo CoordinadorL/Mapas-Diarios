@@ -48,32 +48,48 @@ async function llamarServicio(metodo, ruta, cuerpo, ms){
 }
 
 // Manda una accion y muestra el error (si lo hay) en una ventanita.
+// Mientras viaja un pedido, el MISMO pedido (misma ruta y mismos datos) no se
+// manda otra vez (doble clic); uno distinto (otra fecha, otro dia) si.
+const _accionesEnCurso=new Set();
 async function accion(ruta, cuerpo, ms){
-  let r;
-  try{ r=await llamarServicio('POST', ruta, cuerpo, ms); }
-  catch(e){ await mostrarModal({titulo:'Sin conexión con la PC', texto:'No se pudo hablar con el programa de la PC. Revisa que "SERVICIO MAPAS.bat" esté abierto.', tipo:'error'}); return null; }
-  if(r && r.ok===false && r.error && !r.ya_avisado){ await mostrarModal({titulo:'Aviso', texto:r.error, tipo:'aviso'}); }
+  const clave=ruta+' '+JSON.stringify(cuerpo||{});
+  if(_accionesEnCurso.has(clave)) return null;
+  _accionesEnCurso.add(clave);
+  let r=null;
+  try{
+    try{ r=await llamarServicio('POST', ruta, cuerpo, ms); }
+    catch(e){ await mostrarModal({titulo:'Sin conexión con la PC', texto:'No se pudo hablar con el programa de la PC. Revisa que el servicio esté abierto ("SERVICIO MAPAS.bat").', tipo:'error'}); return null; }
+    if(r && r.ok===false && r.error && !r.ya_avisado){ await mostrarModal({titulo:'Aviso', texto:r.error, tipo:'aviso'}); }
+  } finally {
+    _accionesEnCurso.delete(clave);
+  }
   if(typeof refrescarYa==='function') refrescarYa();
   return r;
 }
 
 // ── Ventanita (modal): avisos, preguntas Si/No ──
-let _modalAbierto=false;
+// Devuelve una promesa con el valor del boton tocado; promesa.cerrar() la
+// cierra desde afuera (resuelve undefined), p.ej. si la pregunta ya se
+// contesto en otra pestana.
+let _modales=0;
 function mostrarModal({titulo, texto, tipo, botones}){
-  return new Promise(resolve=>{
-    _modalAbierto=true;
+  let cerrar=()=>{};
+  const promesa=new Promise(resolve=>{
+    _modales++;
     const fondo=document.createElement('div'); fondo.className='modal-fondo';
     const caja=document.createElement('div'); caja.className='modal-caja '+(tipo||'info');
     const h=document.createElement('h3'); h.textContent=titulo||'';
     const p=document.createElement('div'); p.className='modal-texto'; p.textContent=texto||'';
     const pie=document.createElement('div'); pie.className='modal-pie';
+    const terminar=valor=>{ if(!fondo.isConnected) return; fondo.remove(); _modales--; resolve(valor); };
+    cerrar=()=>terminar(undefined);
     (botones||[{texto:'Aceptar', valor:true, principal:true}]).forEach(b=>{
       const btn=document.createElement('button'); btn.type='button';
       btn.className='btn '+(b.principal?'btn-principal':'btn-sec');
       btn.textContent=b.texto;
       btn.onclick=async ()=>{
         if(b.accion){ await b.accion(); if(b.seguirAbierto) return; }
-        fondo.remove(); _modalAbierto=false; resolve(b.valor);
+        terminar(b.valor);
       };
       pie.appendChild(btn);
     });
@@ -81,6 +97,8 @@ function mostrarModal({titulo, texto, tipo, botones}){
     fondo.appendChild(caja); document.body.appendChild(fondo);
     const principal=pie.querySelector('.btn-principal'); if(principal) principal.focus();
   });
+  promesa.cerrar=cerrar;
+  return promesa;
 }
 
 let toastTimer=null;
@@ -104,30 +122,57 @@ async function copiarTexto(texto, aviso){
 // prefijo: '/generador' o '/mymaps'. extras(aviso) arma botones adicionales.
 let _avisosMostrados=new Set();
 let _preguntaMostrada=null;
+let _modalServicio=null;   // la ventanita abierta de un aviso/pregunta del servicio: {tipo, id, cerrar}
 async function atenderAvisosYPregunta(prefijo, estado, extras){
-  if(_modalAbierto) return;
+  // Si la ventanita abierta ya no corresponde (se contesto o se vio en otra
+  // pestana), se cierra sola, sin mandar nada.
+  if(_modalServicio){
+    const m=_modalServicio;
+    const sigue=m.tipo==='pregunta' ? !!(estado.pregunta && estado.pregunta.id===m.id)
+                                    : (estado.avisos||[]).some(a=>a.id===m.id);
+    if(!sigue) m.cerrar();
+    return;
+  }
+  if(_modales>0) return;
   const aviso=(estado.avisos||[]).find(a=>!_avisosMostrados.has(a.id));
   if(aviso){
     _avisosMostrados.add(aviso.id);
     const botones=(extras?extras(aviso):[]).concat([{texto:'Aceptar', valor:true, principal:true}]);
-    await mostrarModal({titulo:aviso.titulo, texto:aviso.texto, tipo:aviso.tipo, botones});
-    try{ await llamarServicio('POST', prefijo+'/aviso_visto', {id:aviso.id}); }catch(e){}
+    const ventana=mostrarModal({titulo:aviso.titulo, texto:aviso.texto, tipo:aviso.tipo, botones});
+    _modalServicio={tipo:'aviso', id:aviso.id, cerrar:ventana.cerrar};
+    const valor=await ventana;
+    _modalServicio=null;
+    if(valor!==undefined){ try{ await llamarServicio('POST', prefijo+'/aviso_visto', {id:aviso.id}); }catch(e){} }
     refrescarYa();
     return;
   }
   const p=estado.pregunta;
   if(p && _preguntaMostrada!==p.id){
     _preguntaMostrada=p.id;
-    const si=await mostrarModal({titulo:p.titulo, texto:p.texto, tipo:'pregunta',
+    const ventana=mostrarModal({titulo:p.titulo, texto:p.texto, tipo:'pregunta',
       botones:[{texto:'No', valor:false}, {texto:'Sí', valor:true, principal:true}]});
-    try{ await llamarServicio('POST', prefijo+'/responder', {id:p.id, si}); }catch(e){}
+    _modalServicio={tipo:'pregunta', id:p.id, cerrar:ventana.cerrar};
+    const si=await ventana;
+    _modalServicio=null;
+    if(si===undefined){ refrescarYa(); return; }      // se contesto en otra pestana
+    let r=null;
+    try{ r=await llamarServicio('POST', prefijo+'/responder', {id:p.id, si}); }
+    catch(e){
+      // No llego la respuesta: la pregunta sigue abierta en la PC, asi que se
+      // vuelve a mostrar en la proxima consulta para poder contestarla.
+      _preguntaMostrada=null;
+      r={ok:false, error:'No se pudo hablar con el programa de la PC para contestar. La pregunta va a volver a salir: contéstala de nuevo.'};
+    }
+    if(r && r.ok===false && r.error && r.error!=='Esa pregunta ya no está vigente.'){
+      await mostrarModal({titulo:'Aviso', texto:r.error, tipo:'aviso'});
+    }
     refrescarYa();
   }
 }
 
 // ── Consulta periodica del estado ──
 // render(estado) dibuja; sinServicio() muestra el aviso de "solo en la PC".
-let _consultaTimer=null, _consultando=false, _ultimoEstado=null;
+let _consultaTimer=null, _consultando=false, _ultimoEstado=null, _instancia=null;
 let _ruta=null, _render=null, _sinServicio=null;
 function iniciarConsulta(rutaEstado, render, sinServicio){
   _ruta=rutaEstado; _render=render; _sinServicio=sinServicio;
@@ -143,6 +188,17 @@ async function refrescarYa(){
   _consultando=false;
   pintarPillServicio(!!estado, estado&&estado.prueba);
   if(!estado || estado.ok===false){ _ultimoEstado=null; _sinServicio(); _consultaTimer=setTimeout(refrescarYa, 5000); return; }
+  // Sin 'instancia' = servicio de una version anterior: cuenta como otra.
+  const instancia=estado.instancia||'-';
+  if(_instancia!==null && instancia!==_instancia){
+    // El servicio se reinicio (por ejemplo al prender la PC): sus avisos y
+    // preguntas vuelven a empezar en 1 y la pagina tiene que volver a "abrirse".
+    _avisosMostrados=new Set(); _preguntaMostrada=null; _logN=0; _logPrimero=null;
+    const log=document.getElementById('log'); if(log) log.textContent='';
+    if(_modalServicio) _modalServicio.cerrar();
+    if(typeof window.alReiniciarServicio==='function') window.alReiniciarServicio();
+  }
+  _instancia=instancia;
   _ultimoEstado=estado;
   _render(estado);
   const activo=estado.ocupado||estado.trabajando||estado.pregunta||(estado.avisos||[]).length;
