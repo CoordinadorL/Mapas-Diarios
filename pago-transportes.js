@@ -822,10 +822,16 @@ function renderServicio(e){
     b.onclick=()=>accion('/pago/limpiar_avisos'); av.appendChild(b);
   } else av.classList.add('oculto');
   // Al terminar una sincronización, el día puede traer cambios hechos en el Excel.
-  if(u && estado.ultimaSync && u.hora!==estado.ultimaSync && !estado.guardando && !document.activeElement.closest('#tabla-dia')){
-    abrirDia(estado.dia, true);
+  if(u && estado.ultimaSync!==null && u.hora!==estado.ultimaSync && !estado.guardando && !document.activeElement.closest('#tabla-dia')){
+    // Pueden haber llegado días nuevos (la primera carga, o la ruta publicada):
+    // si el día que se ve está vacío, se pasa al más reciente.
+    cargarDias().then(()=>{
+      const dia=(!estado.filas.length && estado.dias.length && estado.dias[0].filas)?estado.dias[0].fecha:estado.dia;
+      abrirDia(dia, true);
+      cargarCortes().catch(()=>{});
+    }).catch(()=>{});
   }
-  estado.ultimaSync=u?u.hora:null;
+  estado.ultimaSync=u?u.hora:'';
 }
 function sinServicio(){
   document.getElementById('card-excel').classList.add('oculto');
