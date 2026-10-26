@@ -57,6 +57,8 @@ th.col-fija{z-index:3;background:#f1f5f9}
 .totales-dia b{color:#0b4f7a}
 label.lbl{font-size:.8rem;font-weight:800;color:#334155}
 select.sel,input.inp{border:1.5px solid #cbd5e1;border-radius:10px;padding:7px 10px;font-size:.85rem;font-family:inherit;background:#fff}
+.corte-dia{margin-top:8px;font-size:.82rem;font-weight:700;color:#0b4f7a;background:#e0ecf7;border-radius:10px;padding:6px 10px;display:inline-block}
+.corte-dia.cerrado{background:#f1f5f9;color:#475569}
 .link-pc{font-size:.78rem;color:#0e7ab8;background:none;border:none;cursor:pointer;font-family:inherit;text-decoration:underline;padding:0}
 </style>
 </head>
@@ -69,7 +71,7 @@ select.sel,input.inp{border:1.5px solid #cbd5e1;border-radius:10px;padding:7px 1
 </header>
 <nav class="pestanas">
   <button type="button" data-pestana="dia" class="activa">📅 Día</button>
-  <button type="button" data-pestana="consolidado">📊 Consolidado</button>
+  <button type="button" data-pestana="consolidado">📊 Cortes</button>
   <button type="button" data-pestana="tarifas">💲 Tarifas</button>
   <button type="button" data-pestana="transportistas">🚚 Transportistas</button>
 </nav>
@@ -102,6 +104,7 @@ select.sel,input.inp{border:1.5px solid #cbd5e1;border-radius:10px;padding:7px 1
           <button class="btn btn-sec" type="button" id="b-recargar">↻</button>
         </div>
       </div>
+      <div class="corte-dia" id="dia-corte"></div>
       <div class="ayuda" id="dia-info"></div>
       <div class="tabla-wrap grande"><table id="tabla-dia"></table></div>
       <div class="totales-dia" id="dia-totales"></div>
@@ -110,18 +113,28 @@ select.sel,input.inp{border:1.5px solid #cbd5e1;border-radius:10px;padding:7px 1
     </div>
   </div>
 
-  <!-- ─────────────── CONSOLIDADO ─────────────── -->
+  <!-- ─────────────── CORTES ─────────────── -->
   <div class="contenido ancho oculto" id="p-consolidado">
+    <div class="alerta oculto" id="aviso-corte-pendiente"></div>
     <div class="card">
-      <h2>Consolidado por transportista</h2>
+      <h2>Corte de pago (del 26 al 25)</h2>
       <div class="fila">
-        <span class="lbl">Desde</span><input class="inp" type="date" id="con-desde">
-        <span class="lbl">Hasta</span><input class="inp" type="date" id="con-hasta">
-        <button class="btn btn-principal" type="button" id="b-con-buscar">Ver</button>
+        <select class="sel" id="sel-corte"></select>
+        <span class="fila oculto" id="rango-libre">
+          <span class="lbl">Desde</span><input class="inp" type="date" id="con-desde">
+          <span class="lbl">Hasta</span><input class="inp" type="date" id="con-hasta">
+          <button class="btn btn-principal" type="button" id="b-con-buscar">Ver</button>
+        </span>
         <button class="btn" type="button" id="b-con-excel">⬇️ Descargar Excel</button>
+        <button class="btn btn-principal oculto" type="button" id="b-corte-cerrar">🔒 Cerrar y archivar corte</button>
+        <button class="btn btn-peligro oculto" type="button" id="b-corte-reabrir">🔓 Reabrir</button>
       </div>
+      <div class="excel-estado" id="corte-estado" style="margin-top:8px"></div>
       <div class="ayuda" id="con-info"></div>
+      <h2 style="margin-top:14px">Por transportista</h2>
       <div class="tabla-wrap" style="max-height:none"><table id="tabla-con"></table></div>
+      <h2 style="margin-top:14px">Por día</h2>
+      <div class="tabla-wrap" style="max-height:none"><table id="tabla-con-dias"></table></div>
     </div>
   </div>
 

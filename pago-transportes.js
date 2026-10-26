@@ -25,7 +25,7 @@ const LIMITE_RETORNO=0.03;
 const estado={
   cat:{tarifas:[], transportistas:[], lineas:[]},
   dias:[], dia:null, filas:[], porId:{}, marcadas:new Set(),
-  guardando:0, consolidado:[], ultimaSync:null
+  guardando:0, consolidado:[], ultimaSync:null, cortes:[], hoyServidor:null, totalCorte:null
 };
 
 // ── Backend (JSONP) ──────────────────────────────────────────
@@ -248,6 +248,10 @@ function pintarDia(){
   tabla.appendChild(tfoot);
   pintarTotales();
   actualizarBotonIntercambio();
+  pintarCorteDia();
+  if(corteCerrado(estado.dia)){
+    tabla.querySelectorAll('input,select,button').forEach(x=>{ x.disabled=true; });
+  }
 }
 
 function filaDia(f){
@@ -359,7 +363,7 @@ async function guardarCampo(id, campo, input){
     if(r.fila){ Object.assign(f, r.fila); }
     if(!r.ok){
       input.classList.add('error');
-      if(r.conflicto) restaurarInput(input, f, campo);
+      if(r.conflicto || r.cerrado) restaurarInput(input, f, campo);
       mostrarToast('⚠️ '+(r.error||'No se pudo guardar.'), 6000);
     }
   } catch(e){
@@ -490,15 +494,16 @@ function cargarXLSX(){
   return _xlsxCargando;
 }
 function filasParaExcel(filas){
-  const enc=COLS.map(c=>c.t);
+  const enc=['CORTE'].concat(COLS.map(c=>c.t));
   const datos=filas.map(f=>{
     const c=calcularFila(f);
-    return COLS.map(col=>{
+    const corte=corteDe(f.fecha_entrega);
+    return [corte?corte.nombre:''].concat(COLS.map(col=>{
       if(col.calc){ const v=c[col.k]; return (v===null||v===undefined)?'':(typeof v==='number'?Math.round(v*10000)/10000:v); }
       if(col.k==='fecha_entrega') return f.fecha_entrega?fechaDe(f.fecha_entrega):'';
       const v=f[col.k]; if(vacio(v)) return '';
       return ['kgs','facturas','monto','retorno','ajuste','n_ayudantes'].includes(col.k)?Number(v):v;
-    });
+    }));
   });
   return [enc].concat(datos);
 }
@@ -510,11 +515,85 @@ async function descargarDia(){
   XLSX.writeFile(wb, `PAGO TRANSPORTES ${nombreHoja(estado.dia)}.xlsx`);
 }
 
-// ── Consolidado ──────────────────────────────────────────────
+// ── Cortes ───────────────────────────────────────────────────
+// Del 26 de un mes al 25 del siguiente, por fecha de entrega:
+// 26/09/2026 - 25/10/2026 = "SEPTIEMBRE-OCTUBRE 2026" (id "2026-10").
+// Igual que _pagoCorteDe (PagoTransportes.gs) y corte_de (pago_excel.py).
+const DIA_CORTE=25;
+function corteDe(iso){
+  const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(!m) return null;
+  let y1=Number(m[1]), m1=Number(m[2]);
+  if(Number(m[3])<=DIA_CORTE){ m1-=1; if(m1===0){ m1=12; y1-=1; } }
+  let y2=y1, m2=m1+1;
+  if(m2===13){ m2=1; y2+=1; }
+  const dd=n=>String(n).padStart(2,'0');
+  return {id:y2+'-'+dd(m2), nombre:MESES[m1-1]+'-'+MESES[m2-1]+' '+y2,
+          desde:y1+'-'+dd(m1)+'-'+dd(DIA_CORTE+1), hasta:y2+'-'+dd(m2)+'-'+dd(DIA_CORTE)};
+}
+function corteGuardado(id){ return estado.cortes.find(c=>c.id===id)||null; }
+function corteCerrado(iso){
+  const c=corteDe(iso); if(!c) return false;
+  const g=corteGuardado(c.id);
+  return !!(g && String(g.estado).toUpperCase()==='CERRADO');
+}
+const fechaCorta=iso=>{ const d=fechaDe(iso); return String(d.getDate()).padStart(2,'0')+'/'+String(d.getMonth()+1).padStart(2,'0')+'/'+d.getFullYear(); };
+
+async function cargarCortes(){
+  const r=await apiOk({tipo:'pago_cortes'});
+  estado.cortes=r.cortes||[];
+  estado.hoyServidor=r.hoy||hoyISO();
+  const sel=document.getElementById('sel-corte');
+  const actual=sel.value;
+  sel.innerHTML='';
+  estado.cortes.forEach(c=>{
+    const cerrado=String(c.estado).toUpperCase()==='CERRADO';
+    sel.appendChild(opcion(c.id, `${c.nombre}  ·  ${fechaCorta(c.desde)} al ${fechaCorta(c.hasta)}  ·  ${cerrado?'🔒 cerrado':'abierto'}`, actual));
+  });
+  sel.appendChild(opcion('rango', 'Otro rango de fechas...', actual));
+  if(!actual || ![...sel.options].some(o=>o.value===actual)){
+    const hoyC=corteDe(estado.hoyServidor);
+    sel.value=(estado.cortes.find(c=>hoyC && c.id===hoyC.id)||estado.cortes[0]||{id:'rango'}).id;
+  }
+  // Recordatorio: un corte que ya terminó, con filas, y sigue abierto.
+  const pendiente=estado.cortes.filter(c=>String(c.estado).toUpperCase()!=='CERRADO' && c.hasta<estado.hoyServidor && num(c.filas_vivas)>0);
+  const aviso=document.getElementById('aviso-corte-pendiente');
+  if(pendiente.length){
+    aviso.classList.remove('oculto');
+    aviso.innerHTML='';
+    aviso.appendChild(el('h3',null,'Corte por cerrar'));
+    aviso.appendChild(el('div','ayuda',pendiente.map(c=>`El corte ${c.nombre} terminó el ${fechaCorta(c.hasta)}: revisa las devoluciones y ciérralo para archivarlo.`).join('\n')));
+  } else aviso.classList.add('oculto');
+}
+
+function pintarCorteDia(){
+  const caja=document.getElementById('dia-corte');
+  const c=corteDe(estado.dia);
+  if(!c){ caja.textContent=''; return; }
+  const cerrado=corteCerrado(estado.dia);
+  caja.className='corte-dia'+(cerrado?' cerrado':'');
+  caja.textContent=`Corte ${c.nombre} (${fechaCorta(c.desde)} al ${fechaCorta(c.hasta)})`+(cerrado?' · 🔒 cerrado y archivado: solo lectura':'');
+  document.getElementById('b-adicional').disabled=cerrado;
+  if(cerrado) document.getElementById('b-intercambiar').disabled=true;
+}
+
+function rangoElegido(){
+  const v=document.getElementById('sel-corte').value;
+  if(v==='rango') return {id:null, desde:document.getElementById('con-desde').value, hasta:document.getElementById('con-hasta').value};
+  const c=corteDe(v+'-'+String(DIA_CORTE).padStart(2,'0'));
+  return c?Object.assign({}, c, corteGuardado(c.id)||{}):null;
+}
+
 async function verConsolidado(){
-  const desde=document.getElementById('con-desde').value, hasta=document.getElementById('con-hasta').value;
+  const sel=document.getElementById('sel-corte');
+  document.getElementById('rango-libre').classList.toggle('oculto', sel.value!=='rango');
+  const r0=rangoElegido();
   const info=document.getElementById('con-info');
-  if(!desde||!hasta){ info.textContent='Elige las dos fechas.'; return; }
+  const est=document.getElementById('corte-estado');
+  const bCerrar=document.getElementById('b-corte-cerrar'), bReabrir=document.getElementById('b-corte-reabrir');
+  bCerrar.classList.add('oculto'); bReabrir.classList.add('oculto'); est.textContent='';
+  if(!r0 || !r0.desde || !r0.hasta){ info.textContent='Elige las dos fechas.'; return; }
+  const {desde, hasta}=r0;
   info.textContent='Cargando...';
   try{
     const r=await apiOk({tipo:'pago_filas', desde, hasta}, 60000);
@@ -528,38 +607,90 @@ async function verConsolidado(){
     if(!g.nombre) g.nombre=calcularFila(f).nombre;
   });
   const lista=Object.values(grupos).sort((a,b)=>a.cod.localeCompare(b.cod));
-  const tabla=document.getElementById('tabla-con'); tabla.innerHTML='';
-  const enc=['Código','Nombre','Días','Filas','Kgs','Monto $','Retorno $','% retorno','Valor de ruta','A cancelar','Diferencia'];
+  const total=totalesDe(estado.consolidado);
+  estado.totalCorte={filas:estado.consolidado.length, G:total.G, S:total.S};
+  // Por transportista (lo que se le paga en el corte).
+  pintarTablaResumen('tabla-con', ['Código','Nombre','Días','Filas','Kgs','Monto $','Retorno $','% retorno','Valor de ruta','A cancelar','Diferencia'],
+    lista.map(g=>{ const t=totalesDe(g.filas); return [g.cod, g.nombre||'—', g.dias.size, g.filas.length, numero(t.kgs), dinero(t.monto), dinero(t.retorno),
+      pct(t.monto?t.retorno/t.monto:0), dinero(t.G), dinero(t.S), dinero(t.G-t.S)]; }),
+    ['TOTAL','',new Set(estado.consolidado.map(f=>f.fecha_entrega)).size, total.filas||estado.consolidado.length, numero(total.kgs), dinero(total.monto),
+     dinero(total.retorno), pct(total.monto?total.retorno/total.monto:0), dinero(total.G), dinero(total.S), dinero(total.G-total.S)]);
+  // Por día (una fila por pestaña del Excel).
+  const porDia={};
+  estado.consolidado.forEach(f=>{ (porDia[f.fecha_entrega]=porDia[f.fecha_entrega]||[]).push(f); });
+  pintarTablaResumen('tabla-con-dias', ['Fecha','Pestaña','Camiones','Kgs','Monto $','Valor de ruta','A cancelar','Diferencia'],
+    Object.keys(porDia).sort().map(d=>{ const t=totalesDe(porDia[d]); return [fechaLarga(d), nombreHoja(d), porDia[d].length, numero(t.kgs), dinero(t.monto), dinero(t.G), dinero(t.S), dinero(t.G-t.S)]; }),
+    null);
+  info.textContent=`${estado.consolidado.length} filas entre ${fechaLarga(desde)} y ${fechaLarga(hasta)}.`+(total.faltan?` ⚠ ${total.faltan} fila(s) con ajuste pero sin COD de frecuencia válido.`:'');
+  // Estado del corte y botones.
+  if(r0.id){
+    const rol=(getSesion()||{}).rol;
+    const cerrado=String(r0.estado||'').toUpperCase()==='CERRADO';
+    if(cerrado){
+      est.textContent=`🔒 Corte cerrado y archivado`+(r0.cerrado_por?` por ${r0.cerrado_por}`:'')+(r0.cerrado_ts?` el ${new Date(Number(r0.cerrado_ts)).toLocaleString('es-EC').replace(/\.$/,'')}`:'')+
+        `. Al cerrarlo: ${numero(r0.filas,0)} filas · valor de rutas ${dinero(num(r0.total_valor_ruta))} · a cancelar ${dinero(num(r0.total_a_cancelar))}.`;
+      if(rol==='admin') bReabrir.classList.remove('oculto');
+    } else {
+      est.textContent=(r0.hasta<estado.hoyServidor?'Corte terminado, todavía abierto: ':'Corte en curso: ')+`del ${fechaLarga(r0.desde)} al ${fechaLarga(r0.hasta)}.`;
+      if(['admin','coordinador'].includes(rol)) bCerrar.classList.remove('oculto');
+    }
+  }
+}
+function pintarTablaResumen(idTabla, encabezado, filas, total){
+  const tabla=document.getElementById(idTabla); tabla.innerHTML='';
   const thead=document.createElement('thead'); const trh=document.createElement('tr');
-  enc.forEach(t=>trh.appendChild(el('th',null,t))); thead.appendChild(trh); tabla.appendChild(thead);
+  encabezado.forEach(t=>trh.appendChild(el('th',null,t))); thead.appendChild(trh); tabla.appendChild(thead);
   const tbody=document.createElement('tbody');
-  const T={kgs:0, monto:0, retorno:0, G:0, S:0, filas:0};
-  lista.forEach(g=>{
-    const t=totalesDe(g.filas);
-    T.kgs+=t.kgs; T.monto+=t.monto; T.retorno+=t.retorno; T.G+=t.G; T.S+=t.S; T.filas+=g.filas.length;
+  filas.forEach(f=>{ const tr=document.createElement('tr'); f.forEach((v,i)=>tr.appendChild(el('td', i>=2?'num':null, v))); tbody.appendChild(tr); });
+  if(total){
     const tr=document.createElement('tr');
-    [g.cod, g.nombre||'—', g.dias.size, g.filas.length, numero(t.kgs), dinero(t.monto), dinero(t.retorno),
-     pct(t.monto?t.retorno/t.monto:0), dinero(t.G), dinero(t.S), dinero(t.G-t.S)].forEach((v,i)=>{
-      const td=el('td', i>=2?'num':null, v); tr.appendChild(td);
-    });
+    total.forEach((v,i)=>{ const td=el('td', i>=2?'num':null, v); td.style.fontWeight='800'; td.style.background='#e2ebf3'; tr.appendChild(td); });
     tbody.appendChild(tr);
-  });
-  const trT=document.createElement('tr');
-  ['TOTAL','',new Set(estado.consolidado.map(f=>f.fecha_entrega)).size, T.filas, numero(T.kgs), dinero(T.monto), dinero(T.retorno),
-   pct(T.monto?T.retorno/T.monto:0), dinero(T.G), dinero(T.S), dinero(T.G-T.S)].forEach((v,i)=>{
-    const td=el('td', i>=2?'num':null, v); td.style.fontWeight='800'; td.style.background='#e2ebf3'; trT.appendChild(td);
-  });
-  tbody.appendChild(trT);
+  }
   tabla.appendChild(tbody);
-  info.textContent=`${estado.consolidado.length} filas entre ${fechaLarga(desde)} y ${fechaLarga(hasta)}.`;
+}
+
+async function cerrarCorte(){
+  const c=rangoElegido(); if(!c||!c.id) return;
+  const t=estado.totalCorte||{filas:0,G:0,S:0};
+  const antes=c.hasta>=estado.hoyServidor;
+  const si=await mostrarModal({titulo:'Cerrar y archivar el corte '+c.nombre, tipo:'pregunta',
+    texto:`Del ${fechaLarga(c.desde)} al ${fechaLarga(c.hasta)}:\n${t.filas} filas · valor de rutas ${dinero(t.G)} · a cancelar ${dinero(t.S)} · diferencia ${dinero(t.G-t.S)}.\n\n`+
+      'Al cerrarlo queda archivado: ya no se puede cambiar nada de esos días (ni en la web, ni en el Excel, ni volviendo a publicar la ruta). Solo un admin lo puede reabrir.'+
+      (antes?`\n\n⚠️ El corte todavía no termina (termina el ${fechaLarga(c.hasta)}). ¿Cerrarlo igual?`:''),
+    botones:[{texto:'Cancelar', valor:false}, {texto:'Cerrar corte', valor:true, principal:true}]});
+  if(!si) return;
+  try{
+    const r=await apiOk({tipo:'pago_corte_cerrar', id:c.id, filas:t.filas, total_valor_ruta:Math.round(t.G*100)/100,
+      total_a_cancelar:Math.round(t.S*100)/100, antes_de_tiempo:antes?'SI':''});
+    estado.cortes=r.cortes||estado.cortes;
+    await cargarCortes(); await verConsolidado(); pintarCorteDia();
+    if(estado.dia && corteCerrado(estado.dia)) pintarDia();
+    mostrarToast('🔒 Corte '+c.nombre+' cerrado y archivado');
+  } catch(e){ await mostrarModal({titulo:'No se cerró', texto:e.message, tipo:'aviso'}); }
+}
+async function reabrirCorte(){
+  const c=rangoElegido(); if(!c||!c.id) return;
+  const si=await mostrarModal({titulo:'Reabrir el corte '+c.nombre, tipo:'pregunta',
+    texto:'Se podrán volver a cambiar sus días (en la web y en el Excel). Úsalo solo para corregir algo del pago ya cerrado.',
+    botones:[{texto:'Cancelar', valor:false}, {texto:'Reabrir', valor:true, principal:true}]});
+  if(!si) return;
+  try{
+    await apiOk({tipo:'pago_corte_reabrir', id:c.id});
+    await cargarCortes(); await verConsolidado(); pintarCorteDia();
+    if(estado.dia) pintarDia();
+    mostrarToast('🔓 Corte '+c.nombre+' reabierto');
+  } catch(e){ await mostrarModal({titulo:'No se reabrió', texto:e.message, tipo:'aviso'}); }
 }
 async function descargarConsolidado(){
-  if(!estado.consolidado.length){ mostrarToast('Primero toca "Ver".'); return; }
+  if(!estado.consolidado.length){ mostrarToast('No hay filas en ese corte.'); return; }
   try{ await cargarXLSX(); }catch(e){ mostrarToast('⚠️ '+e.message, 5000); return; }
+  const c=rangoElegido();
   const wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.table_to_sheet(document.getElementById('tabla-con'), {raw:false}), 'RESUMEN');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.table_to_sheet(document.getElementById('tabla-con-dias'), {raw:false}), 'POR DIA');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filasParaExcel(estado.consolidado), {cellDates:true}), 'CONSOLIDADO');
-  XLSX.writeFile(wb, `PAGO TRANSPORTES ${document.getElementById('con-desde').value} a ${document.getElementById('con-hasta').value}.xlsx`);
+  XLSX.writeFile(wb, `PAGO TRANSPORTES ${c&&c.id?'CORTE '+c.nombre:(c.desde+' a '+c.hasta)}.xlsx`);
 }
 
 // ── Tarifas ──────────────────────────────────────────────────
@@ -721,6 +852,7 @@ function conectarPC(){
 function mostrarPestana(nombre){
   document.querySelectorAll('.pestanas button').forEach(b=>b.classList.toggle('activa', b.dataset.pestana===nombre));
   ['dia','consolidado','tarifas','transportistas'].forEach(p=>document.getElementById('p-'+p).classList.toggle('oculto', p!==nombre));
+  if(nombre==='consolidado') cargarCortes().then(verConsolidado).catch(e=>{ document.getElementById('con-info').textContent='No se pudo cargar: '+e.message; });
   if(nombre==='tarifas') pintarTarifas();
   if(nombre==='transportistas') pintarTransportistas();
 }
@@ -736,6 +868,9 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('b-sincronizar').addEventListener('click', ()=>accion('/pago/sincronizar'));
   document.getElementById('b-conectar-pc').addEventListener('click', conectarPC);
   document.getElementById('b-con-buscar').addEventListener('click', verConsolidado);
+  document.getElementById('sel-corte').addEventListener('change', verConsolidado);
+  document.getElementById('b-corte-cerrar').addEventListener('click', cerrarCorte);
+  document.getElementById('b-corte-reabrir').addEventListener('click', reabrirCorte);
   document.getElementById('b-con-excel').addEventListener('click', descargarConsolidado);
   document.getElementById('b-tarifa-nueva').addEventListener('click', ()=>editarTarifa(null));
   document.getElementById('b-linea').addEventListener('click', ()=>{ const i=document.getElementById('inp-linea'); if(i.value.trim()){ guardarLinea(i.value.trim()); i.value=''; } });
@@ -753,6 +888,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
 
   try{
     await cargarCatalogos();
+    await cargarCortes();
     await cargarDias();
     let dia=null; try{ dia=localStorage.getItem('pago_dia'); }catch(e){}
     if(!dia || !estado.dias.some(d=>d.fecha===dia)) dia=estado.dias.length?estado.dias[0].fecha:hoy;
