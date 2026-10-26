@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b4f7a">
+<title>OPAUSTRO — Pago a transportes</title>
+<link rel="icon" href="icon-192.png">
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="herramientas.css">
+<style>
+.contenido.ancho{max-width:none}
+.tabla-wrap.grande{max-height:calc(100vh - 330px);min-height:260px}
+#tabla-dia{font-size:.78rem;width:max-content;min-width:100%}
+#tabla-dia th{white-space:nowrap;vertical-align:bottom;font-size:.72rem}
+#tabla-dia th small{display:block;color:#94a3b8;font-weight:700;font-size:.62rem}
+#tabla-dia td{padding:3px 5px;vertical-align:middle;white-space:nowrap}
+#tabla-dia td.calc{background:#f8fafc;color:#334155}
+#tabla-dia td.dinero,#tabla-dia td.num{text-align:right}
+#tabla-dia tr.fila-dia:hover td{background:#f0f7fd}
+#tabla-dia tr.fila-dia.marcada td{background:#fff7d6}
+#tabla-dia tr.fila-dia.quitada td{color:#9ca3af}
+#tabla-dia tfoot td{position:sticky;bottom:0;background:#e2ebf3;font-weight:800;border-top:2px solid #94a3b8}
+#tabla-dia input,#tabla-dia select{font-family:inherit;font-size:.78rem;border:1px solid #d6dee8;border-radius:6px;padding:3px 5px;background:#fff;color:#0f172a}
+#tabla-dia input:focus,#tabla-dia select:focus{outline:none;border-color:#0e7ab8;box-shadow:0 0 0 2px rgba(14,122,184,.15)}
+#tabla-dia input.guardando,#tabla-dia select.guardando{background:#fef9c3}
+#tabla-dia input.error,#tabla-dia select.error{border-color:#dc2626;background:#fef2f2}
+#tabla-dia .w-num{width:74px;text-align:right}
+#tabla-dia .w-chico{width:56px}
+#tabla-dia .w-cod{width:96px}
+#tabla-dia .w-texto{width:150px}
+#tabla-dia .w-largo{width:230px}
+#tabla-dia .w-fecha{width:122px}
+.col-fija{position:sticky;left:0;z-index:2;background:#fff;box-shadow:2px 0 0 #e2e8f0}
+.quien b{color:#0b4f7a}
+.quien small{color:#64748b;font-size:.7rem;max-width:150px;display:inline-block;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;margin-left:5px}
+.pestanas{overflow-x:auto}
+.pestanas button{flex-shrink:0}
+th.col-fija{z-index:3;background:#f1f5f9}
+.sancion{color:#b91c1c;font-weight:800}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;background:#e0ecf7;color:#0b4f7a;border-radius:20px;padding:4px 10px;font-weight:700;font-size:.8rem}
+.chip button{border:none;background:none;color:#b91c1c;cursor:pointer;font-weight:800;font-size:.85rem}
+.etq.adic{background:#dcfce7;color:#166534}
+.etq.camb{background:#e0e7ff;color:#3730a3}
+.etq.fuera{background:#fee2e2;color:#b00020}
+.etq.cargue{background:#f1f5f9;color:#334155}
+.etq.corr{background:#fef3c7;color:#92400e}
+.campo-form{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.campo-form label{font-size:.78rem;font-weight:800;color:#334155}
+.campo-form input,.campo-form select{border:1.5px solid #cbd5e1;border-radius:10px;padding:8px 10px;font-size:.88rem;font-family:inherit}
+.excel-estado{font-size:.85rem;line-height:1.5}
+.excel-estado.mal{color:#b00020}
+.lista-avisos{margin-top:8px;font-size:.8rem;color:#7f1d1d;background:#fff5f5;border:1px solid #fecaca;border-radius:10px;padding:8px 10px}
+.lista-avisos li{margin-left:16px}
+.totales-dia{display:flex;gap:18px;flex-wrap:wrap;font-size:.85rem;margin-top:8px}
+.totales-dia b{color:#0b4f7a}
+label.lbl{font-size:.8rem;font-weight:800;color:#334155}
+select.sel,input.inp{border:1.5px solid #cbd5e1;border-radius:10px;padding:7px 10px;font-size:.85rem;font-family:inherit;background:#fff}
+.link-pc{font-size:.78rem;color:#0e7ab8;background:none;border:none;cursor:pointer;font-family:inherit;text-decoration:underline;padding:0}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <a class="btn-menu" href="inicio.html" title="Volver al menú de Inicio">← Menú</a>
+  <div class="logo"><img src="logo-wordmark.png" alt="OPAUSTRO"></div>
+  <h1>Pago a transportes</h1>
+  <span class="pill oculto" id="pill-servicio">● Conectando...</span>
+</header>
+<nav class="pestanas">
+  <button type="button" data-pestana="dia" class="activa">📅 Día</button>
+  <button type="button" data-pestana="consolidado">📊 Consolidado</button>
+  <button type="button" data-pestana="tarifas">💲 Tarifas</button>
+  <button type="button" data-pestana="transportistas">🚚 Transportistas</button>
+</nav>
+
+<main>
+  <!-- ─────────────── DÍA ─────────────── -->
+  <div class="contenido ancho" id="p-dia">
+    <div class="card oculto" id="card-excel">
+      <div class="fila entre">
+        <div style="min-width:0;flex:1">
+          <h2 style="margin-bottom:4px">📗 Excel de esta PC</h2>
+          <div class="excel-estado" id="excel-estado">—</div>
+        </div>
+        <button class="btn" type="button" id="b-sincronizar">🔄 Sincronizar ahora</button>
+      </div>
+      <div class="lista-avisos oculto" id="excel-avisos"></div>
+    </div>
+
+    <div class="card">
+      <div class="fila entre">
+        <div class="fila">
+          <span class="lbl">Fecha de entrega</span>
+          <select class="sel" id="sel-dia"></select>
+          <input class="inp" type="date" id="inp-dia" title="Otra fecha (por ejemplo, para un cargue adicional en un día sin datos)">
+        </div>
+        <div class="fila">
+          <button class="btn" type="button" id="b-adicional">➕ Cargue adicional</button>
+          <button class="btn" type="button" id="b-intercambiar" disabled title="Marca dos filas (casilla de la izquierda)">⇄ Intercambiar transportistas</button>
+          <button class="btn" type="button" id="b-excel-dia">⬇️ Descargar Excel</button>
+          <button class="btn btn-sec" type="button" id="b-recargar">↻</button>
+        </div>
+      </div>
+      <div class="ayuda" id="dia-info"></div>
+      <div class="tabla-wrap grande"><table id="tabla-dia"></table></div>
+      <div class="totales-dia" id="dia-totales"></div>
+      <div class="ayuda">Se guarda solo al cambiar cada dato. <b>Intercambiar</b>: marca las dos filas (casilla de la izquierda) de los transportistas que se cambiaron de ruta. Los cambios llegan al Excel de la PC de logística en la siguiente sincronización (cada 5 minutos).</div>
+      <div style="margin-top:6px"><button class="link-pc" type="button" id="b-conectar-pc">🖥️ ¿Esta es la PC del Excel? Conectar con el Excel</button></div>
+    </div>
+  </div>
+
+  <!-- ─────────────── CONSOLIDADO ─────────────── -->
+  <div class="contenido ancho oculto" id="p-consolidado">
+    <div class="card">
+      <h2>Consolidado por transportista</h2>
+      <div class="fila">
+        <span class="lbl">Desde</span><input class="inp" type="date" id="con-desde">
+        <span class="lbl">Hasta</span><input class="inp" type="date" id="con-hasta">
+        <button class="btn btn-principal" type="button" id="b-con-buscar">Ver</button>
+        <button class="btn" type="button" id="b-con-excel">⬇️ Descargar Excel</button>
+      </div>
+      <div class="ayuda" id="con-info"></div>
+      <div class="tabla-wrap" style="max-height:none"><table id="tabla-con"></table></div>
+    </div>
+  </div>
+
+  <!-- ─────────────── TARIFAS ─────────────── -->
+  <div class="contenido ancho oculto" id="p-tarifas">
+    <div class="card">
+      <div class="fila entre">
+        <h2 style="margin:0">Rutas y tarifas</h2>
+        <button class="btn btn-principal" type="button" id="b-tarifa-nueva">➕ Nueva ruta</button>
+      </div>
+      <div class="ayuda">Nueva tarifa = tarifa actual + su % (3% o 3,5%). 6 llantas = tarifa actual + 4% (o 4,5%). Sanción (ajuste 1 y 2) = tarifa actual. Ajuste 3 = nueva tarifa − $20; su sanción = tarifa actual − $20.
+Al cambiar una tarifa se elige desde qué fecha de entrega rige: los días anteriores se siguen pagando con la tarifa que tenían.</div>
+      <div class="tabla-wrap" style="max-height:none"><table id="tabla-tarifas"></table></div>
+    </div>
+    <div class="card">
+      <h2>Líneas</h2>
+      <div class="chips" id="chips-lineas"></div>
+      <div class="pegar"><input type="text" id="inp-linea" placeholder="Nueva línea (ej. HPC CUENCA)"><button class="btn" type="button" id="b-linea">Agregar</button></div>
+    </div>
+  </div>
+
+  <!-- ─────────────── TRANSPORTISTAS ─────────────── -->
+  <div class="contenido oculto" id="p-transportistas">
+    <div class="card">
+      <div class="fila entre">
+        <h2 style="margin:0">Transportistas</h2>
+        <div class="fila">
+          <input class="inp" type="text" id="inp-buscar-transp" placeholder="Buscar...">
+          <button class="btn btn-principal" type="button" id="b-transp-nuevo">➕ Agregar</button>
+        </div>
+      </div>
+      <div class="tabla-wrap" style="max-height:none"><table id="tabla-transp"></table></div>
+    </div>
+  </div>
+</main>
+
+<datalist id="dl-transportistas"></datalist>
+
+<script>
+const API_URL_PRODUCCION="https://script.google.com/macros/s/AKfycbwzQRnCJHFXni_9Qvs9kh_6BoikPDtb2sAMNChS3gSk9gAn5e31z5PFvKRGRzeoFqK5og/exec";
+// Solo al probar la app en esta PC (http://localhost): se puede apuntar a un
+// backend de pruebas guardando su dirección en localStorage 'pago_api_pruebas'.
+const API_URL=(/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && localStorage.getItem('pago_api_pruebas')) || API_URL_PRODUCCION;
+function getSesion(){ try{ return JSON.parse(localStorage.getItem('sesionActiva')||'null'); }catch(e){ return null; } }
+function getToken(){ const s=getSesion(); return (s&&s.token)||''; }
+let _redirigiendoLogin=false;
+function sesionExpirada(){
+  if(_redirigiendoLogin) return;
+  _redirigiendoLogin=true;
+  try{ localStorage.removeItem('sesionActiva'); }catch(e){}
+  alert('Tu sesión expiró o no es válida. Ingresa de nuevo.');
+  window.location.href='login.html';
+}
+const ROLES_PAGO=['admin','coordinador','cartera'];
+(function(){
+  const s=getSesion();
+  if(s && s.rol && !ROLES_PAGO.includes(s.rol)) window.location.replace('inicio.html?aviso=sin-permiso');
+})();
+</script>
+<script src="servicio-local.js"></script>
+<script src="pago-transportes.js"></script>
+</body>
+</html>

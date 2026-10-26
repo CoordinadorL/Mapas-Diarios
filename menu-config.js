@@ -46,8 +46,9 @@ const MENU_INICIO = [
   },
   {
     titulo: 'PAGO A TRANSPORTES',
-    descripcion: 'Liquidación de pagos a transportistas',
+    descripcion: 'Resumen diario por transportista · tarifas · sanciones',
     icono: '💵',
-    destino: null,
+    destino: 'pago-transportes.html',
+    roles: ['admin', 'coordinador', 'cartera'],
   },
 ];
