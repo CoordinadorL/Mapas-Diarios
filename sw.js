@@ -2,7 +2,7 @@
 // Service Worker — OPAUSTRO (login, menú de Inicio y Cargues)
 // Permite instalación en pantalla de inicio y caché básico
 // ═══════════════════════════════════════════════════════════
-const CACHE_NAME = 'mapas-diarios-v57';
+const CACHE_NAME = 'mapas-diarios-v58';
 // Caché separada para las imágenes del mapa (calles) que usan los mapas de
 // Cargue. Aparte de CACHE_NAME para que actualizar la app no la borre.
 const TILES_CACHE_NAME = 'mapas-diarios-tiles-v1';

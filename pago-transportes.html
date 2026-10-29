@@ -60,6 +60,41 @@ select.sel,input.inp{border:1.5px solid #cbd5e1;border-radius:10px;padding:7px 1
 .corte-dia{margin-top:8px;font-size:.82rem;font-weight:700;color:#0b4f7a;background:#e0ecf7;border-radius:10px;padding:6px 10px;display:inline-block}
 .corte-dia.cerrado{background:#f1f5f9;color:#475569}
 .link-pc{font-size:.78rem;color:#0e7ab8;background:none;border:none;cursor:pointer;font-family:inherit;text-decoration:underline;padding:0}
+/* Tablas de Cortes: ordenar (clic en el título) y filtrar (casilla debajo) */
+.tabla-filtrable th.ordenable{cursor:pointer;user-select:none;white-space:nowrap}
+.tabla-filtrable th.ordenable:hover{color:#0b4f7a}
+.tabla-filtrable th .flecha{color:#0e7ab8;font-size:.7rem;margin-left:3px}
+.tabla-filtrable tr.fila-filtro th{background:#f8fafc;padding:4px 6px;top:31px}
+.tabla-filtrable tr.fila-filtro input{width:100%;min-width:60px;border:1px solid #d6dee8;border-radius:6px;padding:3px 6px;font-size:.75rem;font-family:inherit;font-weight:600}
+.tabla-filtrable tr.fila-filtro input.activo{border-color:#0e7ab8;background:#eff8ff}
+.tabla-filtrable tr.fila-filtro input.mal{border-color:#dc2626;background:#fef2f2}
+.tabla-filtrable tr.clic-transp{cursor:pointer}
+.tabla-filtrable tr.clic-transp:hover td{background:#f0f7fd}
+.tabla-filtrable tr.elegida td{background:#dbeafe !important;font-weight:700}
+.tabla-filtrable tr.fila-total td{font-weight:800;background:#e2ebf3}
+/* Resumen del transportista */
+.corte-arriba{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,460px);gap:16px;align-items:start}
+.resumen-transp{border:1.5px solid #c9dfee;background:#f6fafd;border-radius:14px;padding:12px 14px;font-size:.82rem;min-height:120px}
+.resumen-transp .vacio{color:#64748b;line-height:1.5}
+.resumen-transp .cab{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.resumen-transp .cab b{font-size:.98rem;color:#0b4f7a}
+.resumen-transp .cab small{display:block;color:#64748b;font-weight:600;margin-top:2px}
+.resumen-transp .cerrar{border:none;background:none;font-size:1rem;cursor:pointer;color:#64748b}
+.resumen-transp .cifras{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.resumen-transp .cifra{background:#fff;border:1px solid #dbe5ee;border-radius:10px;padding:7px 8px}
+.resumen-transp .cifra span{display:block;font-size:.68rem;font-weight:800;color:#64748b;text-transform:uppercase}
+.resumen-transp .cifra b{font-size:1rem}
+.resumen-transp .cifra.final{background:#0b4f7a;border-color:#0b4f7a}
+.resumen-transp .cifra.final span{color:#cfe3f1}
+.resumen-transp .cifra.final b{color:#fff}
+.resumen-transp .datos{margin-top:8px;color:#334155;line-height:1.5}
+.resumen-transp .nota{margin-top:6px;color:#92400e;font-weight:700;font-size:.76rem}
+.resumen-transp .fila{margin-top:10px}
+.resumen-transp details{margin-top:8px}
+.resumen-transp details summary{cursor:pointer;font-weight:800;color:#0b4f7a}
+.resumen-transp table{font-size:.74rem;margin-top:6px}
+.resumen-transp td,.resumen-transp th{padding:3px 5px}
+@media (max-width:900px){ .corte-arriba{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -117,24 +152,37 @@ select.sel,input.inp{border:1.5px solid #cbd5e1;border-radius:10px;padding:7px 1
   <div class="contenido ancho oculto" id="p-consolidado">
     <div class="alerta oculto" id="aviso-corte-pendiente"></div>
     <div class="card">
-      <h2>Corte de pago (del 26 al 25)</h2>
-      <div class="fila">
-        <select class="sel" id="sel-corte"></select>
-        <span class="fila oculto" id="rango-libre">
-          <span class="lbl">Desde</span><input class="inp" type="date" id="con-desde">
-          <span class="lbl">Hasta</span><input class="inp" type="date" id="con-hasta">
-          <button class="btn btn-principal" type="button" id="b-con-buscar">Ver</button>
-        </span>
-        <button class="btn" type="button" id="b-con-excel">⬇️ Descargar Excel</button>
-        <button class="btn btn-principal oculto" type="button" id="b-corte-cerrar">🔒 Cerrar y archivar corte</button>
-        <button class="btn btn-peligro oculto" type="button" id="b-corte-reabrir">🔓 Reabrir</button>
+      <div class="corte-arriba">
+        <div style="min-width:0">
+          <h2>Corte de pago (del 26 al 25)</h2>
+          <div class="fila">
+            <select class="sel" id="sel-corte"></select>
+            <span class="fila oculto" id="rango-libre">
+              <span class="lbl">Desde</span><input class="inp" type="date" id="con-desde">
+              <span class="lbl">Hasta</span><input class="inp" type="date" id="con-hasta">
+              <button class="btn btn-principal" type="button" id="b-con-buscar">Ver</button>
+            </span>
+            <button class="btn" type="button" id="b-con-excel">⬇️ Descargar Excel</button>
+            <button class="btn btn-principal oculto" type="button" id="b-corte-cerrar">🔒 Cerrar y archivar corte</button>
+            <button class="btn btn-peligro oculto" type="button" id="b-corte-reabrir">🔓 Reabrir</button>
+          </div>
+          <div class="excel-estado" id="corte-estado" style="margin-top:8px"></div>
+          <div class="ayuda" id="con-info"></div>
+        </div>
+        <!-- Resumen de un transportista (para mandárselo cuando tiene que facturar) -->
+        <aside class="resumen-transp" id="resumen-transp"></aside>
       </div>
-      <div class="excel-estado" id="corte-estado" style="margin-top:8px"></div>
-      <div class="ayuda" id="con-info"></div>
-      <h2 style="margin-top:14px">Por transportista</h2>
-      <div class="tabla-wrap" style="max-height:none"><table id="tabla-con"></table></div>
-      <h2 style="margin-top:14px">Por día</h2>
-      <div class="tabla-wrap" style="max-height:none"><table id="tabla-con-dias"></table></div>
+      <div class="fila entre" style="margin-top:14px">
+        <h2 style="margin:0">Por transportista</h2>
+        <button class="btn btn-sec oculto" type="button" data-quitar-filtros="tabla-con">✕ Quitar filtros</button>
+      </div>
+      <div class="ayuda" style="margin-top:2px">Toca un transportista para ver su resumen arriba. Toca un título para ordenar; escribe en la casilla de abajo para filtrar (números: <b>&gt;100</b>, <b>&lt;5</b>, <b>10-50</b>, <b>!=0</b>).</div>
+      <div class="tabla-wrap" style="max-height:none"><table id="tabla-con" class="tabla-filtrable"></table></div>
+      <div class="fila entre" style="margin-top:14px">
+        <h2 style="margin:0">Por día</h2>
+        <button class="btn btn-sec oculto" type="button" data-quitar-filtros="tabla-con-dias">✕ Quitar filtros</button>
+      </div>
+      <div class="tabla-wrap" style="max-height:none"><table id="tabla-con-dias" class="tabla-filtrable"></table></div>
     </div>
   </div>
 

@@ -609,18 +609,35 @@ async function verConsolidado(){
   const lista=Object.values(grupos).sort((a,b)=>a.cod.localeCompare(b.cod));
   const total=totalesDe(estado.consolidado);
   estado.totalCorte={filas:estado.consolidado.length, G:total.G, S:total.S};
-  // Por transportista (lo que se le paga en el corte).
-  pintarTablaResumen('tabla-con', ['Código','Nombre','Días','Filas','Kgs','Monto $','Retorno $','% retorno','Valor de ruta','A cancelar','Diferencia'],
-    lista.map(g=>{ const t=totalesDe(g.filas); return [g.cod, g.nombre||'—', g.dias.size, g.filas.length, numero(t.kgs), dinero(t.monto), dinero(t.retorno),
-      pct(t.monto?t.retorno/t.monto:0), dinero(t.G), dinero(t.S), dinero(t.G-t.S)]; }),
-    ['TOTAL','',new Set(estado.consolidado.map(f=>f.fecha_entrega)).size, total.filas||estado.consolidado.length, numero(total.kgs), dinero(total.monto),
-     dinero(total.retorno), pct(total.monto?total.retorno/total.monto:0), dinero(total.G), dinero(total.S), dinero(total.G-total.S)]);
+  estado.corteVisto={id:r0.id||null, nombre:r0.nombre||'', desde, hasta, cerrado:String(r0.estado||'').toUpperCase()==='CERRADO'};
+  estado.gruposCorte={};
+  lista.forEach(g=>{ estado.gruposCorte[g.cod]=g; });
+  // Por transportista (lo que se le paga en el corte). Cada fila guarda los
+  // números crudos (para ordenar, filtrar y totalizar) y su código (resumen).
+  tablaFiltrable('tabla-con', COLS_CORTE, lista.map(g=>{
+    const t=totalesDe(g.filas);
+    return {clave:g.cod, v:[g.cod, g.nombre||'—', g.dias.size, g.filas.length, t.kgs, t.monto, t.retorno,
+      t.monto?t.retorno/t.monto:0, t.G, t.S, t.G-t.S]};
+  }), {
+    total:filas=>{
+      const s=i=>filas.reduce((a,f)=>a+(Number(f.v[i])||0),0);
+      const dias=new Set(); filas.forEach(f=>estado.gruposCorte[f.clave].dias.forEach(d=>dias.add(d)));
+      return ['TOTAL','',dias.size, s(3), s(4), s(5), s(6), s(5)?s(6)/s(5):0, s(8), s(9), s(10)];
+    },
+    alClic:clave=>pintarResumenTransportista(clave, true),
+  });
   // Por día (una fila por pestaña del Excel).
   const porDia={};
   estado.consolidado.forEach(f=>{ (porDia[f.fecha_entrega]=porDia[f.fecha_entrega]||[]).push(f); });
-  pintarTablaResumen('tabla-con-dias', ['Fecha','Pestaña','Camiones','Kgs','Monto $','Valor de ruta','A cancelar','Diferencia'],
-    Object.keys(porDia).sort().map(d=>{ const t=totalesDe(porDia[d]); return [fechaLarga(d), nombreHoja(d), porDia[d].length, numero(t.kgs), dinero(t.monto), dinero(t.G), dinero(t.S), dinero(t.G-t.S)]; }),
-    null);
+  tablaFiltrable('tabla-con-dias', COLS_DIAS, Object.keys(porDia).sort().map(d=>{
+    const t=totalesDe(porDia[d]);
+    return {clave:d, v:[d, nombreHoja(d), porDia[d].length, t.kgs, t.monto, t.G, t.S, t.G-t.S]};
+  }), {
+    total:filas=>{ const s=i=>filas.reduce((a,f)=>a+(Number(f.v[i])||0),0); return ['TOTAL','',s(2), s(3), s(4), s(5), s(6), s(7)]; },
+  });
+  // El resumen abierto se actualiza con los datos nuevos (o se cierra si en
+  // este corte ese transportista no tiene filas).
+  pintarResumenTransportista(estado.transpElegido && estado.gruposCorte[estado.transpElegido] ? estado.transpElegido : null);
   info.textContent=`${estado.consolidado.length} filas entre ${fechaLarga(desde)} y ${fechaLarga(hasta)}.`+(total.faltan?` ⚠ ${total.faltan} fila(s) con ajuste pero sin COD de frecuencia válido.`:'');
   // Estado del corte y botones.
   if(r0.id){
@@ -636,18 +653,288 @@ async function verConsolidado(){
     }
   }
 }
-function pintarTablaResumen(idTabla, encabezado, filas, total){
+// ── Tablas de Cortes: ordenar y filtrar ─────────────────────────
+// Columnas: t = título, f = cómo se muestra el número crudo, num = filtro numérico.
+const COLS_CORTE=[
+  {t:'Código'}, {t:'Nombre'}, {t:'Días', num:true, f:v=>numero(v,0)}, {t:'Filas', num:true, f:v=>numero(v,0)},
+  {t:'Kgs', num:true, f:v=>numero(v)}, {t:'Monto $', num:true, f:dinero}, {t:'Retorno $', num:true, f:dinero},
+  {t:'% retorno', num:true, f:pct, pct:true}, {t:'Valor de ruta', num:true, f:dinero}, {t:'A cancelar', num:true, f:dinero},
+  {t:'Diferencia', num:true, f:dinero},
+];
+const COLS_DIAS=[
+  {t:'Fecha', f:fechaLarga}, {t:'Pestaña'}, {t:'Camiones', num:true, f:v=>numero(v,0)}, {t:'Kgs', num:true, f:v=>numero(v)},
+  {t:'Monto $', num:true, f:dinero}, {t:'Valor de ruta', num:true, f:dinero}, {t:'A cancelar', num:true, f:dinero},
+  {t:'Diferencia', num:true, f:dinero},
+];
+// Filtros y orden se recuerdan por tabla (al cambiar de corte siguen puestos).
+const vistaTablas={};
+
+function textoCelda(col, v){ return col.f ? col.f(v) : (v===null||v===undefined?'':String(v)); }
+function sinTildes(s){ return String(s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(); }
+
+// Filtro numérico: ">100", "<5", ">=1", "<=0", "10-50", "=0", "!=0", o un
+// número (igual). En % retorno se escribe en porcentaje (">3" = más de 3%).
+// Devuelve null si no es una expresión numérica (entonces se busca como texto).
+function filtroNumerico(txt, esPct){
+  const s=String(txt).trim().replace(/\s+/g,'').replace(/[$%]/g,'');
+  // "13.741,10" y "13741,10" (como se muestran) o "13741.10"; "1.5" es 1,5.
+  const n=x=>{
+    let t=String(x);
+    if(t.includes(',')) t=t.replace(/\./g,'').replace(',','.');
+    else if(/^-?\d{1,3}(\.\d{3})+$/.test(t)) t=t.replace(/\./g,'');
+    const v=Number(t); return isNaN(v)?NaN:(esPct?v/100:v);
+  };
+  let m;
+  if((m=s.match(/^(>=|<=|!=|<>|>|<|=)(-?[\d.,]+)$/))){
+    const k=n(m[2]); if(isNaN(k)) return null;
+    const e=1e-9;
+    return {'>':v=>v>k+e, '<':v=>v<k-e, '>=':v=>v>=k-e, '<=':v=>v<=k+e, '=':v=>Math.abs(v-k)<0.005, '!=':v=>Math.abs(v-k)>=0.005, '<>':v=>Math.abs(v-k)>=0.005}[m[1]];
+  }
+  if((m=s.match(/^(-?[\d.,]+)-(-?[\d.,]+)$/))){
+    const a=n(m[1]), b=n(m[2]); if(isNaN(a)||isNaN(b)) return null;
+    return v=>v>=Math.min(a,b)-1e-9 && v<=Math.max(a,b)+1e-9;
+  }
+  return null;
+}
+
+function tablaFiltrable(idTabla, cols, filas, opciones){
+  const vista=vistaTablas[idTabla]||(vistaTablas[idTabla]={filtros:{}, orden:null});
+  vista.cols=cols; vista.filas=filas; vista.opciones=opciones||{};
   const tabla=document.getElementById(idTabla); tabla.innerHTML='';
-  const thead=document.createElement('thead'); const trh=document.createElement('tr');
-  encabezado.forEach(t=>trh.appendChild(el('th',null,t))); thead.appendChild(trh); tabla.appendChild(thead);
-  const tbody=document.createElement('tbody');
-  filas.forEach(f=>{ const tr=document.createElement('tr'); f.forEach((v,i)=>tr.appendChild(el('td', i>=2?'num':null, v))); tbody.appendChild(tr); });
-  if(total){
+  const thead=document.createElement('thead');
+  const trh=document.createElement('tr');
+  cols.forEach((c,i)=>{
+    const th=el('th', 'ordenable'+(c.num?' num':''), c.t);
+    th.title='Ordenar';
+    th.appendChild(el('span','flecha',''));
+    th.addEventListener('click', ()=>{
+      const o=vista.orden;
+      vista.orden=(!o||o.i!==i)?{i, dir:1}:(o.dir===1?{i, dir:-1}:null);
+      pintarCuerpoFiltrable(idTabla);
+    });
+    trh.appendChild(th);
+  });
+  const trf=document.createElement('tr'); trf.className='fila-filtro';
+  cols.forEach((c,i)=>{
+    const th=document.createElement('th');
+    const inp=document.createElement('input'); inp.type='text';
+    inp.placeholder=c.num?'ej. >0':'filtrar…';
+    inp.value=vista.filtros[i]||'';
+    inp.addEventListener('input', ()=>{ vista.filtros[i]=inp.value; pintarCuerpoFiltrable(idTabla); });
+    th.appendChild(inp); trf.appendChild(th);
+  });
+  thead.appendChild(trh); thead.appendChild(trf); tabla.appendChild(thead);
+  tabla.appendChild(document.createElement('tbody'));
+  pintarCuerpoFiltrable(idTabla);
+}
+
+function filasVisibles(idTabla){
+  const vista=vistaTablas[idTabla];
+  const conds=vista.cols.map((c,i)=>{
+    const txt=String(vista.filtros[i]||'').trim();
+    if(!txt) return null;
+    const fn=c.num?filtroNumerico(txt, c.pct):null;
+    if(fn) return f=>fn(Number(f.v[i])||0);
+    const buscado=sinTildes(txt);
+    return f=>sinTildes(textoCelda(c, f.v[i])).includes(buscado);
+  });
+  let filas=vista.filas.filter(f=>conds.every(cond=>!cond||cond(f)));
+  if(vista.orden){
+    const {i, dir}=vista.orden, c=vista.cols[i];
+    filas=filas.slice().sort((a,b)=>{
+      const x=a.v[i], y=b.v[i];
+      return dir*(c.num ? (Number(x)||0)-(Number(y)||0) : String(x).localeCompare(String(y), 'es', {numeric:true}));
+    });
+  }
+  return filas;
+}
+
+function pintarCuerpoFiltrable(idTabla){
+  const vista=vistaTablas[idTabla];
+  const tabla=document.getElementById(idTabla);
+  const tbody=tabla.querySelector('tbody'); tbody.innerHTML='';
+  const visibles=filasVisibles(idTabla);
+  // Flechas de orden y marca de filtros activos.
+  tabla.querySelectorAll('thead tr:first-child th').forEach((th,i)=>{
+    th.querySelector('.flecha').textContent=vista.orden&&vista.orden.i===i?(vista.orden.dir===1?'▲':'▼'):'';
+  });
+  tabla.querySelectorAll('tr.fila-filtro input').forEach((inp,i)=>{
+    const txt=String(vista.filtros[i]||'').trim();
+    inp.classList.toggle('activo', !!txt);
+    inp.classList.toggle('mal', !!txt && !!vista.cols[i].num && /^[<>=!]/.test(txt) && !filtroNumerico(txt, vista.cols[i].pct));
+  });
+  const hayFiltro=Object.values(vista.filtros).some(t=>String(t||'').trim());
+  const bQuitar=document.querySelector(`[data-quitar-filtros="${idTabla}"]`);
+  if(bQuitar) bQuitar.classList.toggle('oculto', !hayFiltro && !vista.orden);
+  visibles.forEach(f=>{
     const tr=document.createElement('tr');
-    total.forEach((v,i)=>{ const td=el('td', i>=2?'num':null, v); td.style.fontWeight='800'; td.style.background='#e2ebf3'; tr.appendChild(td); });
+    tr.dataset.clave=f.clave;
+    vista.cols.forEach((c,i)=>tr.appendChild(el('td', c.num?'num':null, textoCelda(c, f.v[i]))));
+    if(vista.opciones.alClic){
+      tr.classList.add('clic-transp');
+      if(estado.transpElegido===f.clave) tr.classList.add('elegida');
+      tr.addEventListener('click', ()=>vista.opciones.alClic(f.clave));
+    }
+    tbody.appendChild(tr);
+  });
+  if(!visibles.length){
+    const tr=document.createElement('tr'); const td=el('td',null, vista.filas.length?'Ningún dato con esos filtros.':'Sin datos en este corte.');
+    td.colSpan=vista.cols.length; td.style.color='#64748b'; tr.appendChild(td); tbody.appendChild(tr);
+  }
+  if(vista.opciones.total && vista.filas.length){
+    const tot=vista.opciones.total(visibles);
+    const tr=document.createElement('tr'); tr.className='fila-total';
+    tot.forEach((v,i)=>{
+      const c=vista.cols[i];
+      let txt=i===0 ? (hayFiltro?`TOTAL (${visibles.length} de ${vista.filas.length})`:'TOTAL') : (v===''?'':textoCelda(c, v));
+      if(i===0 && c.f===fechaLarga) txt=hayFiltro?`TOTAL (${visibles.length} de ${vista.filas.length})`:'TOTAL';
+      tr.appendChild(el('td', c.num?'num':null, txt));
+    });
     tbody.appendChild(tr);
   }
-  tabla.appendChild(tbody);
+}
+
+// Hoja de Excel con TODAS las filas de una tabla de Cortes (sin filtros) + TOTAL.
+function hojaDeTabla(idTabla){
+  const vista=vistaTablas[idTabla];
+  const cols=vista.cols;
+  const valor=(c,v)=>c.f===fechaLarga?fechaLarga(v):v;
+  const aoa=[cols.map(c=>c.t)].concat(vista.filas.map(f=>cols.map((c,i)=>valor(c, f.v[i]))));
+  if(vista.opciones.total && vista.filas.length) aoa.push(vista.opciones.total(vista.filas).map((v,i)=>i===0?'TOTAL':v));
+  const hoja=XLSX.utils.aoa_to_sheet(aoa);
+  // Formato de cada columna numérica ($, % o número).
+  cols.forEach((c,i)=>{
+    if(!c.num) return;
+    const z=c.pct?'0.00%':(c.f===dinero?'"$"#,##0.00':'#,##0.##');
+    for(let r=1;r<aoa.length;r++){
+      const ref=XLSX.utils.encode_cell({r, c:i});
+      if(hoja[ref] && typeof hoja[ref].v==='number') hoja[ref].z=z;
+    }
+  });
+  return hoja;
+}
+
+function quitarFiltros(idTabla){
+  const vista=vistaTablas[idTabla]; if(!vista) return;
+  vista.filtros={}; vista.orden=null;
+  tablaFiltrable(idTabla, vista.cols, vista.filas, vista.opciones);
+}
+
+// ── Resumen de un transportista (para mandárselo cuando factura) ──
+function datosResumen(cod){
+  const g=estado.gruposCorte&&estado.gruposCorte[cod];
+  if(!g) return null;
+  const t=totalesDe(g.filas);
+  const filas=g.filas.slice().sort((a,b)=>String(a.fecha_entrega).localeCompare(String(b.fecha_entrega))||num(a.orden)-num(b.orden))
+    .map(f=>{ const c=calcularFila(f); return {fecha:f.fecha_entrega, ruta:c.ruta, cod_frec:f.cod_frec||'', kgs:num(f.kgs), monto:num(f.monto),
+      retorno:num(f.retorno), P:c.P, G:c.G, S:c.S, sancionado:c.sancionado}; });
+  return {cod, nombre:g.nombre||nombreTransportista(cod)||'', dias:g.dias.size, filas, t,
+    sanciones:filas.filter(f=>f.sancionado).length, corte:estado.corteVisto||{}};
+}
+
+function nombreCorteTexto(c){
+  return (c.nombre?`Corte ${c.nombre} · `:'')+(c.desde&&c.hasta?`${fechaCorta(c.desde)} al ${fechaCorta(c.hasta)}`:'');
+}
+
+function pintarResumenTransportista(cod, desdeClic){
+  estado.transpElegido=cod||null;
+  document.querySelectorAll('#tabla-con tbody tr').forEach(tr=>tr.classList.toggle('elegida', !!cod && tr.dataset.clave===cod));
+  const caja=document.getElementById('resumen-transp');
+  caja.innerHTML='';
+  const d=cod?datosResumen(cod):null;
+  if(!d){
+    caja.appendChild(el('div','vacio','👆 Toca un transportista en la tabla "Por transportista" para ver aquí su resumen del corte (valor de ruta, diferencia y valor a cancelar) y enviárselo cuando tenga que facturar.'));
+    return;
+  }
+  const cab=el('div','cab');
+  const quien=el('div'); quien.appendChild(el('b',null,`${d.cod} · ${d.nombre||'—'}`));
+  quien.appendChild(el('small',null,nombreCorteTexto(d.corte)+(d.corte.cerrado?' · 🔒 cerrado':'')));
+  const x=el('button','cerrar','✕'); x.type='button'; x.title='Cerrar'; x.onclick=()=>pintarResumenTransportista(null);
+  cab.appendChild(quien); cab.appendChild(x); caja.appendChild(cab);
+  const cifras=el('div','cifras');
+  [['Valor de ruta', d.t.G, ''], ['Diferencia', d.t.G-d.t.S, ''], ['A cancelar', d.t.S, 'final']].forEach(([t,v,cl])=>{
+    const c=el('div','cifra'+(cl?' '+cl:'')); c.appendChild(el('span',null,t)); c.appendChild(el('b',null,dinero(v))); cifras.appendChild(c);
+  });
+  caja.appendChild(cifras);
+  caja.appendChild(el('div','datos',
+    `${d.dias} día(s) · ${d.filas.length} ruta(s) · ${numero(d.t.kgs)} kg · Monto ${dinero(d.t.monto)} · Retorno ${dinero(d.t.retorno)} (${pct(d.t.monto?d.t.retorno/d.t.monto:0)})`+
+    (d.sanciones?` · ${d.sanciones} día(s) con sanción por retorno mayor a 3%`:'')));
+  if(d.t.faltan) caja.appendChild(el('div','nota',`⚠ ${d.t.faltan} fila(s) con ajuste pero sin COD de frecuencia válido: no están sumadas.`));
+  if(!d.corte.cerrado && d.corte.id) caja.appendChild(el('div','nota','Corte todavía abierto: los valores pueden cambiar hasta que se cierre.'));
+  const botones=el('div','fila');
+  const b1=el('button','btn btn-principal','📋 Copiar para WhatsApp'); b1.type='button';
+  b1.onclick=()=>copiarTexto(textoResumenWhatsApp(d), '✅ Resumen copiado: pégalo en WhatsApp.');
+  const b2=el('button','btn','🖨️ Imprimir / PDF'); b2.type='button'; b2.onclick=()=>imprimirResumen(d);
+  botones.appendChild(b1); botones.appendChild(b2); caja.appendChild(botones);
+  // Detalle por día (plegado).
+  const det=document.createElement('details');
+  det.appendChild(el('summary',null,`Detalle por día (${d.filas.length})`));
+  const tb=document.createElement('table');
+  const h=document.createElement('tr'); ['Fecha','Ruta','% ret.','Valor ruta','A cancelar'].forEach(t=>h.appendChild(el('th',null,t)));
+  tb.appendChild(h);
+  d.filas.forEach(f=>{
+    const tr=document.createElement('tr');
+    [fechaLarga(f.fecha), f.ruta, pct(f.P), dinero(f.G), dinero(f.S)].forEach((v,i)=>{ const td=el('td', i>=2?'num':null, v); if(i===4&&f.sancionado) td.className='num sancion'; tr.appendChild(td); });
+    tb.appendChild(tr);
+  });
+  det.appendChild(tb); caja.appendChild(det);
+  if(desdeClic){
+    const r=caja.getBoundingClientRect();
+    if(r.top<0 || r.top>window.innerHeight-80) caja.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+}
+
+function textoResumenWhatsApp(d){
+  const lineas=[
+    '*OPAUSTRO LOGÍSTICA — Resumen de pago de transporte*',
+    `Transportista: ${d.cod}${d.nombre?' · '+d.nombre:''}`,
+    nombreCorteTexto(d.corte),
+    '',
+    `Días trabajados: ${d.dias} (${d.filas.length} ruta${d.filas.length===1?'':'s'})`,
+    `Valor de ruta: ${dinero(d.t.G)}`,
+    `Diferencia (sanciones): ${dinero(d.t.G-d.t.S)}`,
+    `*Valor a cancelar (a facturar): ${dinero(d.t.S)}*`,
+    '',
+    'Detalle:',
+  ];
+  d.filas.forEach(f=>lineas.push(`• ${fechaLarga(f.fecha)} · ${f.ruta} · ${dinero(f.S)}`+(f.sancionado?` (retorno ${pct(f.P)}: sanción ${dinero((f.G||0)-(f.S||0))})`:'')));
+  if(!d.corte.cerrado && d.corte.id) lineas.push('', '_Corte todavía abierto: valores sujetos a cambios hasta el cierre._');
+  return lineas.join('\n');
+}
+
+function imprimirResumen(d){
+  const esc=s=>String(s===null||s===undefined?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const logo=new URL('logo-wordmark.png', location.href).href;
+  const filas=d.filas.map(f=>`<tr><td>${esc(fechaLarga(f.fecha))}</td><td>${esc(f.ruta)}</td><td class="n">${esc(numero(f.kgs))}</td>`+
+    `<td class="n">${esc(dinero(f.monto))}</td><td class="n">${esc(pct(f.P))}</td><td class="n">${esc(dinero(f.G))}</td>`+
+    `<td class="n${f.sancionado?' s':''}">${esc(dinero(f.S))}</td></tr>`).join('');
+  const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Resumen ${esc(d.cod)} - ${esc(d.corte.nombre||'')}</title>
+<style>body{font-family:'Segoe UI',Arial,sans-serif;color:#0f172a;margin:28px;font-size:13px}
+.cab{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #0b4f7a;padding-bottom:10px}
+.cab img{height:46px}.cab div{text-align:right}h1{font-size:18px;margin:0;color:#0b4f7a}
+.quien{margin:16px 0 8px;font-size:15px}.quien b{font-size:17px}
+.cifras{display:flex;gap:10px;margin:12px 0}.cifra{flex:1;border:1.5px solid #c9dfee;border-radius:10px;padding:8px 10px}
+.cifra span{display:block;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase}.cifra b{font-size:17px}
+.cifra.final{background:#0b4f7a;color:#fff;border-color:#0b4f7a}.cifra.final span{color:#cfe3f1}
+table{width:100%;border-collapse:collapse;margin-top:10px}th,td{border-bottom:1px solid #e2e8f0;padding:5px 6px;text-align:left}
+th{background:#f1f5f9;font-size:12px}.n{text-align:right}.s{color:#b91c1c;font-weight:700}
+tfoot td{font-weight:800;background:#e2ebf3}.nota{margin-top:10px;color:#92400e;font-size:12px}
+@media print{body{margin:12mm}}</style></head><body>
+<div class="cab"><img src="${logo}" alt="OPAUSTRO"><div><h1>Resumen de pago de transporte</h1>${esc(nombreCorteTexto(d.corte))}</div></div>
+<div class="quien">Transportista: <b>${esc(d.cod)}${d.nombre?' · '+esc(d.nombre):''}</b></div>
+<div class="cifras"><div class="cifra"><span>Valor de ruta</span><b>${esc(dinero(d.t.G))}</b></div>
+<div class="cifra"><span>Diferencia (sanciones)</span><b>${esc(dinero(d.t.G-d.t.S))}</b></div>
+<div class="cifra final"><span>Valor a cancelar (a facturar)</span><b>${esc(dinero(d.t.S))}</b></div></div>
+<div>${d.dias} día(s) trabajado(s) · ${d.filas.length} ruta(s) · ${esc(numero(d.t.kgs))} kg · Monto entregado ${esc(dinero(d.t.monto))} · Retorno ${esc(dinero(d.t.retorno))} (${esc(pct(d.t.monto?d.t.retorno/d.t.monto:0))})</div>
+<table><thead><tr><th>Fecha</th><th>Ruta</th><th class="n">Kgs</th><th class="n">Monto $</th><th class="n">% retorno</th><th class="n">Valor de ruta</th><th class="n">A cancelar</th></tr></thead>
+<tbody>${filas}</tbody><tfoot><tr><td>TOTAL</td><td></td><td class="n">${esc(numero(d.t.kgs))}</td><td class="n">${esc(dinero(d.t.monto))}</td>
+<td class="n">${esc(pct(d.t.monto?d.t.retorno/d.t.monto:0))}</td><td class="n">${esc(dinero(d.t.G))}</td><td class="n">${esc(dinero(d.t.S))}</td></tr></tfoot></table>
+${d.sanciones?`<div class="nota">En rojo: días con retorno mayor a 3% (se paga la tarifa con sanción).</div>`:''}
+${!d.corte.cerrado&&d.corte.id?`<div class="nota">Corte todavía abierto: valores sujetos a cambios hasta el cierre.</div>`:''}
+<script>window.onload=function(){setTimeout(function(){window.print();},300);};<\/script></body></html>`;
+  const w=window.open('', '_blank');
+  if(!w){ mostrarToast('El navegador bloqueó la ventana: permite ventanas emergentes para imprimir.', 5000); return; }
+  w.document.open(); w.document.write(html); w.document.close();
 }
 
 async function cerrarCorte(){
@@ -687,8 +974,10 @@ async function descargarConsolidado(){
   try{ await cargarXLSX(); }catch(e){ mostrarToast('⚠️ '+e.message, 5000); return; }
   const c=rangoElegido();
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.table_to_sheet(document.getElementById('tabla-con'), {raw:false}), 'RESUMEN');
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.table_to_sheet(document.getElementById('tabla-con-dias'), {raw:false}), 'POR DIA');
+  // Desde los datos (no desde la pantalla): siempre el corte COMPLETO aunque
+  // haya filtros puestos, y con números de verdad (no texto) para Excel.
+  XLSX.utils.book_append_sheet(wb, hojaDeTabla('tabla-con'), 'RESUMEN');
+  XLSX.utils.book_append_sheet(wb, hojaDeTabla('tabla-con-dias'), 'POR DIA');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(filasParaExcel(estado.consolidado), {cellDates:true}), 'CONSOLIDADO');
   XLSX.writeFile(wb, `PAGO TRANSPORTES ${c&&c.id?'CORTE '+c.nombre:(c.desde+' a '+c.hasta)}.xlsx`);
 }
@@ -878,6 +1167,8 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('b-corte-cerrar').addEventListener('click', cerrarCorte);
   document.getElementById('b-corte-reabrir').addEventListener('click', reabrirCorte);
   document.getElementById('b-con-excel').addEventListener('click', descargarConsolidado);
+  document.querySelectorAll('[data-quitar-filtros]').forEach(b=>b.addEventListener('click', ()=>quitarFiltros(b.dataset.quitarFiltros)));
+  pintarResumenTransportista(null);
   document.getElementById('b-tarifa-nueva').addEventListener('click', ()=>editarTarifa(null));
   document.getElementById('b-linea').addEventListener('click', ()=>{ const i=document.getElementById('inp-linea'); if(i.value.trim()){ guardarLinea(i.value.trim()); i.value=''; } });
   document.getElementById('b-transp-nuevo').addEventListener('click', ()=>editarTransportista(null));
