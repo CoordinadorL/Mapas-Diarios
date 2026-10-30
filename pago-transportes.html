@@ -46,6 +46,18 @@ th.col-fija{z-index:3;background:#f1f5f9}
 .etq.fuera{background:#fee2e2;color:#b00020}
 .etq.cargue{background:#f1f5f9;color:#334155}
 .etq.corr{background:#fef3c7;color:#92400e}
+.etq.hist{background:#ede9fe;color:#5b21b6}
+.modal-caja.modal-ancho{max-width:1000px}
+.hist-cuerpo{margin-top:10px;max-height:62vh;overflow:auto}
+.hist-tabla{width:100%;border-collapse:collapse;font-size:.8rem}
+.hist-tabla th{background:#0b4f7a;color:#fff;padding:6px 7px;text-align:left;position:sticky;top:0}
+.hist-tabla td{padding:6px 7px;border-bottom:1px solid #e2e8f0;vertical-align:top}
+.hist-tabla td small{display:block;color:#64748b;font-size:.68rem;font-weight:600}
+.hist-tabla td.n{text-align:right;white-space:nowrap}
+.hist-accion{white-space:nowrap;text-align:center}
+.hist-notas td{background:#f8fafc;font-size:.74rem;color:#475569;padding-top:2px}
+.hist-notas ul{margin:0 0 0 18px}
+.hist-mal{color:#b00020;font-weight:700;padding:8px 0}
 .campo-form{display:flex;flex-direction:column;gap:4px;margin-top:10px}
 .campo-form label{font-size:.78rem;font-weight:800;color:#334155}
 .campo-form input,.campo-form select{border:1.5px solid #cbd5e1;border-radius:10px;padding:8px 10px;font-size:.88rem;font-family:inherit}
@@ -180,6 +192,7 @@ select.sel,input.inp{border:1.5px solid #cbd5e1;border-radius:10px;padding:7px 1
             <button class="btn" type="button" id="b-con-excel">⬇️ Descargar Excel</button>
             <button class="btn btn-principal oculto" type="button" id="b-corte-cerrar">🔒 Cerrar y archivar corte</button>
             <button class="btn btn-peligro oculto" type="button" id="b-corte-reabrir">🔓 Reabrir</button>
+            <button class="btn oculto" type="button" id="b-con-historico" title="Sube a la web los Excel de los cortes que se hicieron a mano (para las gráficas)">📥 Importar cortes anteriores</button>
           </div>
           <div class="ayuda" id="corte-sync"></div>
         </div>

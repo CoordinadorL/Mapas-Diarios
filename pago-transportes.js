@@ -92,6 +92,9 @@ function nombreTransportista(cod){
   return t?t.nombre:'';
 }
 function calcularFila(f){
+  // Importada del Excel de un corte anterior: ruta, valor de ruta y valor a
+  // cancelar son los que tenía ese Excel (la tarifa de ese momento).
+  if(f.origen==='historico') return calcularHistorica(f);
   const t=tarifaDe(f.cod_frec, f.fecha_entrega);
   const v=t?valoresTarifa(t):null;
   const C=vacio(f.ajuste)?0:Number(f.ajuste);
@@ -112,6 +115,16 @@ function calcularFila(f){
   return {
     mes:d?MESES[d.getMonth()]:'', ruta:v?v.ruta:(vacio(f.cod_frec)?'-':'¿COD?'), G, nombre,
     O:M-N, P, Q:C?'':'NO', S, sancionado:(S!==null&&G!==null&&S<G-0.005), sinTarifa:!!(C&&!v)
+  };
+}
+
+function calcularHistorica(f){
+  const G=num(f.valor_ruta_hist), S=num(f.valor_cancelar_hist), M=num(f.monto), N=num(f.retorno);
+  const cod=String(f.cod_camion||'').toUpperCase();
+  const d=f.fecha_entrega?fechaDe(f.fecha_entrega):null;
+  return {
+    mes:d?MESES[d.getMonth()]:'', ruta:f.ruta_hist||'-', G, nombre:nombreTransportista(cod)||f.nombre_carga||'',
+    O:M-N, P:M?N/M:0, Q:G?'':'NO', S, sancionado:S<G-0.005, sinTarifa:false
   };
 }
 
@@ -273,6 +286,7 @@ function filaDia(f){
   const cargue=String(f.clave_carga||'').split(' CARGUE ')[1];
   if(cargue) td0.appendChild(el('span','etq cargue','CARGUE '+cargue));
   if(f.origen==='manual') td0.appendChild(el('span','etq adic','adicional'));
+  if(f.origen==='historico') td0.appendChild(el('span','etq hist','del Excel anterior'));
   const orig=codOriginal(f);
   if(orig && orig!==String(f.cod_camion||'').toUpperCase()) td0.appendChild(el('span','etq camb','era '+orig));
   if(f.fuera_de_ruta==='SI') td0.appendChild(el('span','etq fuera','ya no está en la ruta'));
@@ -1254,6 +1268,7 @@ function renderServicio(e){
   bCon.classList.remove('oculto'); bCon.disabled=!!e.sincronizando;
   bCon.textContent=e.sincronizando?'⏳ Sincronizando...':'🔄 Sincronizar con el Excel';
   document.getElementById('corte-sync').textContent=e.sincronizando?'Sincronizando con el Excel...':(u?`Última sincronización con el Excel: ${u.hora}.`:'');
+  document.getElementById('b-con-historico').classList.toggle('oculto', !['admin','coordinador'].includes(rol));
   const av=document.getElementById('excel-avisos');
   if((e.avisos_sync||[]).length){
     av.classList.remove('oculto'); av.innerHTML='<b>Cambios del Excel que no se aplicaron (ganó la web):</b>';
@@ -1278,6 +1293,7 @@ function renderServicio(e){
 function sinServicio(){
   document.getElementById('card-excel').classList.add('oculto');
   document.getElementById('b-con-sincronizar').classList.add('oculto');
+  document.getElementById('b-con-historico').classList.add('oculto');
   document.getElementById('corte-sync').textContent='';
   document.getElementById('pill-servicio').classList.add('oculto');
   document.getElementById('b-conectar-pc').classList.remove('oculto');
@@ -1296,6 +1312,106 @@ async function entregarClave(){
 }
 function conectarPC(){
   iniciarConsulta('/pago/estado', renderServicio, sinServicio);
+}
+
+// ── Cortes anteriores (Excel viejos de la PC -> web) ─────────
+// El servicio de la PC lee los Excel de los cortes anteriores a la web
+// (pago_historico.py) y los sube uno por uno, CERRADOS y con los valores
+// del Excel. Aquí se muestran sus totales para revisarlos antes.
+async function importarHistorico(){
+  const fondo=el('div','modal-fondo'); const caja=el('div','modal-caja pregunta modal-ancho');
+  caja.appendChild(el('h3',null,'📥 Importar cortes anteriores'));
+  caja.appendChild(el('div','modal-texto','Los Excel de los cortes que se hicieron a mano, para que las gráficas tengan historia. '+
+    'Cada corte entra cerrado (solo lectura) con la ruta, el valor de ruta y el valor a cancelar que tiene su Excel. '+
+    'Los archivos solo se leen: no se cambian.'));
+  const cuerpo=el('div','hist-cuerpo'); caja.appendChild(cuerpo);
+  const pie=el('div','modal-pie');
+  const bRevisar=el('button','btn btn-sec','🔄 Volver a leer los archivos'); bRevisar.type='button';
+  const bCerrar=el('button','btn btn-principal','Cerrar'); bCerrar.type='button';
+  pie.appendChild(bRevisar); pie.appendChild(bCerrar); caja.appendChild(pie);
+  fondo.appendChild(caja); document.body.appendChild(fondo);
+  let timer=null, huboImportados=false, vivo=true;
+  const terminar=()=>{
+    vivo=false; clearTimeout(timer); fondo.remove();
+    // Al cerrar se refresca Cortes (y sus gráficas) con lo que se importó.
+    if(huboImportados){ estado.historico=null; cargarCortes().then(verConsolidado).then(()=>cargarHistorico()).catch(()=>{}); cargarDias().catch(()=>{}); }
+  };
+  bCerrar.onclick=terminar;
+  const pintar=h=>{
+    cuerpo.innerHTML='';
+    if(h.leyendo){ cuerpo.appendChild(el('div','ayuda','⏳ Leyendo los Excel (puede tardar un minuto)...')); return; }
+    if(h.error){ cuerpo.appendChild(el('div','hist-mal',h.error)); return; }
+    const tabla=el('table','hist-tabla'); const thead=document.createElement('thead'); const trh=document.createElement('tr');
+    ['Corte','Días','Rutas','Transp.','Monto $','Retorno $','% Dev.','Valor de ruta','A cancelar',''].forEach(t=>trh.appendChild(el('th',null,t)));
+    thead.appendChild(trh); tabla.appendChild(thead);
+    const tbody=document.createElement('tbody');
+    (h.archivos||[]).forEach(a=>{
+      const tr=document.createElement('tr'); const t=a.totales||{};
+      const g=corteGuardado(a.corte_id);
+      const yaImportado=!!g && String(g.cerrado_por||'').indexOf('IMPORTADO')===0;
+      const cerradoWeb=!!g && String(g.estado).toUpperCase()==='CERRADO' && !yaImportado;
+      const td0=el('td'); td0.appendChild(el('b',null,a.corte||a.archivo)); td0.appendChild(el('small',null,a.archivo)); tr.appendChild(td0);
+      [t.dias, t.filas, t.transportistas].forEach(v=>tr.appendChild(el('td','n',v===undefined?'':numero(v,0))));
+      [t.monto, t.retorno].forEach(v=>tr.appendChild(el('td','n',v===undefined?'':dinero(v))));
+      tr.appendChild(el('td','n',t.monto?pct(t.retorno/t.monto):''));
+      [t.valor_ruta, t.valor_cancelar].forEach(v=>tr.appendChild(el('td','n',v===undefined?'':dinero(v))));
+      const td=el('td','hist-accion');
+      if(a.estado==='importando') td.appendChild(el('span','etq cargue','⏳ Subiendo...'));
+      else if(a.estado==='importado') td.appendChild(el('span','etq adic','✅ Importado'));
+      else if(cerradoWeb) td.appendChild(el('span','etq camb','Cerrado en la web'));
+      else if(a.cuadra){
+        const b=el('button','btn '+(yaImportado?'btn-sec':'btn-principal'),yaImportado?'Volver a importar':'Importar'); b.type='button';
+        b.onclick=async ()=>{
+          if(yaImportado){
+            const si=await mostrarModal({titulo:'Volver a importar '+a.corte, tipo:'pregunta',
+              texto:'Se reemplaza lo que se importó antes de este corte por lo que tiene hoy su Excel.',
+              botones:[{texto:'Cancelar', valor:false}, {texto:'Reemplazar', valor:true, principal:true}]});
+            if(!si) return;
+          }
+          b.disabled=true;
+          await accion('/pago/historico/importar', {corte_id:a.corte_id});
+          seguir();
+        };
+        td.appendChild(b);
+        if(yaImportado) td.appendChild(el('small',null,'ya está en la web'));
+      }
+      tr.appendChild(td); tbody.appendChild(tr);
+      // Avisos de la lectura (filas movidas, saltadas...) y errores.
+      const notas=[...(a.avisos||[])];
+      if(a.problema) notas.unshift('⚠️ '+a.problema);
+      if(a.estado==='error' && a.mensaje) notas.unshift('⚠️ No se importó: '+a.mensaje);
+      if(a.estado==='importado' && a.mensaje) notas.unshift('✅ '+a.mensaje);
+      if(notas.length){
+        const trn=document.createElement('tr'); trn.className='hist-notas';
+        const tdn=el('td'); tdn.colSpan=10;
+        const ul=document.createElement('ul'); notas.forEach(n=>ul.appendChild(el('li',null,n))); tdn.appendChild(ul);
+        trn.appendChild(tdn); tbody.appendChild(trn);
+      }
+    });
+    tabla.appendChild(tbody); cuerpo.appendChild(tabla);
+  };
+  // Mientras se lee o se sube algo, se consulta cada 1,5 s.
+  const seguir=async ()=>{
+    clearTimeout(timer);
+    if(!vivo) return;
+    let h;
+    try{ h=await llamarServicio('GET', '/pago/historico'); }
+    catch(e){ cuerpo.innerHTML=''; cuerpo.appendChild(el('div','hist-mal','No se pudo hablar con el programa de la PC.')); return; }
+    if(!vivo) return;
+    const ocupado=h.leyendo || (h.archivos||[]).some(a=>a.estado==='importando');
+    if((h.archivos||[]).some(a=>a.estado==='importado')) huboImportados=true;
+    if(huboImportados && !ocupado) await cargarCortes().catch(()=>{});   // para "ya está en la web"
+    if(!vivo) return;
+    pintar(h);
+    bRevisar.disabled=ocupado;
+    if(ocupado) timer=setTimeout(seguir, 1500);
+  };
+  bRevisar.onclick=async ()=>{ await accion('/pago/historico/revisar'); seguir(); };
+  // La primera vez (o si la lista quedó vacía) se leen los archivos.
+  cuerpo.appendChild(el('div','ayuda','⏳ Buscando los archivos...'));
+  let h0=null; try{ h0=await llamarServicio('GET', '/pago/historico'); }catch(e){}
+  if(!h0 || (!h0.leyendo && !(h0.archivos||[]).length)) await accion('/pago/historico/revisar');
+  seguir();
 }
 
 // ── Pestañas e inicio ───────────────────────────────────────
@@ -1321,6 +1437,7 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('sel-corte').addEventListener('change', ()=>verConsolidado().then(pintarComparacion));
   document.getElementById('sel-analisis').addEventListener('change', pintarAnalisis);
   document.getElementById('b-con-sincronizar').addEventListener('click', ()=>accion('/pago/sincronizar'));
+  document.getElementById('b-con-historico').addEventListener('click', importarHistorico);
   document.getElementById('b-corte-cerrar').addEventListener('click', cerrarCorte);
   document.getElementById('b-corte-reabrir').addEventListener('click', reabrirCorte);
   document.getElementById('b-con-excel').addEventListener('click', descargarConsolidado);
