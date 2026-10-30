@@ -73,8 +73,9 @@ select.sel,input.inp{border:1.5px solid #cbd5e1;border-radius:10px;padding:7px 1
 .tabla-filtrable tr.elegida td{background:#dbeafe !important;font-weight:700}
 .tabla-filtrable tr.fila-total td{font-weight:800;background:#e2ebf3}
 /* Resumen del transportista */
-.corte-arriba{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,460px);gap:16px;align-items:start}
-.resumen-transp{border:1.5px solid #c9dfee;background:#f6fafd;border-radius:14px;padding:12px 14px;font-size:.82rem;min-height:120px}
+.corte-arriba{display:grid;grid-template-columns:minmax(340px,1fr) minmax(420px,1.25fr);gap:20px;align-items:start}
+.acciones-corte{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;padding-top:12px;border-top:1px dashed #dbe5ee}
+.resumen-transp{border:1.5px solid #c9dfee;background:#f6fafd;border-radius:14px;padding:16px 18px;font-size:.86rem;min-height:120px}
 .resumen-transp .vacio{color:#64748b;line-height:1.5}
 .resumen-transp .cab{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
 .resumen-transp .cab b{font-size:.98rem;color:#0b4f7a}
@@ -92,9 +93,18 @@ select.sel,input.inp{border:1.5px solid #cbd5e1;border-radius:10px;padding:7px 1
 .resumen-transp .fila{margin-top:10px}
 .resumen-transp details{margin-top:8px}
 .resumen-transp details summary{cursor:pointer;font-weight:800;color:#0b4f7a}
-.resumen-transp table{font-size:.74rem;margin-top:6px}
-.resumen-transp td,.resumen-transp th{padding:3px 5px}
-@media (max-width:900px){ .corte-arriba{grid-template-columns:1fr} }
+.resumen-transp table{font-size:.8rem;margin-top:8px}
+.resumen-transp td,.resumen-transp th{padding:5px 8px}
+.resumen-transp .cifra{padding:10px 12px}
+.resumen-transp .cifra b{font-size:1.15rem}
+@media (max-width:1000px){ .corte-arriba{grid-template-columns:1fr} }
+/* Análisis por corte (gerencia) */
+.graficas{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:14px;margin-top:10px}
+.grafica{border:1px solid #e2e8f0;border-radius:12px;padding:10px 12px;background:#fcfcfb}
+.grafica h3{font-size:.85rem;font-weight:800;color:#0f172a;margin-bottom:2px}
+.grafica .sub{font-size:.74rem;color:#64748b;margin-bottom:6px}
+.grafica .lienzo{position:relative;height:240px}
+@media (max-width:640px){ .graficas{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
@@ -162,12 +172,16 @@ select.sel,input.inp{border:1.5px solid #cbd5e1;border-radius:10px;padding:7px 1
               <span class="lbl">Hasta</span><input class="inp" type="date" id="con-hasta">
               <button class="btn btn-principal" type="button" id="b-con-buscar">Ver</button>
             </span>
+          </div>
+          <div class="excel-estado" id="corte-estado" style="margin-top:8px"></div>
+          <div class="ayuda" id="con-info"></div>
+          <div class="acciones-corte">
+            <button class="btn oculto" type="button" id="b-con-sincronizar" title="Trae ya los cambios del Excel de la PC de logística (si no, se sincroniza solo cada 5 minutos)">🔄 Sincronizar con el Excel</button>
             <button class="btn" type="button" id="b-con-excel">⬇️ Descargar Excel</button>
             <button class="btn btn-principal oculto" type="button" id="b-corte-cerrar">🔒 Cerrar y archivar corte</button>
             <button class="btn btn-peligro oculto" type="button" id="b-corte-reabrir">🔓 Reabrir</button>
           </div>
-          <div class="excel-estado" id="corte-estado" style="margin-top:8px"></div>
-          <div class="ayuda" id="con-info"></div>
+          <div class="ayuda" id="corte-sync"></div>
         </div>
         <!-- Resumen de un transportista (para mandárselo cuando tiene que facturar) -->
         <aside class="resumen-transp" id="resumen-transp"></aside>
@@ -183,6 +197,30 @@ select.sel,input.inp{border:1.5px solid #cbd5e1;border-radius:10px;padding:7px 1
         <button class="btn btn-sec oculto" type="button" data-quitar-filtros="tabla-con-dias">✕ Quitar filtros</button>
       </div>
       <div class="tabla-wrap" style="max-height:none"><table id="tabla-con-dias" class="tabla-filtrable"></table></div>
+    </div>
+
+    <!-- Análisis mes a mes (corte a corte) para gerencia -->
+    <div class="card" id="card-analisis">
+      <div class="fila entre">
+        <h2 style="margin:0">📈 Análisis por corte (gerencia)</h2>
+        <div class="fila">
+          <span class="lbl">Transportista</span>
+          <select class="sel" id="sel-analisis"><option value="">Todos los transportistas</option></select>
+        </div>
+      </div>
+      <div class="ayuda" id="analisis-info">Cargando el histórico...</div>
+      <div class="graficas">
+        <div class="grafica"><h3>Valor a cancelar por corte</h3><div class="sub">Lo que se paga en cada corte (del 26 al 25).</div><div class="lienzo"><canvas id="g-pago"></canvas></div></div>
+        <div class="grafica"><h3>Días trabajados por corte</h3><div class="sub" id="g-dias-sub">Días con al menos una ruta.</div><div class="lienzo"><canvas id="g-dias"></canvas></div></div>
+        <div class="grafica"><h3>% de devolución por corte</h3><div class="sub">Retorno $ ÷ monto $. Línea punteada: límite de 3% (más de eso, se sanciona).</div><div class="lienzo"><canvas id="g-retorno"></canvas></div></div>
+        <div class="grafica"><h3>Sanciones por devolución alta ($)</h3><div class="sub">Diferencia entre el valor de ruta y lo que se cancela.</div><div class="lienzo"><canvas id="g-sanciones"></canvas></div></div>
+      </div>
+      <div class="fila entre" style="margin-top:16px">
+        <h2 style="margin:0" id="titulo-comparacion">Comparación con el corte anterior</h2>
+        <button class="btn btn-sec oculto" type="button" data-quitar-filtros="tabla-comparacion">✕ Quitar filtros</button>
+      </div>
+      <div class="ayuda" style="margin-top:2px" id="ayuda-comparacion"></div>
+      <div class="tabla-wrap" style="max-height:none"><table id="tabla-comparacion" class="tabla-filtrable"></table></div>
     </div>
   </div>
 

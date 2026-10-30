@@ -870,15 +870,17 @@ function pintarResumenTransportista(cod, desdeClic){
   const det=document.createElement('details');
   det.appendChild(el('summary',null,`Detalle por día (${d.filas.length})`));
   const tb=document.createElement('table');
-  const h=document.createElement('tr'); ['Fecha','Ruta','% ret.','Valor ruta','A cancelar'].forEach(t=>h.appendChild(el('th',null,t)));
+  const h=document.createElement('tr'); ['Mes','Fecha','Ruta','% ret.','Valor ruta','A cancelar'].forEach(t=>h.appendChild(el('th',null,t)));
   tb.appendChild(h);
   d.filas.forEach(f=>{
     const tr=document.createElement('tr');
-    [fechaLarga(f.fecha), f.ruta, pct(f.P), dinero(f.G), dinero(f.S)].forEach((v,i)=>{ const td=el('td', i>=2?'num':null, v); if(i===4&&f.sancionado) td.className='num sancion'; tr.appendChild(td); });
+    [MESES[fechaDe(f.fecha).getMonth()], fechaLarga(f.fecha), f.ruta, pct(f.P), dinero(f.G), dinero(f.S)].forEach((v,i)=>{ const td=el('td', i>=3?'num':null, v); if(i===5&&f.sancionado) td.className='num sancion'; tr.appendChild(td); });
     tb.appendChild(tr);
   });
   det.appendChild(tb); caja.appendChild(det);
   if(desdeClic){
+    // Las gráficas de gerencia pasan a ese transportista.
+    if(estado.historico){ document.getElementById('sel-analisis').value=cod; pintarAnalisis(); }
     const r=caja.getBoundingClientRect();
     if(r.top<0 || r.top>window.innerHeight-80) caja.scrollIntoView({behavior:'smooth', block:'start'});
   }
@@ -905,7 +907,7 @@ function textoResumenWhatsApp(d){
 function imprimirResumen(d){
   const esc=s=>String(s===null||s===undefined?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const logo=new URL('logo-wordmark.png', location.href).href;
-  const filas=d.filas.map(f=>`<tr><td>${esc(fechaLarga(f.fecha))}</td><td>${esc(f.ruta)}</td><td class="n">${esc(numero(f.kgs))}</td>`+
+  const filas=d.filas.map(f=>`<tr><td>${esc(MESES[fechaDe(f.fecha).getMonth()])}</td><td>${esc(fechaLarga(f.fecha))}</td><td>${esc(f.ruta)}</td><td class="n">${esc(numero(f.kgs))}</td>`+
     `<td class="n">${esc(dinero(f.monto))}</td><td class="n">${esc(pct(f.P))}</td><td class="n">${esc(dinero(f.G))}</td>`+
     `<td class="n${f.sancionado?' s':''}">${esc(dinero(f.S))}</td></tr>`).join('');
   const html=`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Resumen ${esc(d.cod)} - ${esc(d.corte.nombre||'')}</title>
@@ -926,8 +928,8 @@ tfoot td{font-weight:800;background:#e2ebf3}.nota{margin-top:10px;color:#92400e;
 <div class="cifra"><span>Diferencia (sanciones)</span><b>${esc(dinero(d.t.G-d.t.S))}</b></div>
 <div class="cifra final"><span>Valor a cancelar (a facturar)</span><b>${esc(dinero(d.t.S))}</b></div></div>
 <div>${d.dias} día(s) trabajado(s) · ${d.filas.length} ruta(s) · ${esc(numero(d.t.kgs))} kg · Monto entregado ${esc(dinero(d.t.monto))} · Retorno ${esc(dinero(d.t.retorno))} (${esc(pct(d.t.monto?d.t.retorno/d.t.monto:0))})</div>
-<table><thead><tr><th>Fecha</th><th>Ruta</th><th class="n">Kgs</th><th class="n">Monto $</th><th class="n">% retorno</th><th class="n">Valor de ruta</th><th class="n">A cancelar</th></tr></thead>
-<tbody>${filas}</tbody><tfoot><tr><td>TOTAL</td><td></td><td class="n">${esc(numero(d.t.kgs))}</td><td class="n">${esc(dinero(d.t.monto))}</td>
+<table><thead><tr><th>Mes</th><th>Fecha</th><th>Ruta</th><th class="n">Kgs</th><th class="n">Monto $</th><th class="n">% retorno</th><th class="n">Valor de ruta</th><th class="n">A cancelar</th></tr></thead>
+<tbody>${filas}</tbody><tfoot><tr><td>TOTAL</td><td></td><td></td><td class="n">${esc(numero(d.t.kgs))}</td><td class="n">${esc(dinero(d.t.monto))}</td>
 <td class="n">${esc(pct(d.t.monto?d.t.retorno/d.t.monto:0))}</td><td class="n">${esc(dinero(d.t.G))}</td><td class="n">${esc(dinero(d.t.S))}</td></tr></tfoot></table>
 ${d.sanciones?`<div class="nota">En rojo: días con retorno mayor a 3% (se paga la tarifa con sanción).</div>`:''}
 ${!d.corte.cerrado&&d.corte.id?`<div class="nota">Corte todavía abierto: valores sujetos a cambios hasta el cierre.</div>`:''}
@@ -935,6 +937,150 @@ ${!d.corte.cerrado&&d.corte.id?`<div class="nota">Corte todavía abierto: valore
   const w=window.open('', '_blank');
   if(!w){ mostrarToast('El navegador bloqueó la ventana: permite ventanas emergentes para imprimir.', 5000); return; }
   w.document.open(); w.document.write(html); w.document.close();
+}
+
+// ── Análisis por corte (gerencia): gráficas mes a mes + comparación ──
+// Se carga TODO lo que hay en la web (todos los cortes) una vez al entrar a
+// Cortes, y se agrupa por corte (del 26 al 25). Con un transportista elegido
+// (aquí o tocándolo en "Por transportista"), las gráficas son solo de él.
+const COLOR_SERIE='#2a78d6', COLOR_SANCION='#eb6834', COLOR_LIMITE='#9ca3af';
+const graficas={};
+
+function cargarChart(){
+  if(window.Chart) return Promise.resolve();
+  return new Promise((resolve, reject)=>{
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js';
+    s.onload=()=>resolve(); s.onerror=()=>reject(new Error('No se pudo cargar la librería de gráficas (¿hay internet?).'));
+    document.head.appendChild(s);
+  });
+}
+
+async function cargarHistorico(forzar){
+  if(estado.historico && !forzar){ pintarAnalisis(); return; }
+  const info=document.getElementById('analisis-info');
+  const desdes=estado.cortes.map(c=>c.desde).filter(Boolean).sort(), hastas=estado.cortes.map(c=>c.hasta).filter(Boolean).sort();
+  if(!desdes.length){ info.textContent='Todavía no hay cortes con datos.'; return; }
+  info.textContent='Cargando el histórico...';
+  try{
+    const [r]=await Promise.all([apiOk({tipo:'pago_filas', desde:desdes[0], hasta:hastas[hastas.length-1]}, 90000), cargarChart()]);
+    estado.historico=r.filas||[];
+  } catch(e){ info.textContent='No se pudo cargar el histórico: '+e.message; return; }
+  // Opciones del selector: los transportistas que aparecen en el histórico.
+  const sel=document.getElementById('sel-analisis'), actual=sel.value;
+  const cods=[...new Set(estado.historico.map(f=>String(f.cod_camion||'').toUpperCase()).filter(Boolean))].sort();
+  sel.innerHTML='';
+  sel.appendChild(opcion('', 'Todos los transportistas', actual));
+  cods.forEach(c=>{ const n=nombreTransportista(c); sel.appendChild(opcion(c, n&&n.toUpperCase().startsWith(c)?n:(c+(n?' · '+n:'')), actual)); });
+  pintarAnalisis();
+}
+
+// Agrupa filas por corte y saca las métricas. cod: solo ese transportista ('' = todos).
+function metricasPorCorte(filas, cod){
+  const porCorte={};
+  filas.forEach(f=>{
+    if(cod && String(f.cod_camion||'').toUpperCase()!==cod) return;
+    const c=corteDe(f.fecha_entrega); if(!c) return;
+    (porCorte[c.id]=porCorte[c.id]||{id:c.id, nombre:c.nombre, filas:[]}).filas.push(f);
+  });
+  return Object.values(porCorte).sort((a,b)=>a.id.localeCompare(b.id)).map(g=>{
+    const t=totalesDe(g.filas);
+    return {id:g.id, nombre:g.nombre, corto:etiquetaCorte(g.nombre), dias:new Set(g.filas.map(f=>f.fecha_entrega)).size,
+            rutas:g.filas.length, G:t.G, S:t.S, sancion:t.G-t.S, monto:t.monto, retorno:t.retorno,
+            pRet:t.monto?t.retorno/t.monto:0, sancionados:g.filas.filter(f=>calcularFila(f).sancionado).length};
+  });
+}
+// "SEPTIEMBRE-OCTUBRE 2026" -> "SEP-OCT 26"
+function etiquetaCorte(nombre){
+  const m=String(nombre||'').match(/^(\S+)-(\S+)\s+(\d{4})$/);
+  return m?(m[1].slice(0,3)+'-'+m[2].slice(0,3)+' '+m[3].slice(2)):String(nombre||'');
+}
+
+function grafica(id, tipo, etiquetas, datasets, formato, extra){
+  if(graficas[id]) graficas[id].destroy();
+  const opciones={
+    responsive:true, maintainAspectRatio:false, animation:false,
+    interaction:{mode:'index', intersect:false},
+    plugins:{
+      legend:{display:datasets.length>1, labels:{boxWidth:10, boxHeight:10, color:'#334155', font:{size:11}}},
+      tooltip:{callbacks:{label:c=>c.dataset.label+': '+formato(c.parsed.y)}},
+    },
+    scales:{
+      x:{grid:{display:false}, ticks:{color:'#52514e', font:{size:11}}},
+      y:{beginAtZero:true, grid:{color:'#eef0f2'}, border:{display:false}, ticks:{color:'#52514e', font:{size:11}, callback:v=>formato(v)}},
+    },
+  };
+  if(extra && extra.tooltip) opciones.plugins.tooltip.callbacks.label=extra.tooltip;
+  graficas[id]=new Chart(document.getElementById(id), {type:tipo, data:{labels:etiquetas, datasets}, options:opciones});
+}
+
+function pintarAnalisis(){
+  if(!estado.historico || !window.Chart) return;
+  const cod=document.getElementById('sel-analisis').value;
+  const m=metricasPorCorte(estado.historico, cod);
+  const quien=cod?(nombreTransportista(cod)||cod):'todos los transportistas';
+  document.getElementById('analisis-info').textContent=m.length
+    ? `${m.length} corte(s) con datos, de ${m[0].nombre} a ${m[m.length-1].nombre} · ${quien}.`+(m.length<3?' Las gráficas se completan a medida que se carguen los cortes anteriores.':'')
+    : `Sin datos para ${quien}.`;
+  const et=m.map(x=>x.corto);
+  const barra=(label, datos, color)=>({label, data:datos, backgroundColor:color, borderRadius:{topLeft:4, topRight:4}, borderSkipped:'bottom', maxBarThickness:46});
+  grafica('g-pago', 'bar', et, [barra('Valor a cancelar', m.map(x=>x.S), COLOR_SERIE)], dinero);
+  grafica('g-dias', 'bar', et, [barra(cod?'Días trabajados':'Días con rutas', m.map(x=>x.dias), COLOR_SERIE)], v=>numero(v,0));
+  document.getElementById('g-dias-sub').textContent=cod?'Días con al menos una ruta de este transportista.':'Días con al menos una ruta (de cualquier transportista).';
+  grafica('g-retorno', 'line', et, [
+    {label:'% de devolución', data:m.map(x=>x.pRet), borderColor:COLOR_SERIE, backgroundColor:COLOR_SERIE, borderWidth:2, pointRadius:4, pointHoverRadius:6, tension:0},
+    {label:'Límite 3%', data:m.map(()=>LIMITE_RETORNO), borderColor:COLOR_LIMITE, borderDash:[5,4], borderWidth:1.5, pointRadius:0, pointHoverRadius:0},
+  ], pct);
+  grafica('g-sanciones', 'bar', et, [barra('Sanciones', m.map(x=>x.sancion), COLOR_SANCION)], dinero,
+    {tooltip:c=>{ const x=m[c.dataIndex]; return 'Sanciones: '+dinero(x.sancion)+' ('+x.sancionados+' ruta'+(x.sancionados===1?'':'s')+')'; }});
+  pintarComparacion();
+}
+
+// Por transportista: el corte elegido arriba contra el anterior, con una pista
+// de por qué cambió (días, valor por día, sanciones).
+const COLS_COMP=[
+  {t:'Código'}, {t:'Nombre'},
+  {t:'Días ant.', num:true, f:v=>numero(v,0)}, {t:'Días', num:true, f:v=>numero(v,0)},
+  {t:'A cancelar ant.', num:true, f:dinero}, {t:'A cancelar', num:true, f:dinero},
+  {t:'Diferencia $', num:true, f:v=>v<0?'-'+dinero(-v):(v>0?'+':'')+dinero(v)},
+  {t:'Variación %', num:true, pct:true, f:v=>v===null?'nuevo':(v>0?'+':'')+pct(v)},
+  {t:'% devolución', num:true, pct:true, f:pct}, {t:'Sanciones $', num:true, f:dinero}, {t:'Qué cambió'},
+];
+function pintarComparacion(){
+  if(!estado.historico) return;
+  const ids=[...new Set(estado.historico.map(f=>(corteDe(f.fecha_entrega)||{}).id).filter(Boolean))].sort();
+  const elegido=document.getElementById('sel-corte').value;
+  const act=ids.includes(elegido)?elegido:ids[ids.length-1];
+  const ant=ids[ids.indexOf(act)-1];
+  const nombre=id=>{ const c=estado.cortes.find(x=>x.id===id); return c?c.nombre:(id||''); };
+  document.getElementById('titulo-comparacion').textContent=ant?`Comparación: ${nombre(act)} contra ${nombre(ant)}`:'Comparación con el corte anterior';
+  const enCurso=String((estado.cortes.find(c=>c.id===act)||{}).hasta||'')>=String(estado.hoyServidor||'');
+  document.getElementById('ayuda-comparacion').textContent=!ant
+    ? 'Todavía no hay un corte anterior con datos para comparar: aparecerá al cargar los cortes anteriores.'
+    : (enCurso?'⚠ El corte elegido sigue en curso: sus valores son parciales y van a subir hasta el día 25. ':'')+'Toca un título para ordenar (por ejemplo, Diferencia $); toca un transportista para ver sus gráficas.';
+  const porCod=id=>{ const r={}; estado.historico.forEach(f=>{ const c=corteDe(f.fecha_entrega); if(!c||c.id!==id) return; const k=String(f.cod_camion||'').toUpperCase(); (r[k]=r[k]||[]).push(f); }); return r; };
+  const A=act?porCod(act):{}, B=ant?porCod(ant):{};
+  const cods=[...new Set([...Object.keys(A), ...Object.keys(B)])].sort();
+  const filas=cods.map(k=>{
+    const fa=A[k]||[], fb=B[k]||[];
+    const ta=totalesDe(fa), tb=totalesDe(fb);
+    const da=new Set(fa.map(f=>f.fecha_entrega)).size, db=new Set(fb.map(f=>f.fecha_entrega)).size;
+    const dif=ta.S-tb.S, varPct=tb.S?dif/tb.S:(ta.S?null:0);
+    const motivos=[];
+    if(!fb.length && ant) motivos.push('no trabajó en el corte anterior');
+    else if(!fa.length) motivos.push('no tiene rutas en este corte');
+    else if(ant){
+      if(da!==db) motivos.push((da>db?'+':'')+(da-db)+' día(s)');
+      const pda=da?ta.S/da:0, pdb=db?tb.S/db:0;
+      if(Math.abs(pda-pdb)>=1) motivos.push('valor por día '+(pda>pdb?'+':'')+dinero(pda-pdb));
+    }
+    if(ta.G-ta.S>0.005) motivos.push('sanción '+dinero(ta.G-ta.S));
+    return {clave:k, v:[k, nombreTransportista(k)||'—', db, da, tb.S, ta.S, dif, varPct, ta.monto?ta.retorno/ta.monto:0, ta.G-ta.S, motivos.join(' · ')]};
+  });
+  tablaFiltrable('tabla-comparacion', COLS_COMP, filas, {
+    total:fs=>{ const s=i=>fs.reduce((a,f)=>a+(Number(f.v[i])||0),0); const b=s(4); return ['TOTAL','', '', '', b, s(5), s(5)-b, b?(s(5)-b)/b:null, '', s(9), '']; },
+    alClic:k=>{ document.getElementById('sel-analisis').value=k; pintarAnalisis(); document.getElementById('card-analisis').scrollIntoView({behavior:'smooth', block:'start'}); },
+  });
 }
 
 async function cerrarCorte(){
@@ -1103,6 +1249,11 @@ function renderServicio(e){
   est.textContent=txt; est.style.whiteSpace='pre-line';
   est.className='excel-estado'+(u&&!u.ok&&!e.sincronizando?' mal':'');
   document.getElementById('b-sincronizar').disabled=!!e.sincronizando;
+  // Lo mismo en la pestaña Cortes (botón + estado corto).
+  const bCon=document.getElementById('b-con-sincronizar');
+  bCon.classList.remove('oculto'); bCon.disabled=!!e.sincronizando;
+  bCon.textContent=e.sincronizando?'⏳ Sincronizando...':'🔄 Sincronizar con el Excel';
+  document.getElementById('corte-sync').textContent=e.sincronizando?'Sincronizando con el Excel...':(u?`Última sincronización con el Excel: ${u.hora}.`:'');
   const av=document.getElementById('excel-avisos');
   if((e.avisos_sync||[]).length){
     av.classList.remove('oculto'); av.innerHTML='<b>Cambios del Excel que no se aplicaron (ganó la web):</b>';
@@ -1117,13 +1268,17 @@ function renderServicio(e){
     cargarDias().then(()=>{
       const dia=(!estado.filas.length && estado.dias.length && estado.dias[0].filas)?estado.dias[0].fecha:estado.dia;
       abrirDia(dia, true);
-      cargarCortes().catch(()=>{});
+      // Si se está mirando Cortes, también se refrescan sus tablas y gráficas.
+      const enCortes=!document.getElementById('p-consolidado').classList.contains('oculto');
+      cargarCortes().then(()=>{ if(enCortes){ estado.historico=null; return verConsolidado().then(()=>cargarHistorico()); } }).catch(()=>{});
     }).catch(()=>{});
   }
   estado.ultimaSync=u?u.hora:'';
 }
 function sinServicio(){
   document.getElementById('card-excel').classList.add('oculto');
+  document.getElementById('b-con-sincronizar').classList.add('oculto');
+  document.getElementById('corte-sync').textContent='';
   document.getElementById('pill-servicio').classList.add('oculto');
   document.getElementById('b-conectar-pc').classList.remove('oculto');
 }
@@ -1147,7 +1302,7 @@ function conectarPC(){
 function mostrarPestana(nombre){
   document.querySelectorAll('.pestanas button').forEach(b=>b.classList.toggle('activa', b.dataset.pestana===nombre));
   ['dia','consolidado','tarifas','transportistas'].forEach(p=>document.getElementById('p-'+p).classList.toggle('oculto', p!==nombre));
-  if(nombre==='consolidado') cargarCortes().then(verConsolidado).catch(e=>{ document.getElementById('con-info').textContent='No se pudo cargar: '+e.message; });
+  if(nombre==='consolidado') cargarCortes().then(verConsolidado).then(()=>cargarHistorico()).catch(e=>{ document.getElementById('con-info').textContent='No se pudo cargar: '+e.message; });
   if(nombre==='tarifas') pintarTarifas();
   if(nombre==='transportistas') pintarTransportistas();
 }
@@ -1163,7 +1318,9 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('b-sincronizar').addEventListener('click', ()=>accion('/pago/sincronizar'));
   document.getElementById('b-conectar-pc').addEventListener('click', conectarPC);
   document.getElementById('b-con-buscar').addEventListener('click', verConsolidado);
-  document.getElementById('sel-corte').addEventListener('change', verConsolidado);
+  document.getElementById('sel-corte').addEventListener('change', ()=>verConsolidado().then(pintarComparacion));
+  document.getElementById('sel-analisis').addEventListener('change', pintarAnalisis);
+  document.getElementById('b-con-sincronizar').addEventListener('click', ()=>accion('/pago/sincronizar'));
   document.getElementById('b-corte-cerrar').addEventListener('click', cerrarCorte);
   document.getElementById('b-corte-reabrir').addEventListener('click', reabrirCorte);
   document.getElementById('b-con-excel').addEventListener('click', descargarConsolidado);
