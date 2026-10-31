@@ -145,7 +145,7 @@ function sesionExpirada(){
 }
 function logout(){ if(!confirm('¿Cerrar sesión?'))return; localStorage.removeItem('sesionActiva'); window.location.href='login.html'; }
 
-const ROLES_CARGUE=['admin','bodega','coordinador','facturador'];
+const ROLES_CARGUE=['admin','bodega','coordinador','facturador','supervisor'];
 const sesion=getSesion();
 if(!sesion || !sesion.rol){ window.location.href='login.html'; }
 else if(!ROLES_CARGUE.includes(sesion.rol)){ window.location.href='inicio.html?aviso=sin-permiso'; }

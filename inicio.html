@@ -131,7 +131,7 @@ function construirMenu(){
   lista.innerHTML='';
   const rol=sesion && sesion.rol;
   (typeof MENU_INICIO!=='undefined'?MENU_INICIO:[])
-    .filter(op=>!op.roles || op.roles.includes(rol))
+    .filter(op=>(!op.roles || op.roles.includes(rol)) && !(op.ocultarA || []).includes(rol))
     .forEach(op=>{
       const li=document.createElement('li');
       const b=document.createElement('button');

@@ -287,7 +287,7 @@ function sesionExpirada(){
   alert('Tu sesión expiró o no es válida. Ingresa de nuevo.');
   window.location.href='login.html';
 }
-const ROLES_PAGO=['admin','coordinador','cartera'];
+const ROLES_PAGO=['admin','coordinador','cartera','supervisor'];
 (function(){
   const s=getSesion();
   if(s && s.rol && !ROLES_PAGO.includes(s.rol)) window.location.replace('inicio.html?aviso=sin-permiso');

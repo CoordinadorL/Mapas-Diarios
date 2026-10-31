@@ -296,7 +296,14 @@ function pintarSinGeoref(sg){
   });
 }
 
-iniciarConsulta('/generador/estado', render, sinServicio);
+if(SOLO_VER){
+  // Supervisor: solo la pestaña Ver mapa (y sin buscar el programa de la PC).
+  document.querySelector('.pestanas button[data-pestana="generar"]').classList.add('oculto');
+  document.querySelector('.pestanas button[data-pestana="ver"]').click();
+  $('pill-servicio').classList.add('oculto');
+} else {
+  iniciarConsulta('/generador/estado', render, sinServicio);
+}
 </script>
 </body>
 </html>

@@ -85,7 +85,7 @@ function esCargueModoHistorico(){
 // que ya se usa para "editar histórico" en el resto del proyecto (ver
 // ROLES_EDITAR_HISTORICO en Auth.gs) -- admin queda afuera a propósito,
 // misma decisión ya tomada ahí.
-const ROLES_CARGUE_EDITAR_HISTORICO = ['bodega', 'coordinador'];
+const ROLES_CARGUE_EDITAR_HISTORICO = ['bodega', 'coordinador', 'supervisor'];
 function puedeCargueEditarHistorico(){
   const s = (typeof getSesion === 'function') ? getSesion() : null;
   return !!(s && ROLES_CARGUE_EDITAR_HISTORICO.includes(s.rol));

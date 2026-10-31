@@ -663,7 +663,7 @@ async function verConsolidado(){
       if(rol==='admin') bReabrir.classList.remove('oculto');
     } else {
       est.textContent=(r0.hasta<estado.hoyServidor?'Corte terminado, todavía abierto: ':'Corte en curso: ')+`del ${fechaLarga(r0.desde)} al ${fechaLarga(r0.hasta)}.`;
-      if(['admin','coordinador'].includes(rol)) bCerrar.classList.remove('oculto');
+      if(['admin','coordinador','supervisor'].includes(rol)) bCerrar.classList.remove('oculto');
     }
   }
 }

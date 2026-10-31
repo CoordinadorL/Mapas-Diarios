@@ -12,8 +12,9 @@
 //   nuevaPestana → true = abre en otra pestaña (para sitios fuera de esta app)
 //   nota         → aviso que aparece al tocarlo (opcional)
 //   soloPC       → true = marca "Solo en la PC" (programas que corren en la PC)
-//   roles        → (opcional, para más adelante) lista de roles que lo ven,
-//                  ej. ['admin','bodega']. Sin "roles" lo ven todos.
+//   roles        → (opcional) lista de roles que lo ven, ej. ['admin','bodega'].
+//                  Sin "roles" lo ven todos.
+//   ocultarA     → (opcional) roles que NO lo ven, ej. ['supervisor'].
 // ═══════════════════════════════════════════════════════════
 
 const MENU_INICIO = [
@@ -42,6 +43,7 @@ const MENU_INICIO = [
     destino: 'http://localhost:5177',
     nuevaPestana: true,
     soloPC: true,
+    ocultarA: ['supervisor'],
     nota: 'Si no abre, primero ejecuta "Iniciar tablero.bat" en C:\\AUT PEDIDOS\\AUT PEDIDOS y vuelve a tocar el botón.',
   },
   {
@@ -49,6 +51,6 @@ const MENU_INICIO = [
     descripcion: 'Resumen diario por transportista · tarifas · sanciones',
     icono: '💵',
     destino: 'pago-transportes.html',
-    roles: ['admin', 'coordinador', 'cartera'],
+    roles: ['admin', 'coordinador', 'cartera', 'supervisor'],
   },
 ];

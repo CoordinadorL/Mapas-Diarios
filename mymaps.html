@@ -49,6 +49,12 @@ details.dia>summary .cuantos{color:#64748b;font-weight:600;font-size:.78rem;flex
       </div>
     </div>
 
+    <div class="card oculto" id="nube-card">
+      <div class="fila entre"><h2 style="margin:0">Links de My Maps</h2>
+        <button class="btn" type="button" id="b-nube-recargar">🔄 Actualizar</button></div>
+      <div class="ayuda" id="nube-info"></div>
+      <div id="links-nube"></div>
+    </div>
     <div class="card oculto" id="visor-card">
       <div class="fila entre">
         <b id="visor-titulo">Mapa</b>
@@ -109,7 +115,7 @@ details.dia>summary .cuantos{color:#64748b;font-weight:600;font-size:.78rem;flex
 <script src="servicio-local.js"></script>
 <script>
 const $=id=>document.getElementById(id);
-let versionPintada=-1, iniciado=false, trabajando=false, linksFirma='';
+let versionPintada=-1, iniciado=false, trabajando=false;
 const diasAbiertos=new Set();
 let urlVisor='';
 
@@ -121,7 +127,7 @@ if(location.search) history.replaceState(null,'',location.pathname);
 
 // El servicio se reinició (por ejemplo, al prender la PC): la página vuelve a
 // "abrirse", sin los datos viejos del link.
-window.alReiniciarServicio=()=>{ iniciado=false; versionPintada=-1; linksFirma=''; inicio={carpeta:'', ofrecer:false}; };
+window.alReiniciarServicio=()=>{ iniciado=false; versionPintada=-1; $('links').firma=''; inicio={carpeta:'', ofrecer:false}; };
 
 $('sel-carpeta').onchange=()=>accion('/mymaps/carpeta',{i:Number($('sel-carpeta').value)});
 $('sel-entrega').onchange=()=>accion('/mymaps/entrega',{i:Number($('sel-entrega').value)});
@@ -153,10 +159,26 @@ function sinServicio(){
   $('sin-servicio').classList.remove('oculto');
   $('con-servicio').classList.add('oculto');
   versionPintada=-1;
+  // Fuera de la PC igual se ven los links (desde la web).
+  if($('nube-card').classList.contains('oculto')){ $('nube-card').classList.remove('oculto'); cargarLinksNube(); }
 }
+
+// Links guardados en la web (los publica el programa de la PC cada vez que
+// cambian): para verlos desde cualquier equipo.
+async function cargarLinksNube(){
+  const info=$('nube-info');
+  info.textContent='Cargando...';
+  try{
+    const r=await leerWeb({tipo:'mymaps_links'});
+    pintarLinks(r.dias||[], $('links-nube'), true);
+    info.textContent=r.actualizado?`Actualizado el ${new Date(r.actualizado).toLocaleString('es-EC').replace(/\.$/,'')}.`:'';
+  } catch(e){ info.textContent='No se pudieron cargar los links: '+e.message; }
+}
+$('b-nube-recargar').onclick=cargarLinksNube;
 
 function render(e){
   $('sin-servicio').classList.add('oculto');
+  $('nube-card').classList.add('oculto');
   $('con-servicio').classList.remove('oculto');
   if(!iniciado){ iniciado=true; llamarServicio('POST','/mymaps/iniciar',inicio).then(refrescarYa).catch(()=>{}); }
   trabajando=e.trabajando;
@@ -190,7 +212,7 @@ function render(e){
     $('b-actualizar').classList.toggle('oculto', !e.actualizables.hay);
     $('ayuda-links').textContent=`"Copiar mensaje del día" copia título, transportistas y link de todos los mapas de esa entrega, listo para pegar en WhatsApp. "Limpiar mapas viejos" manda a la papelera los de entrega de hace más de ${e.dias_historial} días (también los hechos a mano); se hace solo en cada subida.`;
   }
-  pintarLinks(e.links||[]);
+  pintarLinks(e.links||[], $('links'), false);
   atenderAvisosYPregunta('/mymaps', e, aviso=>{
     const extra=[];
     if(aviso.copiar) extra.push({texto:'📋 Copiar mensaje', valor:'copiar', seguirAbierto:true, accion:()=>copiarTexto(aviso.copiar,'✅ Mensaje copiado: pégalo en WhatsApp.')});
@@ -205,12 +227,14 @@ function llenarSelect(sel, opciones, elegido){
   sel.value=String(elegido);
 }
 
-function pintarLinks(dias){
+// nube: los links vienen de la web (el mensaje del día se arma aquí, igual
+// que mymaps.texto_para_compartir en la PC).
+function pintarLinks(dias, cont, nube){
   const firma=JSON.stringify(dias);
-  if(firma===linksFirma) return;          // no redibujar (mantiene lo abierto/cerrado)
-  const primera=!linksFirma;
-  linksFirma=firma;
-  const cont=$('links'); cont.innerHTML='';
+  if(firma===cont.firma) return;          // no redibujar (mantiene lo abierto/cerrado)
+  const primera=!cont.firma;
+  cont.firma=firma;
+  cont.innerHTML='';
   if(!dias.length){ cont.appendChild(el('div','ayuda','Todavía no hay mapas subidos con el robot.')); return; }
   dias.forEach((d,i)=>{
     if(primera && i<2) diasAbiertos.add(d.dia);
@@ -220,7 +244,15 @@ function pintarLinks(dias){
     sum.appendChild(el('span',null,d.texto));
     sum.appendChild(el('span','cuantos',`${d.mapas.length} mapas`));
     const bDia=el('button','btn','📋 Copiar mensaje del día'); bDia.type='button';
-    bDia.onclick=async ev=>{ ev.preventDefault(); const r=await accion('/mymaps/mensaje_dia',{dia:d.dia}); if(r&&r.ok) copiarTexto(r.texto, `✅ Mensaje copiado: ${r.cantidad} mapas del ${d.texto}.`); };
+    bDia.onclick=async ev=>{
+      ev.preventDefault();
+      if(nube){
+        const texto=d.mapas.filter(m=>m.url).map(m=>[m.titulo, m.descripcion, m.url].filter(Boolean).join('\n')).join('\n\n');
+        copiarTexto(texto, `✅ Mensaje copiado: ${d.mapas.length} mapas del ${d.texto}.`);
+        return;
+      }
+      const r=await accion('/mymaps/mensaje_dia',{dia:d.dia}); if(r&&r.ok) copiarTexto(r.texto, `✅ Mensaje copiado: ${r.cantidad} mapas del ${d.texto}.`);
+    };
     sum.appendChild(bDia);
     det.appendChild(sum);
     d.mapas.forEach(m=>{
@@ -237,7 +269,14 @@ function pintarLinks(dias){
   });
 }
 
-iniciarConsulta('/mymaps/estado', render, sinServicio);
+if(SOLO_VER){
+  // Supervisor: solo los links (desde la web), sin buscar el programa de la PC.
+  $('pill-servicio').classList.add('oculto');
+  $('nube-card').classList.remove('oculto');
+  cargarLinksNube();
+} else {
+  iniciarConsulta('/mymaps/estado', render, sinServicio);
+}
 </script>
 </body>
 </html>

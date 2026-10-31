@@ -361,7 +361,7 @@ function sesionExpirada(){
 }
 function logout(){ if(!confirm('¿Cerrar sesión?'))return; localStorage.removeItem('sesionActiva'); window.location.href='login.html'; }
 
-const ROLES_CARGUE=['admin','bodega','coordinador'];
+const ROLES_CARGUE=['admin','bodega','coordinador','supervisor'];
 const sesion=getSesion();
 if(!sesion || !sesion.rol){ window.location.href='login.html'; }
 else if(sesion.rol==='facturador'){ window.location.href='historial-cargues.html'; }

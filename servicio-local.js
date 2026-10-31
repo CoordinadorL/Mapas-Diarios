@@ -23,6 +23,36 @@ const DURACION_SESION_MS = 16*60*60*1000; // igual que TOKEN_TTL_MS del backend
   }
 })();
 
+// Rol supervisor: de Generar mapas y My Maps solo ve el mapa publicado y los
+// links (leídos de la web); nunca la parte que maneja el programa de la PC.
+const SOLO_VER = (()=>{ try{ return (JSON.parse(localStorage.getItem('sesionActiva')||'null')||{}).rol==='supervisor'; }catch(e){ return false; } })();
+
+// Lectura del backend (JSONP con el token de sesión), para lo que se ve
+// desde cualquier equipo (ej. los links de My Maps).
+// En localhost se puede apuntar a un backend de pruebas (localStorage 'pago_api_pruebas').
+const API_WEB = (/^(localhost|127\.0\.0\.1)$/.test(location.hostname) && localStorage.getItem('pago_api_pruebas'))
+  || 'https://script.google.com/macros/s/AKfycbwzQRnCJHFXni_9Qvs9kh_6BoikPDtb2sAMNChS3gSk9gAn5e31z5PFvKRGRzeoFqK5og/exec';
+function leerWeb(params, ms){
+  return new Promise((resolve, reject)=>{
+    const cb='__cbw'+Date.now()+Math.floor(Math.random()*100000);
+    const script=document.createElement('script');
+    let listo=false;
+    const limpiar=()=>{ try{ delete window[cb]; }catch(e){ window[cb]=undefined; } script.remove(); };
+    const timer=setTimeout(()=>{ if(listo) return; listo=true; limpiar(); reject(new Error('La web tardó demasiado en responder.')); }, ms||30000);
+    window[cb]=data=>{
+      if(listo) return; listo=true; clearTimeout(timer); limpiar();
+      if(data && data.auth===false){ try{ localStorage.removeItem('sesionActiva'); }catch(e){} window.location.replace('login.html'); return; }
+      if(!data || data.ok===false){ reject(new Error((data&&(data.error||data.msg))||'La web no aceptó el pedido.')); return; }
+      resolve(data);
+    };
+    script.onerror=()=>{ if(listo) return; listo=true; clearTimeout(timer); limpiar(); reject(new Error('Sin conexión con la web.')); };
+    let token=''; try{ token=(JSON.parse(localStorage.getItem('sesionActiva')||'null')||{}).token||''; }catch(e){}
+    const qs=Object.keys(params).map(k=>encodeURIComponent(k)+'='+encodeURIComponent(params[k])).join('&');
+    script.src=API_WEB+'?'+qs+'&callback='+cb+'&token='+encodeURIComponent(token)+'&t='+Date.now();
+    document.head.appendChild(script);
+  });
+}
+
 if('serviceWorker' in navigator){
   window.addEventListener('load',()=>{
     navigator.serviceWorker.register('sw.js').then(reg=>{
