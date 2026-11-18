@@ -1217,12 +1217,14 @@ function pintarTransportistas(){
   const filtro=document.getElementById('inp-buscar-transp').value.trim().toUpperCase();
   const tabla=document.getElementById('tabla-transp'); tabla.innerHTML='';
   const thead=document.createElement('thead'); const trh=document.createElement('tr');
-  ['Código','Nombre',''].forEach(t=>trh.appendChild(el('th',null,t))); thead.appendChild(trh); tabla.appendChild(thead);
+  ['Código','Nombre','Ajuste (camión)','Línea (vendedor)',''].forEach(t=>trh.appendChild(el('th',null,t))); thead.appendChild(trh); tabla.appendChild(thead);
   const tbody=document.createElement('tbody');
-  estado.cat.transportistas.filter(t=>!filtro || (t.tag+' '+t.nombre).toUpperCase().includes(filtro))
+  estado.cat.transportistas.filter(t=>!filtro || (t.tag+' '+t.nombre+' '+(t.linea||'')).toUpperCase().includes(filtro))
     .sort((a,b)=>String(a.tag).localeCompare(String(b.tag))).forEach(t=>{
       const tr=document.createElement('tr');
       tr.appendChild(el('td',null,t.tag)); tr.appendChild(el('td',null,t.nombre));
+      tr.appendChild(el('td','num',vacio(t.ajuste)?'—':String(t.ajuste)));
+      tr.appendChild(el('td',null,(!t.linea||String(t.linea)==='0')?'—':t.linea));
       const td=document.createElement('td'); const b=el('button','btn btn-cargue','✏️'); b.type='button'; b.onclick=()=>editarTransportista(t);
       td.appendChild(b); tr.appendChild(td); tbody.appendChild(tr);
     });
@@ -1230,11 +1232,16 @@ function pintarTransportistas(){
 }
 async function editarTransportista(t){
   const v=await formulario({titulo:t?'Cambiar transportista '+t.tag:'Nuevo transportista',
+    texto:'El AJUSTE se pone solo en los días de ese camión (columna C). La LÍNEA es la del vendedor: con ella se elige la LÍNEA del día de cada camión (la que tiene más facturas).',
     campos:[{k:'tag', t:'Código (ej. F150)', valor:t?t.tag:'', soloLectura:!!t},
-            {k:'nombre', t:'Nombre (como sale en la columna NOMBRE, ej. "F150-BETUN JHONATAN")', valor:t?t.nombre:''}]});
+            {k:'nombre', t:'Nombre (como sale en la columna NOMBRE, ej. "F150-BETUN JHONATAN")', valor:t?t.nombre:''},
+            {k:'ajuste', t:'Ajuste del camión', valor:t&&!vacio(t.ajuste)?String(Number(t.ajuste)):'',
+             opciones:[{v:'',t:'— (sin ajuste)'},{v:'0',t:'0'},{v:'1',t:'1'},{v:'2',t:'2'},{v:'3',t:'3'}]},
+            {k:'linea', t:'Línea (si es vendedor)', valor:t&&t.linea&&String(t.linea)!=='0'?t.linea:'',
+             opciones:[{v:'',t:'— (no es vendedor)'}].concat(estado.cat.lineas.map(l=>({v:l,t:l})))}]});
   if(!v) return;
   try{
-    const r=await apiOk({tipo:'pago_transportista_guardar', tag:t?t.tag:v.tag, nombre:v.nombre});
+    const r=await apiOk({tipo:'pago_transportista_guardar', tag:t?t.tag:v.tag, nombre:v.nombre, ajuste:v.ajuste, linea:v.linea||'0'});
     estado.cat.transportistas=r.transportistas||estado.cat.transportistas;
     pintarTransportistas(); await cargarCatalogos();
     mostrarToast('✅ Guardado');
@@ -1285,7 +1292,7 @@ function renderServicio(e){
       abrirDia(dia, true);
       // Si se está mirando Cortes, también se refrescan sus tablas y gráficas.
       const enCortes=!document.getElementById('p-consolidado').classList.contains('oculto');
-      cargarCortes().then(()=>{ if(enCortes){ estado.historico=null; return verConsolidado().then(()=>cargarHistorico()); } }).catch(()=>{});
+      cargarCortes().then(()=>{ estado.historico=null; if(enCortes) return verConsolidado(); if(pestanaVisible('analisis')) return cargarHistorico(); }).catch(()=>{});
     }).catch(()=>{});
   }
   estado.ultimaSync=u?u.hora:'';
@@ -1334,7 +1341,7 @@ async function importarHistorico(){
   const terminar=()=>{
     vivo=false; clearTimeout(timer); fondo.remove();
     // Al cerrar se refresca Cortes (y sus gráficas) con lo que se importó.
-    if(huboImportados){ estado.historico=null; cargarCortes().then(verConsolidado).then(()=>cargarHistorico()).catch(()=>{}); cargarDias().catch(()=>{}); }
+    if(huboImportados){ estado.historico=null; cargarCortes().then(verConsolidado).then(()=>{ if(pestanaVisible('analisis')) return cargarHistorico(); }).catch(()=>{}); cargarDias().catch(()=>{}); }
   };
   bCerrar.onclick=terminar;
   const pintar=h=>{
@@ -1415,10 +1422,14 @@ async function importarHistorico(){
 }
 
 // ── Pestañas e inicio ───────────────────────────────────────
+function pestanaVisible(nombre){ const p=document.getElementById('p-'+nombre); return !!p && !p.classList.contains('oculto'); }
 function mostrarPestana(nombre){
   document.querySelectorAll('.pestanas button').forEach(b=>b.classList.toggle('activa', b.dataset.pestana===nombre));
-  ['dia','consolidado','tarifas','transportistas'].forEach(p=>document.getElementById('p-'+p).classList.toggle('oculto', p!==nombre));
-  if(nombre==='consolidado') cargarCortes().then(verConsolidado).then(()=>cargarHistorico()).catch(e=>{ document.getElementById('con-info').textContent='No se pudo cargar: '+e.message; });
+  ['dia','consolidado','tarifas','transportistas','analisis'].forEach(p=>document.getElementById('p-'+p).classList.toggle('oculto', p!==nombre));
+  if(nombre==='consolidado') cargarCortes().then(verConsolidado).catch(e=>{ document.getElementById('con-info').textContent='No se pudo cargar: '+e.message; });
+  // Las gráficas se dibujan con la pestaña visible (con la pestaña oculta Chart.js las deja sin tamaño).
+  if(nombre==='analisis') (estado.cortes.length?Promise.resolve():cargarCortes()).then(()=>cargarHistorico())
+    .catch(e=>{ document.getElementById('analisis-info').textContent='No se pudo cargar: '+e.message; });
   if(nombre==='tarifas') pintarTarifas();
   if(nombre==='transportistas') pintarTransportistas();
 }
@@ -1431,12 +1442,13 @@ document.addEventListener('DOMContentLoaded', async ()=>{
   document.getElementById('b-adicional').addEventListener('click', cargueAdicional);
   document.getElementById('b-intercambiar').addEventListener('click', intercambiar);
   document.getElementById('b-excel-dia').addEventListener('click', descargarDia);
-  document.getElementById('b-sincronizar').addEventListener('click', ()=>accion('/pago/sincronizar'));
+  // Desde los botones: vuelta completa, que tambien revisa el CONSOLIDADO del Excel.
+  document.getElementById('b-sincronizar').addEventListener('click', ()=>accion('/pago/sincronizar', {forzar:true}));
   document.getElementById('b-conectar-pc').addEventListener('click', conectarPC);
   document.getElementById('b-con-buscar').addEventListener('click', verConsolidado);
   document.getElementById('sel-corte').addEventListener('change', ()=>verConsolidado().then(pintarComparacion));
   document.getElementById('sel-analisis').addEventListener('change', pintarAnalisis);
-  document.getElementById('b-con-sincronizar').addEventListener('click', ()=>accion('/pago/sincronizar'));
+  document.getElementById('b-con-sincronizar').addEventListener('click', ()=>accion('/pago/sincronizar', {forzar:true}));
   document.getElementById('b-con-historico').addEventListener('click', importarHistorico);
   document.getElementById('b-corte-cerrar').addEventListener('click', cerrarCorte);
   document.getElementById('b-corte-reabrir').addEventListener('click', reabrirCorte);
